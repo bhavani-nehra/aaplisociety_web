@@ -7,6 +7,8 @@ import NotificationBell from "./NotificationBell";
 import ProfileSwitcher from "./ProfileSwitcher";
 import RouteLoadingBar from "./RouteLoadingBar";
 import ThemeToggle from "./theme/ThemeToggle";
+import CommandBar from "./global/CommandBar";
+import HelpButton from "@/components/global/HelpButton";
 import styles from "@/styles/Dashboard.module.css";
 // Legacy role strings a staff-hat session can carry (see legacyRoleForKey /
 // session-context.js) — flagged with a colored pill in the sidebar so a
@@ -20,6 +22,7 @@ export default function DashboardLayout({
   subtitle,
   withQueryClient = false,
   sidebarExtra = null,
+  commandBarConfig = null,
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -163,6 +166,13 @@ export default function DashboardLayout({
           <ProfileSwitcher />
         </div>
       </aside>
+      {/* Contextual help — one fixed trigger per shell, always visible.
+          Mounted here (not inside sidebarQuickActions) so it never competes
+          for the same JSX region as CommandBar's mount (that one lives
+          inside .mainContent, above {children} — see the commandBarConfig
+          block below); see
+          docs/superpowers/plans/2026-09-12-contextual-help-phase1.md. */}
+      <HelpButton role={role} />
       {/* MAIN AREA */}
       <div className={styles.mainWrapper}>
         {/* No top header: it used to hold only the user avatar+name (already
@@ -174,6 +184,17 @@ export default function DashboardLayout({
             defined in Dashboard.module.css — components/SuperAdminLayout.js
             still uses them for its own, separate header. */}
         <main key={pathname} className={styles.mainContent}>
+          {/* Global command bar — one shared component
+              (components/global/CommandBar.jsx) mounted once per shell,
+              config-driven per area. Renders nothing when the calling
+              layout doesn't pass commandBarConfig (member/security, this
+              phase) — see docs/ux-overhaul/2026-09-01-global-command-bar-
+              design.md. */}
+          {commandBarConfig ? (
+            <div style={{ marginBottom: 12 }}>
+              <CommandBar navigation={navigation} {...commandBarConfig} />
+            </div>
+          ) : null}
           {children}
         </main>
       </div>

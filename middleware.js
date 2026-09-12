@@ -350,6 +350,35 @@ export async function middleware(request) {
           nonce,
         );
       }
+      // Ending a session is the one write-shaped call a read-only takeover
+      // token must still be allowed to make — it only ever narrows access,
+      // never exercises it. Exact-path match, same reasoning as
+      // isHandoverPath above: a future route must not accidentally inherit
+      // the exemption.
+      const isTakeoverEndPath =
+        payload?.takeover?.grantId &&
+        pathname === `/api/v1/takeover/${payload.takeover.grantId}/end`;
+      // Society takeover, read-only mode: a superadmin viewing a society's
+      // dashboard under a `mode: "read"` grant (see docs/superpowers/specs/
+      // 2026-09-11-society-takeover-design.md) can look at anything the
+      // real admin's token would allow, but can never write. Method is the
+      // one property every mutating request shares — same reasoning as
+      // lifecycleDenied below — so this is the one place that needs to
+      // know about takeover mode at all; every route stays unmodified.
+      // Edge-safe: reads only the token claim, no DB.
+      if (
+        payload?.takeover?.mode === "read" &&
+        !isTakeoverEndPath &&
+        ["POST", "PUT", "PATCH", "DELETE"].includes(method)
+      ) {
+        return withCsp(
+          NextResponse.json(
+            { error: "Read-only support session — writes are disabled.", code: "TAKEOVER_READ_ONLY" },
+            { status: 403 },
+          ),
+          nonce,
+        );
+      }
       // Superadmins operate across societies and are never gated by one
       // society's plan.
       if (!pathname.startsWith("/api/superadmin/") && payload?.role !== "SuperAdmin") {

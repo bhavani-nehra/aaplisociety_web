@@ -16,13 +16,25 @@ const STATUS_COLOR_VAR = {
 };
 
 async function adminFetch(url, opts = {}) {
-  const res = await fetch(url, {
-    ...opts,
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      ...opts,
+      credentials: "include",
+      headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+    });
+  } catch {
+    const err = new Error("Can't reach the server. Check your connection and try again.");
+    err.network = true;
+    throw err;
+  }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || "Request failed");
+  if (!res.ok) {
+    const err = new Error(data.error || `Request failed (${res.status})`);
+    err.status = res.status;
+    err.code = data.code || null;
+    throw err;
+  }
   return data;
 }
 
@@ -259,6 +271,8 @@ function TicketDetail({ ticket, statusDraft, onStatusDraft, noteDraft, onNoteDra
         </div>
       </div>
 
+      <TakeoverControl ticketId={ticket._id} />
+
       <div style={{ background: "var(--bg-sunken)", borderRadius: 8, padding: "1rem", marginBottom: "1rem" }}>
         <div style={labelStyle}>Update status</div>
         <div style={{ display: "flex", gap: "0.75rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
@@ -295,6 +309,135 @@ function TicketDetail({ ticket, statusDraft, onStatusDraft, noteDraft, onNoteDra
         </button>
       </div>
     </>
+  );
+}
+
+function fmtTime(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+}
+
+const GRANT_STATUS_LABEL = {
+  awaiting_consent: "Waiting for society admin to respond",
+  pending_otp: "Society admin is entering their confirmation code",
+  active: "Active",
+  expired: "Expired",
+  revoked: "Ended",
+  denied: "Denied",
+};
+
+// See docs/superpowers/specs/2026-09-11-society-takeover-design.md. Reuses
+// the ticket detail's own qc for consistency but keeps its own queries —
+// a takeover request is not part of the ticket document itself.
+function TakeoverControl({ ticketId }) {
+  const qc = useQueryClient();
+  const [scope, setScope] = useState("read");
+  const [duration, setDuration] = useState(30);
+
+  const { data, isError, error, refetch, isFetching } = useQuery({
+    queryKey: ["superadmin-takeover-grants", ticketId],
+    queryFn: () => adminFetch(`/api/superadmin/takeover?ticketId=${ticketId}`),
+    refetchInterval: 4000,
+    retry: 2,
+  });
+  const latest = data?.grants?.[0] || null;
+  const inFlight = latest && ["awaiting_consent", "pending_otp", "active"].includes(latest.status);
+
+  const request = useMutation({
+    mutationFn: () =>
+      adminFetch("/api/superadmin/takeover", {
+        method: "POST",
+        body: JSON.stringify({ ticketId, scope, requestedDurationMinutes: duration }),
+      }),
+    onSuccess: () => {
+      notify.success("Request sent — waiting for the society admin.");
+      qc.invalidateQueries({ queryKey: ["superadmin-takeover-grants", ticketId] });
+    },
+    onError: (err) => {
+      notify.error(err.message);
+      // 409 "already in flight" means the list is stale (another tab, or
+      // this one's own double-click) — resync instead of leaving the form
+      // sitting there implying nothing happened.
+      if (err.code === "GRANT_IN_FLIGHT") qc.invalidateQueries({ queryKey: ["superadmin-takeover-grants", ticketId] });
+    },
+  });
+
+  const end = useMutation({
+    mutationFn: () => adminFetch(`/api/superadmin/takeover/${latest._id}/end`, { method: "POST" }),
+    onSuccess: (res) => {
+      notify.info(res.alreadyEnded ? "Session had already ended." : "Session ended.");
+      qc.invalidateQueries({ queryKey: ["superadmin-takeover-grants", ticketId] });
+    },
+    onError: (err) => {
+      notify.error(err.message);
+      qc.invalidateQueries({ queryKey: ["superadmin-takeover-grants", ticketId] });
+    },
+  });
+
+  return (
+    <div style={{ background: "var(--bg-sunken)", borderRadius: 8, padding: "1rem", marginBottom: "1rem" }}>
+      <div style={labelStyle}>Remote takeover</div>
+
+      {isError && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, fontSize: 12, color: "var(--danger)", marginBottom: "0.75rem" }}>
+          <span>Couldn't load takeover status: {error.message}</span>
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid var(--danger)", background: "transparent", color: "var(--danger)", cursor: "pointer", fontSize: 12 }}
+          >
+            {isFetching ? "Retrying…" : "Retry"}
+          </button>
+        </div>
+      )}
+
+      {latest && (
+        <div style={{ fontSize: 13, marginBottom: inFlight ? "0.75rem" : 0, color: "var(--fg-3)" }}>
+          {latest.scope === "write" ? "Edit" : "View-only"} · {GRANT_STATUS_LABEL[latest.status] || latest.status}
+          {latest.status === "active" && ` · expires ${fmtTime(latest.expiresAt)}`}
+        </div>
+      )}
+
+      {latest?.status === "active" ? (
+        <div style={{ display: "flex", gap: 10 }}>
+          <a
+            href={`/superadmin/takeover/${latest._id}`}
+            target="_blank"
+            rel="noreferrer"
+            style={{ padding: "0.5rem 1rem", borderRadius: 6, background: "var(--primary)", color: "#fff", fontWeight: 700, fontSize: 13, textDecoration: "none" }}
+          >
+            Open dashboard ↗
+          </a>
+          <button
+            onClick={() => end.mutate()}
+            disabled={end.isPending}
+            style={{ padding: "0.5rem 1rem", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-muted)", color: "var(--fg-3)", cursor: "pointer", fontSize: 13 }}
+          >
+            {end.isPending ? "Ending…" : "End session"}
+          </button>
+        </div>
+      ) : inFlight ? null : (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <select value={scope} onChange={(e) => setScope(e.target.value)} style={selectStyle}>
+            <option value="read">View only</option>
+            <option value="write">View + edit</option>
+          </select>
+          <select value={duration} onChange={(e) => setDuration(Number(e.target.value))} style={selectStyle}>
+            <option value={15}>15 min</option>
+            <option value={30}>30 min</option>
+            <option value={60}>60 min</option>
+            <option value={120}>2 hr</option>
+          </select>
+          <button
+            onClick={() => request.mutate()}
+            disabled={request.isPending}
+            style={{ padding: "0.5rem 1rem", borderRadius: 6, border: "none", background: "var(--primary)", color: "#fff", fontWeight: 700, cursor: "pointer", fontSize: 13 }}
+          >
+            {request.isPending ? "Requesting…" : "Request takeover"}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

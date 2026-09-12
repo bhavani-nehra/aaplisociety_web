@@ -150,7 +150,10 @@ export default function LoginPage() {
         role === "Admin" ||
         role === "Accountant"
       ) {
-        router.replace("/admin/dashboard");
+        // First Admin/Secretary login for a Society that hasn't accepted
+        // the current Terms/Privacy/Refund bundle yet — see
+        // app/api/auth/login/route.js and legal/*.md.
+        router.replace(data.user?.legalAcceptanceRequired ? "/legal/accept" : "/admin/dashboard");
       } else if (role === "Security") {
         router.replace("/security/dashboard");
       } else if (data.user?.kind === "Staff") {

@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { LogOut } from "lucide-react";
 import NotificationBell from "./NotificationBell";
+import TakeoverSessionPanel from "./TakeoverSessionPanel";
 import ProfileSwitcher from "./ProfileSwitcher";
 import RouteLoadingBar from "./RouteLoadingBar";
 import ThemeToggle from "./theme/ThemeToggle";
@@ -60,6 +61,15 @@ export default function DashboardLayout({
     };
     fetchUser();
   }, []);
+  // Legal document (Terms of Service / Privacy Policy / Refund policy)
+  // acceptance gate — app/legal/accept isn't wrapped in this layout, so
+  // this only ever fires from inside a real dashboard page. See
+  // app/api/auth/me/route.js for where the flag comes from.
+  useEffect(() => {
+    if (user?.legalAcceptanceRequired) {
+      router.replace("/legal/accept");
+    }
+  }, [user?.legalAcceptanceRequired, router]);
   // Clear navigating state when route actually changes
   useEffect(() => {
     setNavigating(false);
@@ -77,7 +87,7 @@ export default function DashboardLayout({
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/auth/login");
   };
-  if (!user) {
+  if (!user || user.legalAcceptanceRequired) {
     return (
       <div className={styles.fullPageLoader}>
         <div className={styles.fullPageLoaderDots}>
@@ -176,6 +186,12 @@ export default function DashboardLayout({
       </aside>
       {/* MAIN AREA */}
       <div className={styles.mainWrapper}>
+        {/* Society-takeover consent/session bar — Admin/Secretary only (the
+            only roles the takeover API ever grants against). See
+            docs/superpowers/specs/2026-09-11-society-takeover-design.md. */}
+        {(user.role === "Admin" || user.role === "Secretary") && (
+          <TakeoverSessionPanel user={user} />
+        )}
         {/* No top header: it used to hold only the user avatar+name (already
             shown in the sidebar footer below — redundant) and the
             notification bell (now in the sidebar's quick-actions row above

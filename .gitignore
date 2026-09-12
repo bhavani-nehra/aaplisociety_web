@@ -166,7 +166,7 @@ README-INTEGRATION.md
 ANIMATION_GUIDE.md
 skills-and-plugins-reference.md
 strix_runs/
-legal/
+/legal/
 
 # Dev-only API health-check tooling — not shipped
 app/admin/api-health/

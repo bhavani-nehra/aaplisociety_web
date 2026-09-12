@@ -164,9 +164,10 @@
   box-sizing: border-box;
   font-family: inherit;
 }
-.replyForm textarea:focus {
+.replyForm textarea:focus-visible {
   border-color: var(--accent);
   outline: none;
+  box-shadow: 0 0 0 3px var(--r-focus);
 }
 .replyMeta {
   display: flex;

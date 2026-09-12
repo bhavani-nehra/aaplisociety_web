@@ -63,9 +63,10 @@
   border-radius: 8px;
   font-size: 0.95rem;
 }
-.searchInput:focus {
+.searchInput:focus-visible {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--r-focus);
 }
 .filterSelect {
   padding: 0.75rem 1rem;

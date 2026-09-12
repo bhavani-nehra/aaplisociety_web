@@ -67,22 +67,45 @@ export default function AmenityCategoriesPage() {
     }
   };
 
-  const remove = async (cat) => {
-    // The API refuses to delete a category that still has amenities and tells us
-    // how many. Surfacing that verbatim is more useful than a generic failure.
-    if (!(await notify.confirm(`Delete "${cat.name}"? This cannot be undone.`, { tone: "danger" }))) return;
-    try {
-      const res = await fetch(`/api/amenities/categories/${cat._id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Delete failed");
-      showToast("Category deleted");
-      load();
-    } catch (err) {
-      showToast(err.message, "err");
-    }
+  const remove = (cat) => {
+    const index = categories.findIndex((c) => c._id === cat._id);
+    if (index === -1) return;
+    // Optimistic — the category leaves the list immediately; notify.undo()
+    // gives the admin a window to put it back before the DELETE actually
+    // fires. The API still independently refuses the delete (409) if
+    // amenities still reference this category — see the catch below, which
+    // restores the row and surfaces that message verbatim if so.
+    setCategories((prev) => prev.filter((c) => c._id !== cat._id));
+    notify.undo(`"${cat.name}" deleted`, {
+      onUndo: () => {
+        setCategories((prev) => {
+          const next = [...prev];
+          next.splice(index, 0, cat);
+          return next;
+        });
+      },
+      onCommit: async () => {
+        try {
+          const res = await fetch(`/api/amenities/categories/${cat._id}`, {
+            method: "DELETE",
+            credentials: "include",
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Delete failed");
+        } catch (err) {
+          // The API refuses to delete a category that still has amenities
+          // and tells us how many — surface that verbatim, and put the row
+          // back since the delete never actually happened server-side.
+          showToast(err.message, "err");
+          setCategories((prev) => {
+            if (prev.some((c) => c._id === cat._id)) return prev;
+            const next = [...prev];
+            next.splice(index, 0, cat);
+            return next;
+          });
+        }
+      },
+    });
   };
 
   const onDrop = async (targetId) => {

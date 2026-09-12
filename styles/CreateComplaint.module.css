@@ -54,7 +54,6 @@
   border: 1.5px solid var(--border);
   border-radius: 8px;
   font-size: 0.9rem;
-  outline: none;
   transition: border-color 0.2s;
   width: 100%;
   box-sizing: border-box;
@@ -62,10 +61,12 @@
   background: var(--bg-input);
   color: var(--fg-1);
 }
-.field select:focus,
-.field input:focus,
-.field textarea:focus {
+.field select:focus-visible,
+.field input:focus-visible,
+.field textarea:focus-visible {
+  outline: none;
   border-color: var(--primary-hover);
+  box-shadow: 0 0 0 3px var(--r-focus);
 }
 .inputError {
   border-color: var(--danger) !important;

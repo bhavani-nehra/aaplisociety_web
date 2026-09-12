@@ -124,23 +124,39 @@ export default function AdminNoticesPage() {
       setSubmitting(false);
     }
   };
-  const handleDelete = async (id) => {
-    if (!(await notify.confirm("Delete this notice? This cannot be undone.", { tone: "danger" }))) return;
-    setActionLoading({ ...actionLoading, [id]: "delete" });
-    try {
-      const res = await fetch(`/api/notices/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      showToast("Notice deleted");
-      fetchNotices();
-    } catch (err) {
-      showToast(err.message, "error");
-    } finally {
-      setActionLoading({ ...actionLoading, [id]: null });
-    }
+  const handleDelete = (id) => {
+    const index = notices.findIndex((n) => n._id === id);
+    if (index === -1) return;
+    const removed = notices[index];
+    // Optimistic — the notice leaves the list immediately; notify.undo()
+    // gives the admin a window to put it back before the DELETE actually
+    // fires.
+    setNotices((prev) => prev.filter((n) => n._id !== id));
+    notify.undo("Notice deleted", {
+      onUndo: () => {
+        setNotices((prev) => {
+          const next = [...prev];
+          next.splice(index, 0, removed);
+          return next;
+        });
+      },
+      onCommit: async () => {
+        try {
+          const res = await fetch(`/api/notices/${id}`, {
+            method: "DELETE",
+            credentials: "include",
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error);
+        } catch (err) {
+          // Delete failed server-side after the optimistic removal already
+          // happened — refetch to reconcile the list with reality and
+          // surface why.
+          showToast(err.message, "error");
+          fetchNotices();
+        }
+      },
+    });
   };
   const handlePin = async (id, currentPinned) => {
     setActionLoading({ ...actionLoading, [id]: "pin" });

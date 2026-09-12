@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import notify from "@/lib/notify";
 import {
   Card,
   PageHeader,
@@ -114,14 +115,33 @@ export default function BlacklistPage() {
       setSaving(false);
     }
   }
-  async function remove(id) {
-    try {
-      await api(`/api/admin/blacklist?id=${encodeURIComponent(id)}`, { method: "DELETE" });
-      setToast({ type: "success", message: "Entry deactivated" });
-      load();
-    } catch (err) {
-      setToast({ type: "error", message: err.message });
-    }
+  function remove(id) {
+    const index = entries.findIndex((en) => en._id === id);
+    if (index === -1) return;
+    const removed = entries[index];
+    // Optimistic — the row leaves the list immediately; notify.undo() gives
+    // the admin a window to put it back before the DELETE actually fires.
+    setEntries((prev) => prev.filter((en) => en._id !== id));
+    notify.undo("Removed from watchlist", {
+      onUndo: () => {
+        setEntries((prev) => {
+          const next = [...prev];
+          next.splice(index, 0, removed);
+          return next;
+        });
+      },
+      onCommit: async () => {
+        try {
+          await api(`/api/admin/blacklist?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+        } catch (err) {
+          // Delete failed server-side after the optimistic removal already
+          // happened — put the row back and say why, same as any other
+          // failed mutation on this page.
+          setToast({ type: "error", message: err.message });
+          load();
+        }
+      },
+    });
   }
   return (
     <div>

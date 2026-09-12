@@ -13,6 +13,8 @@ import { enforceRateLimit } from "@/lib/v1/ratelimit";
 import { ApiError } from "@/lib/v1/http";
 import { refreshEntitlementSnapshot } from "@/lib/entitlements/resolve";
 import { verifyTurnstileToken } from "@/lib/turnstile";
+import TermsAcceptance from "@/models/TermsAcceptance";
+import { BUNDLE_VERSION } from "@/lib/legal/documents";
 const MAX_ATTEMPTS = parseInt(process.env.RATE_LIMIT_LOGIN, 10) || 10;
 const WINDOW_MS = 15 * 60 * 1000;
 export async function POST(request) {
@@ -155,6 +157,22 @@ export async function POST(request) {
       // is a cache, and a cold one simply lets requests through until the next
       // read repopulates it (see lib/entitlements/snapshot.js).
       await refreshEntitlementSnapshot(assignment.societyId).catch(() => {});
+      // Legal document (Terms of Service / Privacy Policy / Refund policy)
+      // acceptance gate — checked right at login so a Society's first
+      // Admin/Secretary login goes straight to /legal/accept instead of
+      // flashing the dashboard first. See legal/*.md,
+      // lib/legal/documents.js. DashboardLayout's own check (app/api/auth/
+      // me) is the catch-all for every other entry path (profile-select,
+      // switch-profile, a direct URL) — this is purely the fast path for
+      // the common case.
+      let legalAcceptanceRequired = false;
+      if (assignment.role === "Admin" || assignment.role === "Secretary") {
+        const accepted = await TermsAcceptance.exists({
+          societyId: assignment.societyId,
+          bundleVersion: BUNDLE_VERSION,
+        });
+        legalAcceptanceRequired = !accepted;
+      }
       const token = signToken({
         userId: user._id,
         activeContext: { societyId: assignment.societyId, hat: "staff" },
@@ -184,6 +202,7 @@ export async function POST(request) {
           kind: "Staff",
           societyId: assignment.societyId,
           societyName: assignment.societyName,
+          ...(legalAcceptanceRequired ? { legalAcceptanceRequired: true } : {}),
         },
       });
       response.cookies.set("token", token, {

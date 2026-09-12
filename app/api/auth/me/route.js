@@ -7,6 +7,8 @@ import { getAdminModels } from "@/lib/admin-models";
 import { getTokenFromRequest } from "@/lib/jwt";
 import { loginBlockFor } from "@/lib/auth/login-block";
 import { getSessionContext, HAT_STAFF, HAT_MEMBER } from "@/lib/auth/session-context";
+import TermsAcceptance from "@/models/TermsAcceptance";
+import { BUNDLE_VERSION } from "@/lib/legal/documents";
 // Reads req.cookies.get() directly rather than next/headers' cookies(), which
 // doesn't opt this route out of Next's route cache by itself — force it, or a
 // stale response (e.g. a Member profile fetched before a staff-hat switch)
@@ -75,6 +77,22 @@ export async function GET(req) {
         if (block) {
           return NextResponse.json({ error: block.message, code: block.code }, { status: 403 });
         }
+
+        // Legal document (Terms of Service / Privacy Policy / Refund
+        // policy) acceptance gate — see legal/*.md, lib/legal/documents.js.
+        // Only Admin/Secretary can accept (app/api/v1/legal/accept), so
+        // only they're ever asked; other staff roles never see this, and
+        // a superadmin's takeover session never does either (decoded.takeover
+        // present) — that's not their acceptance to give.
+        let legalAcceptanceRequired = false;
+        if (!decoded.takeover && (session.role === "Admin" || session.role === "Secretary")) {
+          const accepted = await TermsAcceptance.exists({
+            societyId: session.societyId,
+            bundleVersion: BUNDLE_VERSION,
+          });
+          legalAcceptanceRequired = !accepted;
+        }
+
         return NextResponse.json({
           user: {
             id: user._id,
@@ -91,6 +109,12 @@ export async function GET(req) {
             role: session.role || "Staff",
             societyId: session.societyId,
             ...(session.isLegacyToken ? { societyCode: user.societyCode } : {}),
+            // Present only on a superadmin's impersonation token — see
+            // docs/superpowers/specs/2026-09-11-society-takeover-design.md.
+            // Lets the dashboard shell render the persistent support-session
+            // banner without the shell needing to know about JWTs at all.
+            ...(decoded.takeover ? { takeover: decoded.takeover } : {}),
+            ...(legalAcceptanceRequired ? { legalAcceptanceRequired: true } : {}),
           },
         });
       }

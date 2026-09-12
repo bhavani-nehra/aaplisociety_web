@@ -817,11 +817,13 @@ export function Modal({ open, onClose, title, sub, width = 720, children }) {
     <div style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div
         onClick={onClose}
+        className="revamp-modal-backdrop"
         style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)" }}
       />
       <div
         role="dialog"
         aria-modal="true"
+        className="revamp-modal-panel"
         style={{
           position: "relative", width: `min(${width}px, 100%)`, maxHeight: "88vh",
           background: "var(--r-surface)", border: "1px solid var(--r-hairline)", borderRadius: 16,
@@ -879,6 +881,7 @@ export function Drawer({ open, onClose, title, sub, width = 560, children }) {
       <div
         role="dialog"
         aria-modal="true"
+        className="revamp-drawer-panel"
         style={{
           position: "absolute", top: 0, right: 0, bottom: 0, width: `min(${width}px, 100vw)`,
           background: "var(--r-surface)", borderLeft: "1px solid var(--r-hairline)",

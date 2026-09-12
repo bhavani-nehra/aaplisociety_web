@@ -109,6 +109,7 @@
   --r-brand:         #1e3a8a;
   --r-brand-soft:    #e8edf9;
   --r-brand-ink:     #ffffff;
+  --r-focus:         color-mix(in srgb, var(--r-brand) 60%, transparent);
   --r-accent:        #6b8eef;
   --r-success:       #0f9d58;
   --r-success-soft:  #e7f7ee;
@@ -184,6 +185,7 @@
   --r-brand:         #7c9cf7;
   --r-brand-soft:    #202d54;
   --r-brand-ink:     #0d0d12;
+  --r-focus:         color-mix(in srgb, var(--r-brand) 60%, transparent);
   --r-accent:        #a3b9f5;
   --r-success:       #3ddc9b;
   --r-success-soft:  #103428;
@@ -806,6 +808,12 @@ tbody tr:last-child td { border-bottom: none; }
 @keyframes revamp-pop     { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes revamp-spin    { to { transform: rotate(360deg); } }
 .revamp-spin { animation: revamp-spin 0.9s linear infinite; }
+.revamp-modal-backdrop { animation: revamp-fade 0.15s ease-out; }
+.revamp-modal-panel { animation: revamp-pop 0.18s cubic-bezier(0.16, 1, 0.3, 1); }
+.revamp-drawer-panel { animation: revamp-slide-r 0.22s cubic-bezier(0.16, 1, 0.3, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .revamp-modal-backdrop, .revamp-modal-panel, .revamp-drawer-panel { animation: none; }
+}
 .revamp-scroll::-webkit-scrollbar       { width: 10px; height: 10px; }
 .revamp-scroll::-webkit-scrollbar-thumb { background: var(--r-border); border-radius: 8px; }
 .revamp-scroll::-webkit-scrollbar-track { background: transparent; }

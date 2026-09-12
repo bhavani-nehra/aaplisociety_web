@@ -38,6 +38,7 @@ import {
   Banknote,
   SlidersHorizontal,
   Layers,
+  HelpCircle,
 } from "lucide-react";
 
 // Shared between app/admin/layout.js and app/my-access/page.js — the latter
@@ -54,6 +55,10 @@ export const ADMIN_NAVIGATION = [
       // way to find that page from inside the app. The page shows an empty
       // state when there is nothing waiting, which is the normal case.
       { name: "My Society Data", path: "/admin/data-handover", pageKey: null, icon: <Download size={16} /> },
+      // pageKey: null — help must stay reachable regardless of the caller's
+      // permission set (same reasoning as "My Society Data" above). See
+      // docs/ux-overhaul/2026-09-01-faq-docs-hub-design.md.
+      { name: "Help & FAQ", path: "/admin/help", pageKey: null, icon: <HelpCircle size={16} /> },
     ],
   },
   {

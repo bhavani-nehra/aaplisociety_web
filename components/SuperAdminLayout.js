@@ -9,6 +9,7 @@ import {
   Archive,
   LifeBuoy,
   RefreshCw,
+  Lock,
 } from "lucide-react";
 import RouteLoadingBar from "./RouteLoadingBar";
 import ThemeToggle from "./theme/ThemeToggle";
@@ -25,6 +26,7 @@ const NAV = [
     items: [
       { name: "Societies",     path: "/superadmin/societies",     icon: <Building2 size={16} strokeWidth={1.75} /> },
       { name: "Support Tickets", path: "/superadmin/tickets",     icon: <LifeBuoy size={16} strokeWidth={1.75} /> },
+      { name: "Takeover Sessions", path: "/superadmin/takeover",  icon: <Lock size={16} strokeWidth={1.75} /> },
       { name: "Subscriptions", path: "/superadmin/subscriptions", icon: <CreditCard size={16} strokeWidth={1.75} /> },
       { name: "Offboarding",   path: "/superadmin/lifecycle",     icon: <Archive size={16} strokeWidth={1.75} /> },
       { name: "Audit Reports", path: "/superadmin/audit-reports", icon: <ClipboardList size={16} strokeWidth={1.75} /> },

@@ -140,6 +140,8 @@ const AuditLogSchema = new mongoose.Schema(
         // collected its own records. A judgement call, recorded as one.
         "SOCIETY_HANDOVER_WAIVED",
         "SOCIETY_HANDOVER_WAIVER_REMOVED",
+        // ── legal document acceptance ──
+        "TERMS_ACCEPTED",
       ],
     },
     oldData: { type: mongoose.Schema.Types.Mixed },

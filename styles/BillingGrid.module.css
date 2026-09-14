@@ -236,6 +236,13 @@
     background-position: 1000px 0;
   }
 }
+.contactRow {
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.contactRow:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-sunken);
+}
 .errorList {
   background-color: var(--danger-bg);
   border: 1px solid var(--danger);

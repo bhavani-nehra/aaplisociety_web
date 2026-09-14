@@ -838,12 +838,12 @@ tbody tr:last-child td { border-bottom: none; }
   inset: 0;
   z-index: -4;
   pointer-events: none;
-  background-image: url("/bg.svg");
+  background-image: url("/bg-brand.svg?v=4");
   background-size: cover;
   background-position: center;
 }
 :root[data-theme="dark"] .appBgLayer {
-  background-image: url("/bg-dark.svg");
+  background-image: url("/bg-dark-brand.svg?v=4");
 }
 .appBgDarkDepth {
   position: fixed;

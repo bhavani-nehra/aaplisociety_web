@@ -15,11 +15,47 @@ const CATEGORIES = [
   "Housekeeping",
   "Pest Control",
   "Lift AMC",
+  "Emergency",
+  "Helpline",
+  "Utility",
   "Other",
 ];
 
+// These are the numbers the resident app's Essential Contacts screen already
+// ships hardcoded (see aaplisociety_app essential_contacts_page.dart) — real,
+// nationwide numbers that don't vary per society. "Seed defaults" fills these
+// in fully (name + number, nothing left blank) so the admin only has to type
+// the numbers that ARE society-specific: the office, watchman, plumber, etc.
+const NATIONAL_SEEDS = [
+  { category: "Emergency", name: "Police", number: "100" },
+  { category: "Emergency", name: "Fire brigade", number: "101" },
+  { category: "Emergency", name: "Ambulance", number: "102" },
+  { category: "Emergency", name: "Emergency ambulance (108)", number: "108" },
+  { category: "Emergency", name: "Disaster management", number: "1078" },
+  { category: "Helpline", name: "Women's helpline", number: "1091" },
+  { category: "Helpline", name: "Child helpline", number: "1098" },
+  { category: "Helpline", name: "Senior citizen helpline", number: "14567" },
+  { category: "Helpline", name: "Cyber crime / online fraud", number: "1930" },
+  { category: "Utility", name: "Electricity breakdown (MSEDCL)", number: "1912" },
+  { category: "Utility", name: "LPG gas leak emergency", number: "1906" },
+  { category: "Utility", name: "Water supply complaint", number: "1916" },
+];
+
 let nextRowId = 0;
-const blankRow = (category) => ({ _rowId: nextRowId++, category, name: "", numbers: [""] });
+const blankRow = (category, name = "", numbers = [""]) => ({
+  _rowId: nextRowId++,
+  category,
+  name,
+  numbers,
+});
+
+const contactsToRows = (contacts) =>
+  (contacts || []).map((c) => ({
+    _rowId: nextRowId++,
+    category: c.category,
+    name: c.name || "",
+    numbers: c.numbers.length > 0 ? c.numbers : [""],
+  }));
 
 export default function SocietyContactsPage() {
   const queryClient = useQueryClient();
@@ -32,20 +68,20 @@ export default function SocietyContactsPage() {
     queryFn: () => apiClient.get("/api/admin/society-contacts"),
   });
 
-  // Server rows come with 1-3 real numbers; a UI-only trailing blank input
-  // is added when there's room to add one more, so the admin always has an
-  // empty box ready without an extra click.
   useEffect(() => {
     if (!data?.contacts) return;
-    setRows(
-      data.contacts.map((c) => ({
-        _rowId: nextRowId++,
-        category: c.category,
-        name: c.name || "",
-        numbers: c.numbers.length < 3 ? [...c.numbers, ""] : c.numbers,
-      })),
-    );
+    setRows(contactsToRows(data.contacts));
   }, [data]);
+
+  const savedShape = (data?.contacts || []).map((c) => ({
+    category: c.category,
+    name: c.name || "",
+    numbers: c.numbers.length > 0 ? c.numbers : [""],
+  }));
+  const isDirty =
+    JSON.stringify(rows.map(({ _rowId, ...r }) => r)) !== JSON.stringify(savedShape);
+
+  const handleCancel = () => setRows(contactsToRows(data?.contacts));
 
   const saveMutation = useMutation({
     mutationFn: (contacts) => apiClient.put("/api/admin/society-contacts", { contacts }),
@@ -74,10 +110,16 @@ export default function SocietyContactsPage() {
         const row = draft.find((r) => r._rowId === rowId);
         if (!row) return;
         row.numbers[idx] = value;
-        // Keep exactly one trailing blank box while under the cap of 3.
-        const filled = row.numbers.filter((n) => n.trim()).length;
-        if (filled === row.numbers.length && row.numbers.length < 3) row.numbers.push("");
-        row.numbers = row.numbers.filter((n, i) => n.trim() || i === row.numbers.length - 1);
+      }),
+    );
+
+  // Adds one more empty number box, up to the cap of 3. Admin clicks it
+  // explicitly instead of always seeing 3 boxes.
+  const addNumberSlot = (rowId) =>
+    setRows((prev) =>
+      produce(prev, (draft) => {
+        const row = draft.find((r) => r._rowId === rowId);
+        if (row && row.numbers.length < 3) row.numbers.push("");
       }),
     );
 
@@ -85,17 +127,36 @@ export default function SocietyContactsPage() {
 
   const addRow = () => setRows((prev) => [...prev, blankRow(CATEGORIES[0])]);
 
-  // Adds a blank row for every category not already present. Existing rows
-  // (including ones the admin is mid-editing) are left untouched.
+  // Fills in the nationwide numbers (already known — see NATIONAL_SEEDS)
+  // fully, and adds a blank row for the remaining, society-specific
+  // categories that only the admin can fill in. Existing rows (including
+  // ones the admin is mid-editing) are left untouched.
   const seedDefaults = () => {
-    const present = new Set(rows.map((r) => r.category));
-    const missing = CATEGORIES.filter((c) => !present.has(c)).map(blankRow);
-    if (missing.length === 0) {
-      setSuccessMessage("Every category already has a row.");
+    const present = new Set(rows.map((r) => `${r.category}::${r.name}`));
+    const presentCategories = new Set(rows.map((r) => r.category));
+    const manualCategories = [
+      "Society Office",
+      "Watchman/Security",
+      "Plumber",
+      "Electrician",
+      "Gas Agency",
+      "Housekeeping",
+      "Pest Control",
+      "Lift AMC",
+    ];
+    const seeded = NATIONAL_SEEDS.filter((s) => !present.has(`${s.category}::${s.name}`)).map(
+      (s) => blankRow(s.category, s.name, [s.number]),
+    );
+    const manual = manualCategories
+      .filter((c) => !presentCategories.has(c))
+      .map((c) => blankRow(c));
+    const additions = [...seeded, ...manual];
+    if (additions.length === 0) {
+      setSuccessMessage("Every default is already here.");
       setTimeout(() => setSuccessMessage(""), 4000);
       return;
     }
-    setRows((prev) => [...prev, ...missing]);
+    setRows((prev) => [...prev, ...additions]);
   };
 
   const handleSave = () => {
@@ -118,7 +179,7 @@ export default function SocietyContactsPage() {
   }
 
   return (
-    <div>
+    <div style={{ maxWidth: "820px", margin: "0 auto" }}>
       <div className={styles.pageHeader}>
         <div>
           <h1 className={styles.pageTitle}>Essential Contacts</h1>
@@ -127,15 +188,25 @@ export default function SocietyContactsPage() {
             more. Shown on the &ldquo;Essential contacts&rdquo; screen in the resident app.
           </p>
         </div>
-        <div>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
           <button type="button" onClick={seedDefaults} className="btn btn-secondary">
             🌱 Seed defaults
-          </button>{" "}
+          </button>
+          {isDirty && (
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="btn btn-secondary"
+              title="Discard unsaved changes"
+            >
+              Cancel
+            </button>
+          )}
           <button
             type="button"
             onClick={handleSave}
             className="btn btn-success"
-            disabled={saveMutation.isPending}
+            disabled={saveMutation.isPending || !isDirty}
           >
             {saveMutation.isPending ? (
               <>
@@ -166,29 +237,42 @@ export default function SocietyContactsPage() {
       <div className={styles.contentCard}>
         <div className={styles.cardHeader}>
           <h2 className={styles.cardTitle}>Contacts</h2>
+          <span style={{ fontSize: "0.75rem", color: "var(--fg-5)" }}>
+            {rows.length} {rows.length === 1 ? "entry" : "entries"}
+          </span>
         </div>
-        <div style={{ padding: "0 1.25rem 1.25rem" }}>
+        <div style={{ padding: "0 0.25rem 0.25rem" }}>
           <p style={{ margin: "0 0 1rem", color: "var(--fg-3)", fontSize: "0.85rem" }}>
             Up to 3 numbers per contact — e.g. a plumber&rsquo;s own phone plus a WhatsApp or
             alternate number. A row with no number filled in is dropped when you save.
           </p>
           {rows.length === 0 && (
-            <p style={{ color: "var(--fg-4)", fontSize: "0.85rem" }}>
+            <div
+              style={{
+                textAlign: "center",
+                padding: "2rem 1rem",
+                color: "var(--fg-4)",
+                fontSize: "0.85rem",
+                border: "1px dashed var(--border-strong)",
+                borderRadius: "8px",
+              }}
+            >
               No contacts yet. Click &ldquo;Seed defaults&rdquo; to start from the standard
               categories, or &ldquo;+ Add contact&rdquo; below.
-            </p>
+            </div>
           )}
-          <div style={{ display: "grid", gap: "0.75rem" }}>
+          <div style={{ display: "grid", gap: "0.5rem" }}>
             {rows.map((row) => (
               <div
                 key={row._rowId}
+                className={gridStyles.contactRow}
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "180px 1fr 1fr 1fr 1fr auto",
-                  gap: "0.5rem",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "0.4rem",
                   alignItems: "center",
-                  padding: "0.6rem",
-                  border: "1px solid var(--primary-tint)",
+                  padding: "0.45rem",
+                  border: "1px solid var(--border)",
                   borderRadius: "8px",
                 }}
               >
@@ -196,6 +280,7 @@ export default function SocietyContactsPage() {
                   value={row.category}
                   onChange={(e) => updateRow(row._rowId, { category: e.target.value })}
                   className="input"
+                  style={{ width: "150px", flex: "0 0 auto" }}
                 >
                   {CATEGORIES.map((c) => (
                     <option key={c} value={c}>
@@ -209,22 +294,36 @@ export default function SocietyContactsPage() {
                   onChange={(e) => updateRow(row._rowId, { name: e.target.value })}
                   className="input"
                   placeholder={row.category === "Other" ? "Contact name *" : "Name (optional)"}
+                  style={{ width: "160px", flex: "0 0 auto" }}
                 />
-                {[0, 1, 2].map((i) => (
+                {row.numbers.map((n, i) => (
                   <input
                     key={i}
                     type="tel"
-                    value={row.numbers[i] ?? ""}
+                    value={n}
                     onChange={(e) => updateNumber(row._rowId, i, e.target.value)}
                     className="input"
                     placeholder={i === 0 ? "Phone number *" : `Number ${i + 1}`}
+                    style={{ width: "125px", flex: "0 0 auto" }}
                   />
                 ))}
+                {row.numbers.length < 3 && (
+                  <button
+                    type="button"
+                    onClick={() => addNumberSlot(row._rowId)}
+                    className="btn btn-secondary"
+                    title="Add another number"
+                    style={{ padding: "0.3rem 0.55rem", flex: "0 0 auto" }}
+                  >
+                    +
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => removeRow(row._rowId)}
                   className="btn btn-secondary"
                   title="Remove contact"
+                  style={{ padding: "0.3rem 0.55rem", flex: "0 0 auto" }}
                 >
                   ✕
                 </button>

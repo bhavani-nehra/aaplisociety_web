@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
+import mongoose from "mongoose";
 import { validateAdminRequest } from "@/lib/admin-middleware";
 import connectDB from "@/lib/mongodb";
 import connectStagingDB from "@/lib/mongodb-staging";
@@ -120,8 +120,8 @@ export async function POST(request) {
   let societyId;
   try {
     const body = await request.json();
-    societyId = body?.societyId && ObjectId.isValid(body.societyId)
-      ? new ObjectId(body.societyId)
+    societyId = body?.societyId && mongoose.Types.ObjectId.isValid(body.societyId)
+      ? new mongoose.Types.ObjectId(body.societyId)
       : null;
   } catch {
     // no body

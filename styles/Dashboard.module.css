@@ -442,7 +442,12 @@
   background: rgba(255, 255, 255, 0.42);
 }
 :global(html[data-theme="dark"]) .contentFrame {
-  background: rgba(22, 30, 50, 0.68);
+  /* Was a hardcoded rgba(22,30,50,0.68) — a fixed navy independent of the
+     --r-* token set, so this panel stayed the same blue no matter what the
+     aurora svg behind it actually looked like. Neutral --r-surface-based
+     value instead, so the svg (not a magic color) is what's visible through
+     the glass. */
+  background: rgba(11, 11, 15, 0.82);
   backdrop-filter: blur(48px);
   -webkit-backdrop-filter: blur(48px);
   border-color: rgba(150, 180, 235, 0.14);

@@ -140,7 +140,20 @@ const AuditLogSchema = new mongoose.Schema(
         // collected its own records. A judgement call, recorded as one.
         "SOCIETY_HANDOVER_WAIVED",
         "SOCIETY_HANDOVER_WAIVER_REMOVED",
-        // ── legal document acceptance ──
+        // ── society takeover (support-assisted remote access) — see
+        // docs/superpowers/specs/2026-09-11-society-takeover-design.md.
+        // Grant lifecycle events only; actual data writes made during an
+        // active session produce their own normal AuditLog entry via the
+        // route that made them (the impersonation token carries the real
+        // admin's identity) — not duplicated here. ──
+        "TAKEOVER_REQUESTED",
+        "TAKEOVER_OTP_SENT",
+        "TAKEOVER_GRANTED",
+        "TAKEOVER_DENIED",
+        "TAKEOVER_ACTIVATED",
+        "TAKEOVER_REVOKED",
+        "TAKEOVER_EXPIRED",
+        // ── legal document acceptance (legal/*.md, lib/legal/documents.js) ──
         "TERMS_ACCEPTED",
       ],
     },

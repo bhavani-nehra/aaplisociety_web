@@ -6,28 +6,149 @@
 .dashboardContainer {
   display: flex;
   min-height: 100vh;
-  background: var(--bg-canvas);
+  /* No opaque background here anymore — this used to be var(--bg-canvas),
+     a solid color that sits at normal stacking order and was painting
+     OVER the fixed, negative-z-index global Aurora bg (app/layout.js /
+     styles/globals.css .appBgLayer etc) on every page that uses this
+     layout (admin/member/security — i.e. almost the whole app). That's
+     the literal cause of "pure white everywhere": the global bg was
+     rendering correctly, this was just opaque on top of it. Transparent
+     lets it show through. */
+  background: transparent;
 }
 /* ══════════════════════════════════════════════════
    SIDEBAR — 260px, left border only
 ══════════════════════════════════════════════════ */
+/* ── Sidebar — Capsule shape, permanent (the Segmented/Weighted variants
+   and their switcher were tried and retired; their CSS stays below,
+   selectors gated on a data-sidebar-style attribute nothing sets anymore,
+   so it's dead but harmless — kept in case a future request wants one of
+   them back instead of re-deriving it). .sidebar itself is just a
+   positioning shell (transparent, fixed, inset from the viewport edge);
+   the glass paint lives on the 3 segment classes below. */
 .sidebar {
   width: 260px;
-  background: var(--bg-surface);
-  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   position: fixed;
-  height: 100vh;
-  overflow-y: auto;
-  overflow-x: hidden;
-  left: 0;
-  top: 0;
+  left: 10px; /* Capsule (default) — untouched: still floats on all sides */
+  top: 10px;
+  bottom: 10px;
+  gap: 0;
   z-index: 200;
+  background: transparent;
 }
-.sidebar::-webkit-scrollbar {
-  width: 0;
+/* Segmented is retired from the switcher (see useSidebarStyle.js) but its
+   CSS stays here, unreachable, in case it comes back. */
+:global(html[data-sidebar-style="segmented"]) .sidebar {
+  left: 16px;
+  top: 16px;
+  bottom: 16px;
+  gap: 14px;
 }
+/* Weighted — flush against the viewport's left edge (no left inset, no
+   left corners, per the hand-drawn sketch: it "originates from the
+   border"), only floats top/bottom/right. */
+:global(html[data-sidebar-style="weighted"]) .sidebar {
+  left: 0;
+  top: 16px;
+  bottom: 16px;
+  gap: 10px;
+}
+
+/* The 3 floating segments — glass paint shared by all of them.
+   --sidebar-glass-t (0-100, see globals.css) blends between the flat
+   opaque surface (0) and the full glass tint (100) — fixed at 40, no
+   slider. Plain fallback first for browsers without color-mix(). */
+.sidebarSegHeader,
+.sidebarSegNav,
+.sidebarSegFooter {
+  background: var(--bg-surface);
+  background: color-mix(in srgb, var(--bg-surface) calc(100% - var(--sidebar-glass-t) * 1%), var(--r-sidebar-glass) calc(var(--sidebar-glass-t) * 1%));
+  /* Light theme: mild saturate boost is fine, no reported hue issue.
+     Dark theme drops it entirely below — same saturate()-on-dark-art hue
+     rotation that hit the frame (green, then violet), confirmed twice. */
+  backdrop-filter: blur(calc(var(--sidebar-glass-t) * 0.2px)) saturate(calc(100% + var(--sidebar-glass-t) * 0.7%));
+  -webkit-backdrop-filter: blur(calc(var(--sidebar-glass-t) * 0.2px)) saturate(calc(100% + var(--sidebar-glass-t) * 0.7%));
+  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--border) calc(100% - var(--sidebar-glass-t) * 1%), var(--r-sidebar-glass-border) calc(var(--sidebar-glass-t) * 1%));
+  box-shadow: var(--r-sidebar-glass-shadow);
+  /* No overflow:hidden — border-radius already clips this box's own
+     background/shadow, and NotificationBell's dropdown (position:
+     absolute, anchored inside sidebarSegHeader) needs to be able to
+     escape these bounds instead of getting clipped. */
+}
+.sidebarSegNav {
+  overflow: hidden; /* no absolutely-positioned overflow content in the nav list, safe to clip */
+  /* Was a plain block before — flex:1 on the inner .sidebarNav did
+     nothing without a flex parent, so it never got a bounded height and
+     never actually scrolled (the whole segment just grew and got clipped
+     by this overflow:hidden instead). Making this a flex column gives
+     .sidebarNav real bounds to scroll within. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .sidebarSegHeader,
+  .sidebarSegNav,
+  .sidebarSegFooter {
+    background: var(--bg-surface);
+  }
+}
+:global(html[data-theme="dark"]) .sidebarSegHeader,
+:global(html[data-theme="dark"]) .sidebarSegNav,
+:global(html[data-theme="dark"]) .sidebarSegFooter {
+  backdrop-filter: blur(calc(var(--sidebar-glass-t) * 0.2px));
+  -webkit-backdrop-filter: blur(calc(var(--sidebar-glass-t) * 0.2px));
+}
+/* Capsule (default): butted together at gap:0 — the two 1px borders that
+   meet at each seam read as a single thin divider line, matching the
+   hand-drawn sketch. Only the outer corners of the whole stack are
+   rounded. DOM order is header → nav → footer (user/logout), so nav is
+   the square middle segment and footer gets the bottom corners. */
+.sidebarSegHeader {
+  border-radius: 20px 20px 0 0;
+  flex-shrink: 0;
+}
+.sidebarSegNav {
+  border-radius: 0;
+  flex: 1;
+  min-height: 0;
+}
+.sidebarSegFooter {
+  border-radius: 0 0 20px 20px;
+  flex-shrink: 0;
+}
+/* Segmented (retired, unreachable): 3 independently floating pills,
+   fully rounded. */
+:global(html[data-sidebar-style="segmented"]) .sidebarSegHeader,
+:global(html[data-sidebar-style="segmented"]) .sidebarSegNav,
+:global(html[data-sidebar-style="segmented"]) .sidebarSegFooter {
+  border-radius: 22px;
+}
+/* Weighted: 3 floating pills, but each one's LEFT corners are square —
+   they line up flush against the viewport edge as one continuous
+   straight line (only the right-hand corners are rounded), per the
+   hand-drawn sketch. */
+:global(html[data-sidebar-style="weighted"]) .sidebarSegHeader,
+:global(html[data-sidebar-style="weighted"]) .sidebarSegNav,
+:global(html[data-sidebar-style="weighted"]) .sidebarSegFooter {
+  border-radius: 0 22px 22px 0;
+}
+/* Weighted: compact header/footer pills, nav segment dominates the
+   column (flex:1 already does most of this; shrink the other two
+   further so the size gap actually reads). */
+:global(html[data-sidebar-style="weighted"]) .sidebarHeader {
+  padding: 12px 16px;
+}
+:global(html[data-sidebar-style="weighted"]) .sidebarQuickActions {
+  padding: 6px 12px;
+}
+:global(html[data-sidebar-style="weighted"]) .sidebarFooter {
+  padding: 10px 12px;
+}
+
 /* ── Sidebar Header ─────────────────────────────── */
 .sidebarHeader {
   padding: 20px 24px;
@@ -85,6 +206,7 @@
 /* ── Nav ─────────────────────────────────────────── */
 .sidebarNav {
   flex: 1;
+  min-height: 0; /* lets this actually shrink to sidebarSegNav's bounds and scroll, instead of growing forever */
   padding: 14px;
   overflow-y: auto;
 }
@@ -156,7 +278,9 @@
 /* ── Sidebar Footer ─────────────────────────────── */
 .sidebarFooter {
   padding: 14px;
-  border-top: 1px solid var(--border);
+  /* No border-top here anymore — the sidebarSegNav/sidebarSegFooter seam
+     (or the gap between them, in Segmented/Weighted) already separates
+     nav from footer. */
   flex-shrink: 0;
 }
 .userInfo {
@@ -296,11 +420,61 @@
 .mainContent {
   flex: 1;
   min-width: 0;
-  margin-left: 260px;
-  /* Top padding restored now that topHeader (which used to provide this
-     56px of breathing room above page content) is gone. */
-  padding: 24px 24px 24px;
+  /* Capsule (default): 10px left inset + 260px sidebar + a matching gap. */
+  margin-left: 270px;
+  /* Kept minimal (10px) deliberately — this is the OUTER gap between the
+     content area and the viewport/sidebar. Breathing room around the
+     actual content comes from .contentFrame's own padding below, not
+     from this. */
+  padding: 10px;
   animation: fadeSlideIn 0.18s ease;
+}
+/* ── Global content glass frame ────────────────────────────────────────
+   Every admin/member/security page renders inside this now (wrapped once,
+   in DashboardLayout.js — no per-page opt-in). Used to be admin-dashboard-
+   only (app/admin/dashboard/dashboard-styles.module.css's own .frame,
+   still there for its historical author but no longer wrapping that
+   page's content — the dashboard now gets ITS glass from here too, so
+   there's exactly one frame, not two nested ones blurring each other).
+   Same visual values that page had: translucent white/dark + blur, so the
+   global Aurora bg (styles/globals.css .appBgLayer) shows through on
+   every page, not just one. */
+.contentFrame {
+  border-radius: 28px;
+  padding: clamp(18px, 2.4vw, 32px);
+  min-height: calc(100vh - 20px); /* viewport minus .mainContent's 10px top + 10px bottom padding */
+  backdrop-filter: blur(38px) saturate(140%);
+  -webkit-backdrop-filter: blur(38px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.45) inset,
+    0 28px 70px -24px rgba(20, 20, 40, 0.2);
+  background: rgba(255, 255, 255, 0.42);
+}
+:global(html[data-theme="dark"]) .contentFrame {
+  /* Was a hardcoded rgba(22,30,50,0.68) — a fixed navy independent of the
+     --r-* token set, so this panel stayed the same blue no matter what the
+     aurora svg behind it actually looked like. Neutral --r-surface-based
+     value instead, so the svg (not a magic color) is what's visible through
+     the glass. */
+  background: rgba(11, 11, 15, 0.82);
+  backdrop-filter: blur(48px);
+  -webkit-backdrop-filter: blur(48px);
+  border-color: rgba(150, 180, 235, 0.14);
+  box-shadow:
+    0 1px 0 rgba(180, 205, 255, 0.08) inset,
+    0 28px 70px -24px rgba(0, 0, 0, 0.55);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .contentFrame {
+    background: var(--bg-surface);
+  }
+}
+:global(html[data-sidebar-style="segmented"]) .mainContent {
+  margin-left: 296px; /* 16px left inset + 260px + gap */
+}
+:global(html[data-sidebar-style="weighted"]) .mainContent {
+  margin-left: 280px; /* 0 left inset (flush) + 260px + gap */
 }
 @keyframes fadeSlideIn {
   from {
@@ -482,7 +656,7 @@
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
-  animation: modalSlideIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: modalSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1); /* ease-out-expo, not the bounce/overshoot this used to be */
 }
 .modalHeader {
   padding: 20px 24px;
@@ -557,7 +731,7 @@
   border-radius: 50%;
   background: var(--primary);
   opacity: 0.3;
-  animation: bounceDot 1.4s ease-in-out infinite;
+  animation: loadingDotPulse 1.4s ease-in-out infinite;
 }
 .fullPageLoaderDot:nth-child(2) {
   animation-delay: 0.16s;
@@ -601,7 +775,7 @@
     transform: translateY(-8px);
   }
 }
-@keyframes bounceDot {
+@keyframes loadingDotPulse {
   0%,
   80%,
   100% {

@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
+import { Bell } from "lucide-react";
 import { useNotifications } from "../hooks/useNotifications";
 import NotificationToast from "./NotificationToast";
 import styles from "@/styles/NotificationBell.module.css";
@@ -122,7 +123,7 @@ export default function NotificationBell() {
           aria-label="Notifications"
           aria-expanded={open}
         >
-          🔔
+          <Bell size={15} />
           {unreadCount > 0 && (
             <span className={styles.badge}>
               {unreadCount > 99 ? "99+" : unreadCount}

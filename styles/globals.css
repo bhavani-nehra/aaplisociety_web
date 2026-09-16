@@ -6,6 +6,10 @@
    Source: design system colors_and_type.css + ui_kits/admin
    ============================================================ */
 :root {
+  /* Sidebar glass intensity, 0-100 — fixed final value, no slider. Not
+     theme-specific — same number light or dark, only the color it mixes
+     toward differs (see --r-sidebar-glass below). */
+  --sidebar-glass-t: 40;
   /* ── Brand ─────────────────────────────────────── */
   --primary:        #1e3a8a;
   --primary-hover:  #1e40af;
@@ -122,6 +126,13 @@
   --r-shadow-pop:    0 12px 32px -8px rgba(15,15,30,0.18), 0 2px 6px rgba(15,15,30,0.06);
   --r-shadow-inset:  inset 0 0 0 1px var(--r-border);
   --r-glow-brand:    none;
+  /* App-wide sidebar glass finish (Sep 2026 — Aurora-style reskin of
+     DashboardLayout.js, used by every role: admin/member/security). Not
+     tied to the admin-dashboard style switcher (that's page-local); this
+     is the permanent baseline look everywhere the sidebar renders. */
+  --r-sidebar-glass:        rgba(255, 255, 255, 0.62);
+  --r-sidebar-glass-border: rgba(30, 58, 138, 0.14);
+  --r-sidebar-glass-shadow: 4px 0 28px rgba(30, 50, 110, 0.08);
   --r-radius-sm: 6px;
   --r-radius:    10px;
   --r-radius-lg: 14px;
@@ -197,6 +208,9 @@
   --r-shadow-card:   0 1px 0 rgba(0,0,0,0.4), 0 1px 3px rgba(0,0,0,0.5);
   --r-shadow-pop:    0 16px 40px -8px rgba(0,0,0,0.7), 0 2px 8px rgba(0,0,0,0.4);
   --r-glow-brand:    0 0 0 1px rgba(124,156,247,0.25), 0 8px 24px -6px rgba(124,156,247,0.28);
+  --r-sidebar-glass:        rgba(19, 19, 24, 0.55);
+  --r-sidebar-glass-border: rgba(124, 156, 247, 0.14);
+  --r-sidebar-glass-shadow: 4px 0 28px rgba(0, 0, 0, 0.5);
 
   /* ── App tokens, aliased onto the --r-* layer ──────────────────── */
   --primary:        var(--r-brand);
@@ -817,3 +831,55 @@ tbody tr:last-child td { border-bottom: none; }
 .revamp-scroll::-webkit-scrollbar       { width: 10px; height: 10px; }
 .revamp-scroll::-webkit-scrollbar-thumb { background: var(--r-border); border-radius: 8px; }
 .revamp-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* ══════════════════════════════════════════════════
+   APP-WIDE AURORA BACKGROUND — mounted ONCE in app/layout.js, applies to
+   every route (was admin-dashboard-only; now global per user request).
+   Same 4-layer stack that dashboard-styles.module.css had, moved here so
+   it isn't duplicated per page. public/bg.svg (light) / public/bg-dark.svg
+   (dark, a genuinely different asset — real pixel-level swap, not a CSS
+   filter) swapped by [data-theme]. Fixed z-index -4..-1, pointer-events
+   none, aria-hidden — decorative only, sits behind all real content.
+   ══════════════════════════════════════════════════ */
+.appBgLayer {
+  position: fixed;
+  inset: 0;
+  z-index: -4;
+  pointer-events: none;
+  background-image: url("/bg-brand.svg?v=4");
+  background-size: cover;
+  background-position: center;
+}
+:root[data-theme="dark"] .appBgLayer {
+  background-image: url("/bg-dark-brand.svg?v=4");
+}
+.appBgDarkDepth {
+  position: fixed;
+  inset: 0;
+  z-index: -3;
+  pointer-events: none;
+  background: #050810;
+  opacity: 0;
+}
+:root[data-theme="dark"] .appBgDarkDepth {
+  opacity: 0.595; /* fixed at 70%, final */
+}
+.appBgDarkRightFade {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  opacity: 0;
+}
+:root[data-theme="dark"] .appBgDarkRightFade {
+  opacity: 1;
+  background: linear-gradient(to right, transparent 0%, transparent 35%, rgba(2, 4, 10, 0.75) 100%);
+}
+.appBgScrim {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--bg-canvas);
+  opacity: 0.16;
+}

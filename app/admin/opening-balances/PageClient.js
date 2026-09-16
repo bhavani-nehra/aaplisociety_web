@@ -16,7 +16,6 @@ import { useRouter } from "next/navigation";
 import Icon from "../../../components/accounting/generate/Icon";
 import { PageHeader, FySelect, Btn, EmptyState } from "../../../components/accounting/generate/PageHeader";
 import { NoFinancialYear, SetupAdvisory } from "@/components/accounting/SetupGate";
-import QuickBar from "@/components/accounting/QuickBar";
 import Assistant from "@/components/accounting/Assistant";
 import { useFinancialYears } from "../../../components/accounting/generate/useFinancialYears";
 import { fmtINR, Banner } from "../../../components/accounting/generate/Primitives";
@@ -186,7 +185,6 @@ export default function OpeningBalancesScreen() {
 
   return (
     <div>
-      <QuickBar />
       <Assistant />
       <PageHeader
         title="Opening Balances"

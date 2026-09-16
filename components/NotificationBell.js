@@ -1,5 +1,6 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { Bell } from "lucide-react";
 import { useNotifications } from "../hooks/useNotifications";
@@ -35,8 +36,37 @@ function timeAgo(date) {
 }
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState(null);
+  const [mounted, setMounted] = useState(false);
   const ref = useRef(null);
+  const bellRef = useRef(null);
+  const dropdownRef = useRef(null);
   const pathname = usePathname();
+
+  useEffect(() => setMounted(true), []);
+
+  const updateCoords = useCallback(() => {
+    if (!bellRef.current) return;
+    const rect = bellRef.current.getBoundingClientRect();
+    const width = 360;
+    const margin = 12;
+    let left = rect.left;
+    if (left + width + margin > window.innerWidth) {
+      left = Math.max(margin, window.innerWidth - width - margin);
+    }
+    setCoords({ top: rect.bottom + 10, left, width });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    updateCoords();
+    window.addEventListener("resize", updateCoords);
+    window.addEventListener("scroll", updateCoords, true);
+    return () => {
+      window.removeEventListener("resize", updateCoords);
+      window.removeEventListener("scroll", updateCoords, true);
+    };
+  }, [open, updateCoords]);
 
   // Is the current page one that actually needs notifications?
   const isNeedful = NEEDFUL_NOTIFICATION_ROUTES.some(
@@ -55,7 +85,9 @@ export default function NotificationBell() {
   // Close on outside click
   useEffect(() => {
     function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+      if (ref.current && ref.current.contains(e.target)) return;
+      if (dropdownRef.current && dropdownRef.current.contains(e.target)) return;
+      setOpen(false);
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -85,9 +117,11 @@ export default function NotificationBell() {
       {/* Bell */}
       <div className={styles.wrapper} ref={ref}>
         <button
+          ref={bellRef}
           className={styles.bell}
           onClick={handleOpen}
           aria-label="Notifications"
+          aria-expanded={open}
         >
           <Bell size={15} />
           {unreadCount > 0 && (
@@ -96,8 +130,16 @@ export default function NotificationBell() {
             </span>
           )}
         </button>
-        {open && (
-          <div className={styles.dropdown}>
+      </div>
+      {open &&
+        mounted &&
+        coords &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            className={styles.dropdown}
+            style={{ top: coords.top, left: coords.left, width: coords.width }}
+          >
             <div className={styles.header}>
               <span>Notifications</span>
               {unreadCount > 0 && (
@@ -132,9 +174,9 @@ export default function NotificationBell() {
                 </div>
               ))}
             </div>
-          </div>
+          </div>,
+          document.body,
         )}
-      </div>
     </>
   );
 }

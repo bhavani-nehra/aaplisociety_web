@@ -95,9 +95,10 @@
   border-radius: 6px;
   font-size: 1rem;
 }
-.searchInput:focus {
+.searchInput:focus-visible {
   outline: none;
   border-color: #4caf50;
+  box-shadow: 0 0 0 3px var(--r-focus);
 }
 .filters {
   display: flex;

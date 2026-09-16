@@ -8,6 +8,8 @@ import TakeoverSessionPanel from "./TakeoverSessionPanel";
 import ProfileSwitcher from "./ProfileSwitcher";
 import RouteLoadingBar from "./RouteLoadingBar";
 import ThemeToggle from "./theme/ThemeToggle";
+import CommandBar from "./global/CommandBar";
+import HelpButton from "@/components/global/HelpButton";
 import { SkylineArcMark } from "./brand/SkylineArc";
 import styles from "@/styles/Dashboard.module.css";
 // Legacy role strings a staff-hat session can carry (see legacyRoleForKey /
@@ -22,6 +24,7 @@ export default function DashboardLayout({
   subtitle,
   withQueryClient = false,
   sidebarExtra = null,
+  commandBarConfig = null,
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -70,10 +73,16 @@ export default function DashboardLayout({
       router.replace("/legal/accept");
     }
   }, [user?.legalAcceptanceRequired, router]);
-  // Clear navigating state when route actually changes
+  // Clear navigating state when route actually changes, and scroll back to
+  // the top — the scroll container is `window` (mainWrapper/mainContent
+  // carry no overflow of their own), and <main key={pathname}> remounting
+  // does not reset that on its own, so a page navigated to from partway down
+  // a long previous page (e.g. the accounting nav list) would otherwise open
+  // already scrolled, with its own top content and header off-screen.
   useEffect(() => {
     setNavigating(false);
     clearTimeout(navTimeoutRef.current);
+    window.scrollTo(0, 0);
   }, [pathname]);
   const handleNav = useCallback((path) => {
     if (pathname === path) return;
@@ -184,6 +193,21 @@ export default function DashboardLayout({
           <ProfileSwitcher />
         </div>
       </aside>
+      {/* Contextual help — one fixed trigger per shell, always visible.
+          Mounted here (not inside sidebarQuickActions) so it never competes
+          for the same JSX region as CommandBar's mount (that one lives
+          inside .mainContent, above {children} — see the commandBarConfig
+          block below); see
+          docs/superpowers/plans/2026-09-12-contextual-help-phase1.md.
+          Skipped on /admin/accounting/* and /admin/opening-balances: those
+          routes already mount their own <Assistant> (components/accounting/
+          Assistant.jsx) at the exact same fixed bottom-right position —
+          having both meant two overlapping help buttons stacked on the
+          same 46-48px spot. Assistant is the accounting-specific one and
+          wins there; the generic HelpButton covers every other page. */}
+      {!(pathname.startsWith("/admin/accounting") || pathname === "/admin/opening-balances") && (
+        <HelpButton role={role} />
+      )}
       {/* MAIN AREA */}
       <div className={styles.mainWrapper}>
         {/* Society-takeover consent/session bar — Admin/Secretary only (the
@@ -201,6 +225,17 @@ export default function DashboardLayout({
             defined in Dashboard.module.css — components/SuperAdminLayout.js
             still uses them for its own, separate header. */}
         <main key={pathname} className={styles.mainContent}>
+          {/* Global command bar — one shared component
+              (components/global/CommandBar.jsx) mounted once per shell,
+              config-driven per area. Renders nothing when the calling
+              layout doesn't pass commandBarConfig (member/security, this
+              phase) — see docs/ux-overhaul/2026-09-01-global-command-bar-
+              design.md. */}
+          {commandBarConfig ? (
+            <div style={{ marginBottom: 12 }}>
+              <CommandBar navigation={navigation} {...commandBarConfig} />
+            </div>
+          ) : null}
           {/* Global glass frame — every page gets it now, not just the admin
               dashboard (which used to mount its own, page-local copy; see
               .contentFrame's comment in Dashboard.module.css). */}

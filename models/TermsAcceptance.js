@@ -21,7 +21,7 @@ const TermsAcceptanceSchema = new mongoose.Schema(
     bundleVersion: { type: String, required: true },
     acceptedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     acceptedByName: { type: String, required: true },
-    acceptedAt: { type: Date, default: Date.now },
+    acceptedAt: { type: Date, required: true, default: Date.now },
     ip: { type: String, default: null },
     userAgent: { type: String, default: null },
   },

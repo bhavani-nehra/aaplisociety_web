@@ -1,13 +1,33 @@
 "use client";
 import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import styles from "@/styles/Dashboard.module.css";
 import ledgerStyles from "@/styles/Ledger.module.css";
 import Select from "react-select";
 import notify from "@/lib/notify";
+import {
+  PageHeader, Card, CardHead, SectionLabel, Icon, Pill, Btn, MiniMetric,
+  RevampSkeleton, Donut, Avatar, Drawer, Modal,
+} from "@/components/revamp";
+
+const CATEGORY_ICON = {
+  Maintenance: "wrench", Payment: "banknote", Interest: "percent",
+  Adjustment: "sliders-horizontal", "Opening Balance": "flag", Refund: "undo-2", Fine: "gavel",
+};
 export default function UltraAdvancedLedgerPage() {
   const queryClient = useQueryClient();
+  // docs/ANIMATION_GUIDE.md §2 — distance-based transforms must respect
+  // prefers-reduced-motion; opacity-only fades are left as-is.
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduceMotion(mq.matches);
+    const onChange = (e) => setReduceMotion(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
   // ========== STATE MANAGEMENT ==========
   const [filters, setFilters] = useState({
     memberId: "all",
@@ -266,17 +286,6 @@ export default function UltraAdvancedLedgerPage() {
     const newViews = savedViews.filter((_, i) => i !== index);
     setSavedViews(newViews);
   };
-  const toggleColumn = (column) => {
-    setVisibleColumns((prev) => ({ ...prev, [column]: !prev[column] }));
-  };
-  const handleSort = (field) => {
-    if (sortBy === field) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-    } else {
-      setSortBy(field);
-      setSortOrder("asc");
-    }
-  };
   // Filter transactions by search term
   const filteredTransactions = ledgerData?.transactions?.filter((txn) => {
     if (!searchTerm) return true;
@@ -285,7 +294,7 @@ export default function UltraAdvancedLedgerPage() {
       txn.transactionId?.toLowerCase().includes(search) ||
       txn.description?.toLowerCase().includes(search) ||
       txn.memberId?.ownerName?.toLowerCase().includes(search) ||
-      txn.memberId?.roomNo?.toString().includes(search) ||
+      txn.memberId?.flatNo?.toString().includes(search) ||
       txn.category?.toLowerCase().includes(search)
     );
   });
@@ -296,869 +305,454 @@ export default function UltraAdvancedLedgerPage() {
       .sort((a, b) => {
         const wingCompare = (a.wing || "").localeCompare(b.wing || "");
         if (wingCompare !== 0) return wingCompare;
-        return (parseInt(a.roomNo) || 0) - (parseInt(b.roomNo) || 0);
+        return (parseInt(a.flatNo) || 0) - (parseInt(b.flatNo) || 0);
       })
       .map((member) => ({
         value: member._id,
-        label: `${member.wing || ""}-${member.roomNo} | ${member.ownerName}`,
+        label: `${member.wing || ""}-${member.flatNo} | ${member.ownerName}`,
         member,
       })),
   ];
+  // How many of the "More filters" drawer's fields are actually set, shown
+  // as a badge on its trigger button so it's not a mystery black box.
+  const advancedFilterCount = [
+    filters.paymentMode !== "all",
+    filters.wing !== "all",
+    !!filters.month,
+    !!filters.year,
+    !!filters.startDate,
+    !!filters.endDate,
+    !!filters.minAmount,
+    !!filters.maxAmount,
+    !!groupBy,
+  ].filter(Boolean).length;
+
   // ========== RENDER ==========
   return (
     <div>
       {/* ========== PAGE HEADER ========== */}
-      <div className={styles.pageHeader}>
-        <div>
-          <h1 className={styles.pageTitle}>📊 Ultra-Advanced Ledger System</h1>
-          <p className={styles.pageSubtitle}>
-            Complete transaction analytics with real-time interest tracking &
-            drill-down capabilities
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-          <button
-            onClick={() => exportData("xlsx")}
-            className="btn btn-secondary"
-            style={{ fontSize: "0.875rem" }}
-          >
-            📥 Export Excel
-          </button>
-          <button
-            onClick={() => exportData("pdf")}
-            className="btn btn-secondary"
-            style={{ fontSize: "0.875rem" }}
-          >
-            📄 Export PDF
-          </button>
-          <button
-            onClick={() => refetch()}
-            className="btn btn-primary"
-            style={{ fontSize: "0.875rem" }}
-          >
-            🔄 Refresh
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow={<><Icon name="book-open" size={11} /> Accounting</>}
+        title="Ledger"
+        sub="Every transaction, with interest and payment-mode analytics behind it."
+        right={
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Btn icon="file-spreadsheet" onClick={() => exportData("xlsx")}>Export Excel</Btn>
+            <Btn icon="file-text" onClick={() => exportData("pdf")}>Export PDF</Btn>
+            <Btn variant="primary" icon="refresh-cw" onClick={() => refetch()}>Refresh</Btn>
+          </div>
+        }
+      />
       {/* ========== ANALYTICS DASHBOARD ========== */}
       {isLoading ? (
-        <div className={styles.contentCard} style={{ padding: "4rem", textAlign: "center", marginBottom: "1.5rem" }}>
-          <div
-            className="loading-spinner"
-            style={{ margin: "0 auto 1.5rem", width: "48px", height: "48px" }}
-          ></div>
-          <p style={{ fontSize: "1rem", color: "var(--fg-4)" }}>
-            Loading ledger analytics...
-          </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 18 }}>
+          <RevampSkeleton h={92} /><RevampSkeleton h={92} /><RevampSkeleton h={92} /><RevampSkeleton h={92} />
         </div>
       ) : (
         <>
-      <div className={ledgerStyles.summaryBar}>
-        <div
-          className={ledgerStyles.summaryCard}
-          style={{ borderLeftColor: "var(--accent)" }}
-        >
-          <h3>Total Transactions</h3>
-          <div className={ledgerStyles.summaryValue}>
-            {analytics.totalTransactions}
-          </div>
-          <div className={ledgerStyles.summaryBadge}>
-            Debit:{" "}
-            {ledgerData?.transactions?.filter((t) => t.type === "Debit")
-              .length || 0}{" "}
-            | Credit:{" "}
-            {ledgerData?.transactions?.filter((t) => t.type === "Credit")
-              .length || 0}
-          </div>
-        </div>
-        <div
-          className={ledgerStyles.summaryCard}
-          style={{ borderLeftColor: "var(--danger)" }}
-        >
-          <h3>Total Debit</h3>
-          <div className={ledgerStyles.summaryValue}>
-            ₹{analytics.totalDebit.toLocaleString("en-IN")}
-          </div>
-          <div className={ledgerStyles.summaryBadge}>Money owed by members</div>
-        </div>
-        <div
-          className={ledgerStyles.summaryCard}
-          style={{ borderLeftColor: "var(--success)" }}
-        >
-          <h3>Total Credit</h3>
-          <div className={ledgerStyles.summaryValue}>
-            ₹{analytics.totalCredit.toLocaleString("en-IN")}
-          </div>
-          <div className={ledgerStyles.summaryBadge}>Payments received</div>
-        </div>
-        <div
-          className={ledgerStyles.summaryCard}
-          style={{
-            borderLeftColor: analytics.netBalance < 0 ? "var(--danger)" : "var(--success)",
-          }}
-        >
-          <h3>Net Balance</h3>
-          <div
-            className={`${ledgerStyles.summaryValue} ${
-              analytics.netBalance < 0
-                ? ledgerStyles.balancePositive
-                : ledgerStyles.balanceNegative
-            }`}
-          >
-            ₹{Math.abs(analytics.netBalance).toLocaleString("en-IN")}
-            <span style={{ fontSize: "1rem", marginLeft: "0.5rem" }}>
-              {analytics.netBalance < 0 ? "DR" : "CR"}
-            </span>
-          </div>
-          <div className={ledgerStyles.summaryBadge}>
-            {analytics.netBalance < 0 ? "Outstanding dues" : "Credit balance"}
-          </div>
-        </div>
-      </div>
-      {/* ========== INTEREST ANALYTICS ========== */}
-      <div
+      <motion.div
+        initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.22, ease: "easeOut" }}
         style={{
           display: "grid",
-          gridTemplateColumns: "2fr 1fr",
-          gap: "1.5rem",
-          marginBottom: "1.5rem",
+          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+          gap: 12,
+          marginBottom: 18,
         }}
       >
-        {/* Interest Summary Cards */}
-        <div className={styles.contentCard}>
-          <div className={styles.cardHeader}>
-            <h2 className={styles.cardTitle}>💸 Interest Analytics</h2>
-          </div>
-          <div style={{ padding: "1.5rem" }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap: "1rem",
-              }}
-            >
-              <div
-                style={{
-                  padding: "1.25rem",
-                  backgroundColor: "var(--warning-bg)",
-                  borderRadius: "8px",
-                  borderLeft: "4px solid var(--warning)",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "0.875rem",
-                    color: "var(--warning-fg)",
-                    fontWeight: "600",
-                  }}
-                >
-                  Total Interest Charged
+        <MiniMetric
+          icon="list"
+          label="Total transactions"
+          value={analytics.totalTransactions}
+          extra={
+            <div style={{ fontSize: 11, color: "var(--r-fg-4)", marginTop: 6 }}>
+              {ledgerData?.transactions?.filter((t) => t.type === "Debit").length || 0} debit ·{" "}
+              {ledgerData?.transactions?.filter((t) => t.type === "Credit").length || 0} credit
+            </div>
+          }
+        />
+        <MiniMetric
+          icon="arrow-up-circle"
+          label="Total debit"
+          value={`₹${analytics.totalDebit.toLocaleString("en-IN")}`}
+          delta="Money owed by members"
+        />
+        <MiniMetric
+          icon="arrow-down-circle"
+          label="Total credit"
+          value={`₹${analytics.totalCredit.toLocaleString("en-IN")}`}
+          tone="paid"
+          delta="Payments received"
+        />
+        <MiniMetric
+          icon="scale"
+          label="Net balance"
+          value={`₹${Math.abs(analytics.netBalance).toLocaleString("en-IN")} ${analytics.netBalance < 0 ? "DR" : "CR"}`}
+          tone={analytics.netBalance < 0 ? "danger" : "paid"}
+          delta={analytics.netBalance < 0 ? "Outstanding dues" : "Credit balance"}
+        />
+      </motion.div>
+      {/* ========== INTEREST ANALYTICS + PAYMENT MIX ==========
+          One shared Card, not two side-by-side ones — a "2fr 1fr" grid of
+          two independent cards left the shorter one (whichever had less to
+          show, e.g. Payment mix, or Interest analytics in a month with no
+          interest charged) stretched to match the taller one's height by
+          CSS Grid's default stretch, with nothing of its own to fill that
+          space. One container sized to its own tallest column can't do
+          that — there's no second box left over to be emptier than. */}
+      <Card style={{ marginBottom: 18 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
+          {/* Interest Summary */}
+          <div>
+            <CardHead title="Interest analytics" sub="Charged on overdue balances" />
+            <div style={{ display: "flex", borderTop: "1px solid var(--r-hairline)", paddingTop: 14 }}>
+              {[
+                { label: "Total charged", value: `₹${interestAnalytics.totalInterest.toLocaleString("en-IN")}`, sub: `${interestAnalytics.interestCount} transactions` },
+                { label: "Average", value: `₹${Math.round(interestAnalytics.avgInterest).toLocaleString("en-IN")}`, sub: "per transaction" },
+                { label: "Highest single charge", value: `₹${interestAnalytics.maxInterest.toLocaleString("en-IN")}`, sub: "in this view" },
+              ].map((s, i) => (
+                <div key={s.label} style={{
+                  flex: 1, paddingLeft: i ? 16 : 0,
+                  borderLeft: i ? "1px solid var(--r-hairline)" : "none",
+                }}>
+                  <div style={{ fontSize: 11, color: "var(--r-fg-4)", fontWeight: 600 }}>{s.label}</div>
+                  <div className="revamp-num" style={{ fontSize: 22, fontWeight: 700, color: "var(--r-fg-1)", marginTop: 6, letterSpacing: "-0.02em" }}>{s.value}</div>
+                  <div style={{ fontSize: 11, color: "var(--r-fg-4)", marginTop: 3 }}>{s.sub}</div>
                 </div>
-                <div
-                  style={{
-                    fontSize: "1.75rem",
-                    fontWeight: "bold",
-                    color: "var(--danger)",
-                    marginTop: "0.5rem",
-                  }}
-                >
-                  ₹{interestAnalytics.totalInterest.toLocaleString("en-IN")}
-                </div>
-                <div
-                  style={{
-                    fontSize: "0.75rem",
-                    color: "var(--warning-fg)",
-                    marginTop: "0.25rem",
-                  }}
-                >
-                  {interestAnalytics.interestCount} transactions
-                </div>
-              </div>
-              <div
-                style={{
-                  padding: "1.25rem",
-                  backgroundColor: "var(--danger-bg)",
-                  borderRadius: "8px",
-                  borderLeft: "4px solid var(--danger)",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "0.875rem",
-                    color: "var(--danger-fg)",
-                    fontWeight: "600",
-                  }}
-                >
-                  Average Interest
-                </div>
-                <div
-                  style={{
-                    fontSize: "1.75rem",
-                    fontWeight: "bold",
-                    color: "var(--danger)",
-                    marginTop: "0.5rem",
-                  }}
-                >
-                  ₹
-                  {Math.round(interestAnalytics.avgInterest).toLocaleString(
-                    "en-IN"
-                  )}
-                </div>
-                <div
-                  style={{
-                    fontSize: "0.75rem",
-                    color: "var(--danger-fg)",
-                    marginTop: "0.25rem",
-                  }}
-                >
-                  per transaction
-                </div>
-              </div>
-              <div
-                style={{
-                  padding: "1.25rem",
-                  backgroundColor: "var(--info-bg)",
-                  borderRadius: "8px",
-                  borderLeft: "4px solid var(--accent)",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "0.875rem",
-                    color: "var(--info)",
-                    fontWeight: "600",
-                  }}
-                >
-                  Max Single Interest
-                </div>
-                <div
-                  style={{
-                    fontSize: "1.75rem",
-                    fontWeight: "bold",
-                    color: "var(--info)",
-                    marginTop: "0.5rem",
-                  }}
-                >
-                  ₹{interestAnalytics.maxInterest.toLocaleString("en-IN")}
-                </div>
-                <div
-                  style={{
-                    fontSize: "0.75rem",
-                    color: "var(--info)",
-                    marginTop: "0.25rem",
-                  }}
-                >
-                  highest charge
-                </div>
-              </div>
+              ))}
             </div>
             {/* Interest Trend Chart */}
-            {interestAnalytics.interestTrend.length > 0 && (
-              <div style={{ marginTop: "1.5rem" }}>
-                <h4
-                  style={{
-                    margin: "0 0 1rem 0",
-                    color: "var(--fg-3)",
-                    fontSize: "1rem",
-                  }}
-                >
-                  📈 Interest Trend (Last 6 Months)
-                </h4>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "flex-end",
-                    gap: "1rem",
-                    height: "150px",
-                  }}
-                >
+            {interestAnalytics.interestTrend.length > 0 ? (
+              <div style={{ marginTop: 20 }}>
+                <SectionLabel icon="trending-up">Last 6 months</SectionLabel>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 12, height: 130 }}>
                   {interestAnalytics.interestTrend.map((item, idx) => {
-                    const maxValue = Math.max(
-                      ...interestAnalytics.interestTrend.map((i) => i.total)
-                    );
+                    const maxValue = Math.max(...interestAnalytics.interestTrend.map((i) => i.total));
                     const heightPercent = (item.total / maxValue) * 100;
                     return (
-                      <div
-                        key={idx}
-                        style={{
-                          flex: 1,
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "center",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: "100%",
-                            height: `${heightPercent}%`,
-                            backgroundColor: "var(--warning)",
-                            borderRadius: "4px 4px 0 0",
-                            display: "flex",
-                            alignItems: "flex-end",
-                            justifyContent: "center",
-                            paddingBottom: "0.5rem",
-                            color: "white",
-                            fontSize: "0.75rem",
-                            fontWeight: "600",
-                            minHeight: "30px",
-                          }}
-                        >
+                      <div key={idx} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%", justifyContent: "flex-end" }}>
+                        <div style={{ fontSize: 10.5, fontWeight: 600, color: "var(--r-fg-3)", marginBottom: 4 }}>
                           ₹{Math.round(item.total).toLocaleString("en-IN")}
                         </div>
-                        <div
-                          style={{
-                            fontSize: "0.75rem",
-                            color: "var(--fg-4)",
-                            marginTop: "0.5rem",
-                            textAlign: "center",
-                          }}
-                        >
-                          {item.month.split("-")[1]}/
-                          {item.month.split("-")[0].slice(2)}
-                          <br />
-                          <span style={{ fontSize: "0.625rem" }}>
-                            ({item.count} txns)
-                          </span>
+                        <div style={{
+                          width: "100%", height: `${Math.max(heightPercent, 4)}%`,
+                          background: "var(--r-warning)", borderRadius: 5,
+                        }} />
+                        <div style={{ fontSize: 10.5, color: "var(--r-fg-4)", marginTop: 6, textAlign: "center", lineHeight: 1.4 }}>
+                          {item.month.split("-")[1]}/{item.month.split("-")[0].slice(2)}
+                          <br />({item.count})
                         </div>
                       </div>
                     );
                   })}
                 </div>
               </div>
+            ) : (
+              <div style={{ marginTop: 14, fontSize: 12, color: "var(--r-fg-4)" }}>
+                No interest charged in the last 6 months.
+              </div>
             )}
           </div>
-        </div>
-        {/* Payment Mode Distribution */}
-        <div className={styles.contentCard}>
-          <div className={styles.cardHeader}>
-            <h2 className={styles.cardTitle}>💳 Payment Distribution</h2>
-          </div>
-          <div style={{ padding: "1.5rem" }}>
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
-            >
-              {[
-                {
-                  mode: "Cash",
-                  amount: paymentAnalytics.cashPayments,
-                  color: "var(--success)",
-                  icon: "💵",
-                },
-                {
-                  mode: "Online",
-                  amount: paymentAnalytics.onlinePayments,
-                  color: "var(--accent)",
-                  icon: "🌐",
-                },
-                {
-                  mode: "UPI",
-                  amount: paymentAnalytics.upiPayments,
-                  /* TODO: unmapped color, needs design review */
-                  color: "var(--accent)",
-                  icon: "📱",
-                },
-                {
-                  mode: "Cheque",
-                  amount: paymentAnalytics.chequePayments,
-                  color: "var(--warning)",
-                  icon: "📝",
-                },
-              ].map((item, idx) => {
-                const percent =
-                  paymentAnalytics.totalPayments > 0
-                    ? (item.amount / paymentAnalytics.totalPayments) * 100
-                    : 0;
-                return (
-                  <div key={idx}>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        marginBottom: "0.5rem",
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: "0.875rem",
-                          fontWeight: "600",
-                          color: "var(--fg-3)",
-                        }}
-                      >
-                        {item.icon} {item.mode}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: "0.875rem",
-                          fontWeight: "700",
-                          color: item.color,
-                        }}
-                      >
-                        ₹{item.amount.toLocaleString("en-IN")}
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        height: "8px",
-                        backgroundColor: "var(--border)",
-                        borderRadius: "4px",
-                        overflow: "hidden",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: `${percent}%`,
-                          height: "100%",
-                          backgroundColor: item.color,
-                          transition: "width 0.3s ease",
-                        }}
-                      />
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "0.75rem",
-                        color: "var(--fg-4)",
-                        marginTop: "0.25rem",
-                      }}
-                    >
-                      {percent.toFixed(1)}% of total payments
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-      {/* ========== TOP INTEREST PAYERS ========== */}
-      {interestAnalytics.topInterestPayers.length > 0 && (
-        <div className={styles.contentCard} style={{ marginBottom: "1.5rem" }}>
-          <div className={styles.cardHeader}>
-            <h2 className={styles.cardTitle}>🔥 Top 10 Interest Payers</h2>
-          </div>
-          <div style={{ padding: "1rem" }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                gap: "1rem",
-              }}
-            >
-              {interestAnalytics.topInterestPayers.map((item, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    padding: "1rem",
-                    backgroundColor: idx === 0 ? "var(--danger-bg)" : "var(--warning-bg)",
-                    borderLeft: `4px solid ${
-                      idx === 0 ? "var(--danger)" : "var(--warning)"
-                    }`,
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    transition: "transform 0.2s, box-shadow 0.2s",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = "translateY(-4px)";
-                    e.currentTarget.style.boxShadow =
-                      "0 8px 16px rgba(0,0,0,0.15)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.boxShadow = "none";
-                  }}
-                  onClick={() =>
-                    handleFilterChange("memberId", item.member?._id)
-                  }
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                    }}
-                  >
-                    <div>
-                      <div
-                        style={{
-                          fontSize: "1.5rem",
-                          fontWeight: "bold",
-                          color: idx === 0 ? "var(--danger)" : "var(--warning)",
-                        }}
-                      >
-                        #{idx + 1}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "0.875rem",
-                          color: "var(--warning-fg)",
-                          fontWeight: "600",
-                          marginTop: "0.25rem",
-                        }}
-                      >
-                        {item.member?.wing}-{item.member?.roomNo}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "0.75rem",
-                          color: "var(--fg-4)",
-                          marginTop: "0.125rem",
-                        }}
-                      >
-                        {item.member?.ownerName}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div
-                        style={{
-                          fontSize: "1.5rem",
-                          fontWeight: "bold",
-                          color: "var(--danger)",
-                        }}
-                      >
-                        ₹{item.totalInterest.toLocaleString("en-IN")}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "0.75rem",
-                          color: "var(--warning-fg)",
-                          marginTop: "0.25rem",
-                        }}
-                      >
-                        {item.count} charges
-                      </div>
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      marginTop: "0.75rem",
-                      paddingTop: "0.75rem",
-                      borderTop: "1px solid rgba(0,0,0,0.1)",
-                      fontSize: "0.75rem",
-                      color: "var(--fg-4)",
-                    }}
-                  >
-                    Avg: ₹
-                    {Math.round(item.totalInterest / item.count).toLocaleString(
-                      "en-IN"
-                    )}{" "}
-                    per charge
+          {/* Payment Mode Distribution — donut, not a stacked bar list:
+              4 fixed-order categories, each small enough to direct-label,
+              so a legend box would be pure repetition (dataviz skill,
+              "assign categorical hues in fixed order" + "<=4 series get
+              direct labels, no separate legend needed"). */}
+          <div style={{ borderLeft: "1px solid var(--r-hairline)", paddingLeft: 24 }}>
+            <CardHead title="Payment mix" />
+            {(() => {
+              const modes = [
+                { mode: "Cash", amount: paymentAnalytics.cashPayments, color: "var(--r-success)", icon: "banknote" },
+                { mode: "Online", amount: paymentAnalytics.onlinePayments, color: "var(--r-brand)", icon: "globe" },
+                { mode: "UPI", amount: paymentAnalytics.upiPayments, color: "#9333ea", icon: "smartphone" },
+                { mode: "Cheque", amount: paymentAnalytics.chequePayments, color: "var(--r-warning)", icon: "file-text" },
+              ];
+              const total = paymentAnalytics.totalPayments;
+              return (
+                <div style={{ display: "flex", alignItems: "center", gap: 18, marginTop: 4 }}>
+                  <Donut
+                    segments={modes.map((m) => ({ label: m.mode, value: m.amount, color: m.color }))}
+                    size={104}
+                    thickness={15}
+                    centerLabel={total > 0 ? `₹${Math.round(total / 1000)}k` : "₹0"}
+                    centerSub="total"
+                  />
+                  <div style={{ display: "grid", gap: 8, flex: 1, minWidth: 0 }}>
+                    {modes.map((m) => {
+                      const pct = total > 0 ? (m.amount / total) * 100 : 0;
+                      return (
+                        <div key={m.mode} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: 999, background: m.color, flexShrink: 0 }} />
+                          <span style={{ color: "var(--r-fg-2)", fontWeight: 500 }}>{m.mode}</span>
+                          <span style={{ marginLeft: "auto", color: "var(--r-fg-4)" }}>{pct.toFixed(0)}%</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })()}
           </div>
         </div>
+      </Card>
+      {/* ========== TOP INTEREST PAYERS ========== */}
+      {interestAnalytics.topInterestPayers.length > 0 && (
+        <Card padded={false} style={{ marginBottom: 18 }}>
+          <div style={{ padding: "16px 18px 4px" }}>
+            <CardHead title="Top interest payers" sub="Click a row to filter the ledger to that member" />
+          </div>
+          <div>
+            {interestAnalytics.topInterestPayers.map((item, idx) => (
+              <div
+                key={item.member?._id || idx}
+                onClick={() => handleFilterChange("memberId", item.member?._id)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 14,
+                  padding: "12px 18px", cursor: "pointer",
+                  borderTop: "1px solid var(--r-hairline)",
+                  transition: "background 0.12s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "var(--r-surface-2)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+              >
+                <div style={{
+                  width: 26, height: 26, borderRadius: 999, flexShrink: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 11.5, fontWeight: 700,
+                  background: idx === 0 ? "var(--r-danger-soft)" : "var(--r-surface-3)",
+                  color: idx === 0 ? "var(--r-danger)" : "var(--r-fg-3)",
+                }}>{idx + 1}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--r-fg-1)" }}>
+                    {item.member?.wing}-{item.member?.flatNo}
+                    <span style={{ fontWeight: 400, color: "var(--r-fg-4)" }}> · {item.member?.ownerName}</span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "var(--r-fg-4)", marginTop: 2 }}>
+                    {item.count} charges · avg ₹{Math.round(item.totalInterest / item.count).toLocaleString("en-IN")}
+                  </div>
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "var(--r-danger)", flexShrink: 0 }}>
+                  ₹{item.totalInterest.toLocaleString("en-IN")}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
       )}
         </>
       )}
       {/* ========== SAVED VIEWS ========== */}
       {savedViews.length > 0 && (
-        <div className={ledgerStyles.savedViewsPanel}>
-          <h3>💾 Saved Views</h3>
-          <div className={ledgerStyles.savedViewsList}>
+        <Card style={{ marginBottom: 18 }}>
+          <SectionLabel icon="bookmark">Saved views</SectionLabel>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {savedViews.map((view, idx) => (
-              <div key={idx} className={ledgerStyles.savedViewItem}>
-                <span onClick={() => loadSavedView(view)}>{view.name}</span>
-                <button onClick={() => deleteSavedView(idx)}>✕</button>
-              </div>
+              <span key={idx} style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "5px 6px 5px 12px", borderRadius: 999,
+                background: "var(--r-surface-2)", border: "1px solid var(--r-hairline)",
+                fontSize: 12.5, fontWeight: 500, color: "var(--r-fg-2)",
+              }}>
+                <span onClick={() => loadSavedView(view)} style={{ cursor: "pointer" }}>{view.name}</span>
+                <button
+                  onClick={() => deleteSavedView(idx)}
+                  aria-label={`Delete saved view ${view.name}`}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    width: 18, height: 18, borderRadius: 999, border: "none",
+                    background: "transparent", color: "var(--r-fg-4)", cursor: "pointer",
+                  }}
+                >
+                  <Icon name="x" size={11} />
+                </button>
+              </span>
             ))}
           </div>
-        </div>
+        </Card>
       )}
-      {/* ========== FILTERS PANEL ========== */}
-      <div className={ledgerStyles.filtersPanel}>
-        <div className={ledgerStyles.quickFilters}>
-          <div className={ledgerStyles.filterGroup}>
-            <label>Member</label>
-            <Select
-              options={memberOptions}
-              value={memberOptions.find(
-                (opt) => opt.value === filters.memberId
-              )}
-              onChange={(option) =>
-                handleFilterChange("memberId", option?.value || "all")
-              }
-              placeholder="Select member..."
-              isClearable
-              isSearchable
-              styles={{
-                control: (base) => ({
-                  ...base,
-                  fontSize: "0.875rem",
-                  minHeight: "38px",
-                }),
-                menu: (base) => ({
-                  ...base,
-                  zIndex: 9999,
-                }),
-              }}
-            />
-          </div>
-          <div className={ledgerStyles.filterGroup}>
-            <label>Category</label>
-            <select
-              value={filters.category}
-              onChange={(e) => handleFilterChange("category", e.target.value)}
-              className="input"
-            >
-              <option value="all">All Categories</option>
-              <option value="Maintenance">Maintenance</option>
-              <option value="Payment">Payment</option>
-              <option value="Interest">💸 Interest</option>
-              <option value="Adjustment">Adjustment</option>
-            </select>
-          </div>
-          <div className={ledgerStyles.filterGroup}>
-            <label>Type</label>
-            <select
-              value={filters.type}
-              onChange={(e) => handleFilterChange("type", e.target.value)}
-              className="input"
-            >
-              <option value="all">All Types</option>
-              <option value="Debit">Debit</option>
-              <option value="Credit">Credit</option>
-            </select>
-          </div>
-          <div className={ledgerStyles.filterGroup}>
-            <label>Month</label>
-            <select
-              value={filters.month}
-              onChange={(e) => handleFilterChange("month", e.target.value)}
-              className="input"
-            >
-              <option value="">All Months</option>
-              {[
-                "January",
-                "February",
-                "March",
-                "April",
-                "May",
-                "June",
-                "July",
-                "August",
-                "September",
-                "October",
-                "November",
-                "December",
-              ].map((month, idx) => (
-                <option key={idx} value={idx + 1}>
-                  {month}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className={ledgerStyles.filterGroup}>
-            <label>Year</label>
-            <select
-              value={filters.year}
-              onChange={(e) => handleFilterChange("year", e.target.value)}
-              className="input"
-            >
-              <option value="">All Years</option>
-              {[2025, 2024, 2023, 2022, 2021].map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className={ledgerStyles.filterGroup}>
-            <label>Balance Status</label>
-            <select
-              value={filters.balanceStatus}
-              onChange={(e) =>
-                handleFilterChange("balanceStatus", e.target.value)
-              }
-              className="input"
-            >
-              <option value="all">All</option>
-              <option value="arrears">Arrears (DR)</option>
-              <option value="credit">Credit (CR)</option>
-              <option value="zero">Zero Balance</option>
-            </select>
-          </div>
-        </div>
-        <button
-          onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-          className={ledgerStyles.toggleAdvanced}
-        >
-          {showAdvancedFilters ? "▲ Hide" : "▼ Show"} Advanced Filters
-        </button>
-        {showAdvancedFilters && (
-          <div className={ledgerStyles.advancedFilters}>
-            <div className={ledgerStyles.filterGroup}>
-              <label>Payment Mode</label>
-              <select
-                value={filters.paymentMode}
-                onChange={(e) =>
-                  handleFilterChange("paymentMode", e.target.value)
-                }
-                className="input"
-              >
-                <option value="all">All Modes</option>
-                <option value="Cash">Cash</option>
-                <option value="Cheque">Cheque</option>
-                <option value="Online">Online</option>
-                <option value="UPI">UPI</option>
-                <option value="NEFT">NEFT</option>
-                <option value="RTGS">RTGS</option>
-                <option value="System">System</option>
-              </select>
-            </div>
-            <div className={ledgerStyles.filterGroup}>
-              <label>Wing</label>
-              <select
-                value={filters.wing}
-                onChange={(e) => handleFilterChange("wing", e.target.value)}
-                className="input"
-              >
-                <option value="all">All Wings</option>
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-              </select>
-            </div>
-            <div className={ledgerStyles.filterGroup}>
-              <label>Start Date</label>
-              <input
-                type="date"
-                value={filters.startDate}
-                onChange={(e) =>
-                  handleFilterChange("startDate", e.target.value)
-                }
-                className="input"
-              />
-            </div>
-            <div className={ledgerStyles.filterGroup}>
-              <label>End Date</label>
-              <input
-                type="date"
-                value={filters.endDate}
-                onChange={(e) => handleFilterChange("endDate", e.target.value)}
-                className="input"
-              />
-            </div>
-            <div className={ledgerStyles.filterGroup}>
-              <label>Min Amount (₹)</label>
-              <input
-                type="number"
-                value={filters.minAmount}
-                onChange={(e) =>
-                  handleFilterChange("minAmount", e.target.value)
-                }
-                placeholder="0"
-                className="input"
-              />
-            </div>
-            <div className={ledgerStyles.filterGroup}>
-              <label>Max Amount (₹)</label>
-              <input
-                type="number"
-                value={filters.maxAmount}
-                onChange={(e) =>
-                  handleFilterChange("maxAmount", e.target.value)
-                }
-                placeholder="99999"
-                className="input"
-              />
-            </div>
-          </div>
-        )}
-        <div className={ledgerStyles.filterActions}>
-          <button
-            onClick={resetFilters}
-            className="btn btn-secondary"
-            style={{ flex: 1 }}
-          >
-            🔄 Reset All Filters
-          </button>
-          <button
-            onClick={async () => {
-              const name = await notify.prompt("Enter a name for this view:");
-              if (name) {
-                setNewViewName(name);
-                saveCurrentView();
-              }
-            }}
-            className="btn btn-primary"
-            style={{ flex: 1 }}
-          >
-            💾 Save Current View
-          </button>
-        </div>
-      </div>
-      {/* ========== TABLE CONTROLS ========== */}
-      <div className={ledgerStyles.tableControls}>
-        <div className={ledgerStyles.searchBox}>
+      {/* ========== FILTERS — one dense toolbar row ==========
+          Used to be: a 6-field label-over-input grid, a separate "Show
+          Advanced Filters" block that pushed the whole page down when
+          opened, a Reset/Save button row, and a THIRD row below that for
+          search/group/sort — four stacked blocks, 300px+ before a single
+          transaction was visible. Collapsed into one row: the filters
+          people actually reach for stay inline as compact controls; the six
+          rarely-touched ones (payment mode, wing, date range, amount range,
+          group-by) move into a slide-over Drawer instead of permanently
+          reserving page height for them. */}
+      <div style={{
+        display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8,
+        padding: "10px 12px", marginBottom: 14, borderRadius: 10,
+        background: "var(--r-surface)", border: "1px solid var(--r-border)",
+      }}>
+        <div style={{ position: "relative", flex: "1 1 200px", minWidth: 180 }}>
+          <Icon name="search" size={14} color="var(--r-fg-4)" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)" }} />
           <input
             type="text"
-            placeholder="🔍 Search by Transaction ID, Description, Member..."
+            placeholder="Search transactions…"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            style={{
+              width: "100%", padding: "7px 10px 7px 30px", borderRadius: 7, fontSize: 12.5,
+              border: "1px solid var(--r-border)", background: "var(--r-surface-2)", color: "var(--r-fg-1)",
+            }}
           />
         </div>
-        <div className={ledgerStyles.groupByControl}>
-          <label>Group By:</label>
-          <select
-            value={groupBy}
-            onChange={(e) => setGroupBy(e.target.value)}
-            className="input"
-          >
-            <option value="">None</option>
-            <option value="member">Member</option>
-            <option value="category">Category</option>
-            <option value="date">Month</option>
-          </select>
+        <div style={{ width: 190 }}>
+          <Select
+            options={memberOptions}
+            value={memberOptions.find((opt) => opt.value === filters.memberId)}
+            onChange={(option) => handleFilterChange("memberId", option?.value || "all")}
+            placeholder="Member"
+            isClearable
+            isSearchable
+            styles={{
+              control: (base) => ({ ...base, minHeight: 32, fontSize: 12.5 }),
+              valueContainer: (base) => ({ ...base, padding: "0 8px" }),
+              indicatorsContainer: (base) => ({ ...base, height: 32 }),
+              menu: (base) => ({ ...base, zIndex: 9999, fontSize: 12.5 }),
+            }}
+          />
         </div>
-        <div className={ledgerStyles.sortControl}>
-          <label>Sort:</label>
+        {[
+          { value: filters.category, onChange: (v) => handleFilterChange("category", v), options: [["all", "All Categories"], ["Maintenance", "Maintenance"], ["Payment", "Payment"], ["Interest", "Interest"], ["Adjustment", "Adjustment"], ["Opening Balance", "Opening Balance"], ["Refund", "Refund"], ["Fine", "Fine"]] },
+          { value: filters.type, onChange: (v) => handleFilterChange("type", v), options: [["all", "All Types"], ["Debit", "Debit"], ["Credit", "Credit"]] },
+          { value: filters.balanceStatus, onChange: (v) => handleFilterChange("balanceStatus", v), options: [["all", "Any Balance"], ["arrears", "Arrears (DR)"], ["credit", "Credit (CR)"], ["zero", "Zero Balance"]] },
+        ].map((f, i) => (
           <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            className="input"
+            key={i}
+            value={f.value}
+            onChange={(e) => f.onChange(e.target.value)}
+            style={{
+              padding: "7px 8px", borderRadius: 7, fontSize: 12.5,
+              border: "1px solid var(--r-border)", background: "var(--r-surface-2)", color: "var(--r-fg-1)",
+            }}
           >
-            <option value="date">Date</option>
-            <option value="amount">Amount</option>
-            <option value="member">Member</option>
+            {f.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
-          <button
-            onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-          >
-            {sortOrder === "asc" ? "↑" : "↓"}
-          </button>
+        ))}
+        <div style={{ display: "flex", gap: 4, marginLeft: "auto" }}>
+          <Btn size="sm" icon="filter" onClick={() => setShowAdvancedFilters(true)}>
+            More filters{advancedFilterCount ? ` (${advancedFilterCount})` : ""}
+          </Btn>
+          <Btn size="sm" icon="rotate-ccw" title="Reset all filters" onClick={resetFilters} />
+          <Btn
+            size="sm"
+            icon="bookmark-plus"
+            title="Save current view"
+            onClick={async () => {
+              const name = await notify.prompt("Enter a name for this view:");
+              if (name) { setNewViewName(name); saveCurrentView(); }
+            }}
+          />
         </div>
-        <details className={ledgerStyles.columnToggle}>
-          <summary>⚙️ Columns</summary>
-          <div className={ledgerStyles.columnList}>
-            {Object.entries(visibleColumns).map(([col, visible]) => (
-              <label key={col}>
-                <input
-                  type="checkbox"
-                  checked={visible}
-                  onChange={() => toggleColumn(col)}
-                />
-                {col.charAt(0).toUpperCase() +
-                  col.slice(1).replace(/([A-Z])/g, " $1")}
-              </label>
-            ))}
-          </div>
-        </details>
       </div>
-      {/* ========== LEDGER TABLE ========== */}
+
+      <Drawer
+        open={showAdvancedFilters}
+        onClose={() => setShowAdvancedFilters(false)}
+        title="More filters"
+        sub="Payment mode, wing, date range, amount range, sorting"
+        width={380}
+      >
+        <div style={{ display: "grid", gap: 16 }}>
+          <div>
+            <SectionLabel icon="credit-card">Payment mode</SectionLabel>
+            <select value={filters.paymentMode} onChange={(e) => handleFilterChange("paymentMode", e.target.value)} className="input" style={{ width: "100%" }}>
+              <option value="all">All Modes</option>
+              <option value="Cash">Cash</option>
+              <option value="Cheque">Cheque</option>
+              <option value="Online">Online</option>
+              <option value="UPI">UPI</option>
+              <option value="NEFT">NEFT</option>
+              <option value="RTGS">RTGS</option>
+              <option value="System">System</option>
+            </select>
+          </div>
+          <div>
+            <SectionLabel icon="building-2">Wing</SectionLabel>
+            <select value={filters.wing} onChange={(e) => handleFilterChange("wing", e.target.value)} className="input" style={{ width: "100%" }}>
+              <option value="all">All Wings</option>
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="C">C</option>
+            </select>
+          </div>
+          <div>
+            <SectionLabel icon="calendar">Month / year</SectionLabel>
+            <div style={{ display: "flex", gap: 8 }}>
+              <select value={filters.month} onChange={(e) => handleFilterChange("month", e.target.value)} className="input" style={{ flex: 1 }}>
+                <option value="">All Months</option>
+                {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((m, idx) => (
+                  <option key={idx} value={idx + 1}>{m}</option>
+                ))}
+              </select>
+              <select value={filters.year} onChange={(e) => handleFilterChange("year", e.target.value)} className="input" style={{ flex: 1 }}>
+                <option value="">All Years</option>
+                {[2025, 2024, 2023, 2022, 2021].map((year) => <option key={year} value={year}>{year}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <SectionLabel icon="calendar-range">Date range</SectionLabel>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input type="date" value={filters.startDate} onChange={(e) => handleFilterChange("startDate", e.target.value)} className="input" style={{ flex: 1 }} />
+              <input type="date" value={filters.endDate} onChange={(e) => handleFilterChange("endDate", e.target.value)} className="input" style={{ flex: 1 }} />
+            </div>
+          </div>
+          <div>
+            <SectionLabel icon="indian-rupee">Amount range</SectionLabel>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input type="number" value={filters.minAmount} onChange={(e) => handleFilterChange("minAmount", e.target.value)} placeholder="Min" className="input" style={{ flex: 1 }} />
+              <input type="number" value={filters.maxAmount} onChange={(e) => handleFilterChange("maxAmount", e.target.value)} placeholder="Max" className="input" style={{ flex: 1 }} />
+            </div>
+          </div>
+          <div>
+            <SectionLabel icon="layers">Group by</SectionLabel>
+            <select value={groupBy} onChange={(e) => setGroupBy(e.target.value)} className="input" style={{ width: "100%" }}>
+              <option value="">None</option>
+              <option value="member">Member</option>
+              <option value="category">Category</option>
+              <option value="date">Month</option>
+            </select>
+          </div>
+          <div>
+            <SectionLabel icon="arrow-up-down">Sort by</SectionLabel>
+            <div style={{ display: "flex", gap: 8 }}>
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="input" style={{ flex: 1 }}>
+                <option value="date">Date</option>
+                <option value="amount">Amount</option>
+                <option value="member">Member</option>
+              </select>
+              <Btn
+                icon={sortOrder === "asc" ? "arrow-up" : "arrow-down"}
+                onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+              />
+            </div>
+          </div>
+          <Btn variant="primary" onClick={() => setShowAdvancedFilters(false)}>Apply</Btn>
+        </div>
+      </Drawer>
+      {/* ========== LEDGER TRANSACTIONS — card grid ==========
+          A 12-column table used to be the only view: fine for precision,
+          brutal for 80+ rows of vertical scroll. Cards match the
+          view-members/view-bills pattern elsewhere in the app — each one
+          still opens the same full transaction-detail modal on click, so
+          nothing that lived in the table's extra columns (recorded by,
+          bill period, FY, audit trail) is gone, just one tap deeper. */}
       <div className={styles.contentCard}>
         {isLoading ? (
-          <div style={{ padding: "4rem", textAlign: "center" }}>
-            <div
-              className="loading-spinner"
-              style={{ margin: "0 auto 1.5rem", width: "48px", height: "48px" }}
-            ></div>
-            <p style={{ fontSize: "1rem", color: "var(--fg-4)" }}>
-              Loading transactions...
-            </p>
+          // Skeleton cards in the exact grid the real cards render in — a
+          // small spinner centered in an otherwise blank 4rem-padded box
+          // read as "there's nothing here," not "this is loading," for the
+          // 1-2s a fetch takes. Shape-matched skeletons don't have that gap.
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 12 }}>
+            {Array.from({ length: 12 }).map((_, i) => <RevampSkeleton key={i} h={132} />)}
           </div>
         ) : !filteredTransactions || filteredTransactions.length === 0 ? (
           <div className={ledgerStyles.noData} style={{ padding: "4rem" }}>
-            <div style={{ fontSize: "4rem", marginBottom: "1rem" }}>📭</div>
+            <Icon name="inbox" size={40} color="var(--r-fg-5)" style={{ display: "block", margin: "0 auto 1rem" }} />
             <p
               style={{
                 fontSize: "1.25rem",
@@ -1175,227 +769,101 @@ export default function UltraAdvancedLedgerPage() {
           </div>
         ) : (
           <>
-            <div style={{ overflowX: "auto" }}>
-              <table className={ledgerStyles.ledgerTable}>
-                <thead>
-                  <tr>
-                    {visibleColumns.date && (
-                      <th
-                        onClick={() => handleSort("date")}
-                        style={{ cursor: "pointer" }}
-                      >
-                        Date{" "}
-                        {sortBy === "date" && (sortOrder === "asc" ? "↑" : "↓")}
-                      </th>
-                    )}
-                    {visibleColumns.txnId && <th>Transaction ID</th>}
-                    {visibleColumns.member && (
-                      <th
-                        onClick={() => handleSort("member")}
-                        style={{ cursor: "pointer" }}
-                      >
-                        Member{" "}
-                        {sortBy === "member" &&
-                          (sortOrder === "asc" ? "↑" : "↓")}
-                      </th>
-                    )}
-                    {visibleColumns.category && <th>Category</th>}
-                    {visibleColumns.description && <th>Description</th>}
-                    {visibleColumns.paymentMode && <th>Mode</th>}
-                    {visibleColumns.debit && (
-                      <th
-                        onClick={() => handleSort("amount")}
-                        style={{ cursor: "pointer", textAlign: "right" }}
-                      >
-                        Debit (₹){" "}
-                        {sortBy === "amount" &&
-                          (sortOrder === "asc" ? "↑" : "↓")}
-                      </th>
-                    )}
-                    {visibleColumns.credit && (
-                      <th style={{ textAlign: "right" }}>Credit (₹)</th>
-                    )}
-                    {visibleColumns.balance && (
-                      <th style={{ textAlign: "right" }}>Balance (₹)</th>
-                    )}
-                    {visibleColumns.recordedBy && <th>Recorded By</th>}
-                    {visibleColumns.billPeriod && <th>Bill Period</th>}
-                    {visibleColumns.financialYear && <th>FY</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredTransactions.map((txn) => (
-                    <tr
-                      key={txn._id}
-                      className={ledgerStyles.clickableRow}
-                      onClick={() => fetchTransactionDetails(txn._id)}
-                      style={{
-                        backgroundColor:
-                          txn.category === "Interest"
-                            ? "var(--warning-bg)"
-                            : "transparent",
-                      }}
-                    >
-                      {visibleColumns.date && (
-                        <td style={{ whiteSpace: "nowrap" }}>
-                          {new Date(txn.date).toLocaleDateString("en-IN", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })}
-                        </td>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))",
+                gap: 12,
+              }}
+            >
+              {filteredTransactions.map((txn) => {
+                const catColor =
+                  txn.category === "Interest" ? "var(--r-danger)"
+                  : txn.category === "Payment" ? "var(--r-success)"
+                  : txn.category === "Maintenance" ? "var(--r-brand)"
+                  : "var(--r-fg-5)";
+                const flatLabel = txn.memberId
+                  ? [txn.memberId.wing, txn.memberId.flatNo].filter(Boolean).join("-") || "Flat —"
+                  : null;
+                return (
+                  <div
+                    key={txn._id}
+                    onClick={() => fetchTransactionDetails(txn._id)}
+                    title={txn.category}
+                    style={{
+                      display: "flex", flexDirection: "column", gap: 8,
+                      padding: "12px 14px", borderRadius: 10, cursor: "pointer",
+                      background: "var(--r-surface)", border: "1px solid var(--r-border)",
+                      // Category reads as a slim color strip on the card, not
+                      // a repeated icon or word — with 84 cards mostly the
+                      // same category, drawing "Maintenance" (or an icon
+                      // standing in for it) on every single one was noise;
+                      // a color still tells them apart at a glance, and the
+                      // full word is one click away in the detail modal.
+                      borderTop: `3px solid ${catColor}`,
+                      transition: "border-color 0.15s, transform 0.15s, box-shadow 0.15s",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = "translateY(-1px)";
+                      e.currentTarget.style.boxShadow = "var(--r-shadow-pop)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = "translateY(0)";
+                      e.currentTarget.style.boxShadow = "none";
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                      {txn.memberId ? (
+                        <>
+                          <Avatar name={txn.memberId.ownerName} size={30} />
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--r-fg-1)" }}>{flatLabel}</div>
+                            <div style={{
+                              fontSize: 11.5, color: "var(--r-fg-4)",
+                              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                            }}>{txn.memberId.ownerName}</div>
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ display: "flex", alignItems: "center", gap: 9, flex: 1 }}>
+                          <div style={{
+                            width: 30, height: 30, borderRadius: 999, flexShrink: 0,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            background: "var(--r-surface-3)", color: "var(--r-fg-4)",
+                          }}>
+                            <Icon name="building-2" size={14} />
+                          </div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--r-fg-2)" }}>Society-level</div>
+                        </div>
                       )}
-                      {visibleColumns.txnId && (
-                        <td>
-                          <span
-                            className={ledgerStyles.txnId}
-                            style={{
-                              cursor: "pointer",
-                              textDecoration: "underline",
-                              color: "var(--accent)",
-                            }}
-                          >
-                            {txn.transactionId}
-                          </span>
-                        </td>
-                      )}
-                      {visibleColumns.member && (
-                        <td>
-                          {txn.memberId ? (
-                            <div>
-                              <strong style={{ color: "var(--fg-2)" }}>
-                                {txn.memberId.wing}-{txn.memberId.roomNo}
-                              </strong>
-                              <br />
-                              <span
-                                style={{
-                                  fontSize: "0.8125rem",
-                                  color: "var(--fg-4)",
-                                }}
-                              >
-                                {txn.memberId.ownerName}
-                              </span>
-                            </div>
-                          ) : (
-                            <span style={{ color: "var(--fg-5)" }}>N/A</span>
-                          )}
-                        </td>
-                      )}
-                      {visibleColumns.category && (
-                        <td>
-                          <span
-                            className={ledgerStyles.categoryBadge}
-                            style={{
-                              backgroundColor:
-                                txn.category === "Interest"
-                                  ? "var(--danger-bg)"
-                                  : txn.category === "Payment"
-                                  ? "var(--success-bg)"
-                                  : txn.category === "Maintenance"
-                                  ? "var(--info-bg)"
-                                  : "var(--bg-muted)",
-                              color:
-                                txn.category === "Interest"
-                                  ? "var(--danger-fg)"
-                                  : txn.category === "Payment"
-                                  ? "var(--success-fg)"
-                                  : txn.category === "Maintenance"
-                                  ? "var(--info)"
-                                  : "var(--fg-3)",
-                            }}
-                          >
-                            {txn.category === "Interest" && "💸 "}
-                            {txn.category}
-                          </span>
-                        </td>
-                      )}
-                      {visibleColumns.description && (
-                        <td
-                          style={{
-                            maxWidth: "300px",
-                            fontSize: "0.875rem",
-                            color: "var(--fg-3)",
-                          }}
-                        >
-                          {txn.description}
-                        </td>
-                      )}
-                      {visibleColumns.paymentMode && (
-                        <td>
-                          <span
-                            className={
-                              ledgerStyles[`payment${txn.paymentMode}`]
-                            }
-                          >
-                            {txn.paymentMode}
-                          </span>
-                        </td>
-                      )}
-                      {visibleColumns.debit && (
-                        <td
-                          className={ledgerStyles.debit}
-                          style={{ textAlign: "right" }}
-                        >
-                          {txn.type === "Debit"
-                            ? `₹${txn.amount.toLocaleString("en-IN")}`
-                            : "-"}
-                        </td>
-                      )}
-                      {visibleColumns.credit && (
-                        <td
-                          className={ledgerStyles.credit}
-                          style={{ textAlign: "right" }}
-                        >
-                          {txn.type === "Credit"
-                            ? `₹${txn.amount.toLocaleString("en-IN")}`
-                            : "-"}
-                        </td>
-                      )}
-                      {visibleColumns.balance && (
-                        <td style={{ textAlign: "right", fontWeight: "700" }}>
-                          ₹
-                          {Math.abs(txn.balanceAfterTransaction).toLocaleString(
-                            "en-IN"
-                          )}{" "}
-                          <span
-                            style={{
-                              color:
-                                txn.balanceAfterTransaction < 0
-                                  ? "var(--danger)"
-                                  : "var(--success)",
-                              fontSize: "0.75rem",
-                              fontWeight: "600",
-                            }}
-                          >
-                            {txn.balanceAfterTransaction < 0 ? "DR" : "CR"}
-                          </span>
-                        </td>
-                      )}
-                      {visibleColumns.recordedBy && (
-                        <td style={{ fontSize: "0.8125rem", color: "var(--fg-4)" }}>
-                          {txn.createdBy?.name || "System"}
-                          <br />
-                          <span
-                            style={{ fontSize: "0.6875rem", color: "var(--fg-5)" }}
-                          >
-                            {txn.createdBy?.role}
-                          </span>
-                        </td>
-                      )}
-                      {visibleColumns.billPeriod && (
-                        <td style={{ fontSize: "0.8125rem", color: "var(--fg-4)" }}>
-                          {txn.billPeriodId || "-"}
-                        </td>
-                      )}
-                      {visibleColumns.financialYear && (
-                        <td style={{ fontSize: "0.8125rem", color: "var(--fg-4)" }}>
-                          {txn.financialYear || "-"}
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      <span style={{ fontSize: 11, color: "var(--r-fg-4)", whiteSpace: "nowrap", flexShrink: 0 }}>
+                        {new Date(txn.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                      </span>
+                    </div>
+                    <div style={{
+                      fontSize: 11.5, color: "var(--r-fg-3)", lineHeight: 1.4,
+                      display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+                    }}>
+                      {txn.description || "—"}
+                    </div>
+                    <div style={{
+                      display: "flex", justifyContent: "flex-end", alignItems: "baseline", gap: 6,
+                      marginTop: 2, paddingTop: 8, borderTop: "1px solid var(--r-hairline)",
+                    }}>
+                      <div style={{
+                        fontSize: 14, fontWeight: 700,
+                        color: txn.type === "Debit" ? "var(--r-danger)" : "var(--r-success)",
+                      }}>
+                        {txn.type === "Debit" ? "−" : "+"}₹{txn.amount.toLocaleString("en-IN")}
+                      </div>
+                      <div style={{ fontSize: 10, color: "var(--r-fg-4)" }}>
+                        · bal ₹{Math.abs(txn.balanceAfterTransaction).toLocaleString("en-IN")}{" "}
+                        {txn.balanceAfterTransaction < 0 ? "DR" : "CR"}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
             {/* Pagination */}
             <div className={ledgerStyles.pagination}>
@@ -1420,336 +888,114 @@ export default function UltraAdvancedLedgerPage() {
         )}
       </div>
       {/* ========== TRANSACTION DETAIL MODAL ========== */}
-      {showDetailModal && selectedTransaction && (
-        <div
-          className={ledgerStyles.drillDownOverlay}
-          onClick={() => setShowDetailModal(false)}
-        >
-          <div
-            className={ledgerStyles.drillDownPanel}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className={ledgerStyles.drillDownHeader}>
-              <h2>📝 Transaction Details</h2>
-              <button onClick={() => setShowDetailModal(false)}>✕</button>
-            </div>
-            <div className={ledgerStyles.drillDownContent}>
-              {/* Basic Information */}
-              <div className={ledgerStyles.detailSection}>
-                <h3>📌 Basic Information</h3>
-                <table>
-                  <tbody>
-                    <tr>
-                      <td>Transaction ID</td>
-                      <td>
-                        <strong
-                          style={{
-                            fontFamily: "monospace",
-                            fontSize: "0.9375rem",
-                          }}
-                        >
-                          {selectedTransaction.transaction?.transactionId}
-                        </strong>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>Date & Time</td>
-                      <td>
-                        {new Date(
-                          selectedTransaction.transaction?.date
-                        ).toLocaleString("en-IN", {
-                          day: "2-digit",
-                          month: "long",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>Member</td>
-                      <td>
-                        <strong style={{ fontSize: "1rem" }}>
-                          {selectedTransaction.transaction?.memberId?.wing}-
-                          {selectedTransaction.transaction?.memberId?.roomNo}
-                        </strong>
-                        <br />
-                        <span style={{ color: "var(--fg-4)" }}>
-                          {selectedTransaction.transaction?.memberId?.ownerName}
-                        </span>
-                        <br />
-                        <span
-                          style={{ fontSize: "0.8125rem", color: "var(--fg-5)" }}
-                        >
-                          {selectedTransaction.transaction?.memberId?.areaSqFt}{" "}
-                          sq.ft |{" "}
-                          {selectedTransaction.transaction?.memberId?.contact}
-                        </span>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>Category</td>
-                      <td>
-                        <span
-                          style={{
-                            display: "inline-block",
-                            padding: "0.5rem 1rem",
-                            backgroundColor:
-                              selectedTransaction.transaction?.category ===
-                              "Interest"
-                                ? "var(--danger-bg)"
-                                : selectedTransaction.transaction?.category ===
-                                  "Payment"
-                                ? "var(--success-bg)"
-                                : "var(--info-bg)",
-                            color:
-                              selectedTransaction.transaction?.category ===
-                              "Interest"
-                                ? "var(--danger-fg)"
-                                : selectedTransaction.transaction?.category ===
-                                  "Payment"
-                                ? "var(--success-fg)"
-                                : "var(--info)",
-                            borderRadius: "8px",
-                            fontSize: "0.9375rem",
-                            fontWeight: "700",
-                          }}
-                        >
-                          {selectedTransaction.transaction?.category ===
-                            "Interest" && "💸 "}
-                          {selectedTransaction.transaction?.category}
-                        </span>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>Type</td>
-                      <td>
-                        <span
-                          style={{
-                            color:
-                              selectedTransaction.transaction?.type === "Debit"
-                                ? "var(--danger)"
-                                : "var(--success)",
-                            fontSize: "1.125rem",
-                            fontWeight: "bold",
-                          }}
-                        >
-                          {selectedTransaction.transaction?.type === "Debit"
-                            ? "📤"
-                            : "📥"}{" "}
-                          {selectedTransaction.transaction?.type}
-                        </span>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>Amount</td>
-                      <td>
-                        <strong
-                          style={{
-                            fontSize: "1.75rem",
-                            color:
-                              selectedTransaction.transaction?.type === "Debit"
-                                ? "var(--danger)"
-                                : "var(--success)",
-                          }}
-                        >
-                          ₹
-                          {selectedTransaction.transaction?.amount.toLocaleString(
-                            "en-IN"
-                          )}
-                        </strong>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>Balance After Transaction</td>
-                      <td>
-                        <strong style={{ fontSize: "1.25rem" }}>
-                          ₹
-                          {Math.abs(
-                            selectedTransaction.transaction
-                              ?.balanceAfterTransaction
-                          ).toLocaleString("en-IN")}{" "}
-                          <span
-                            style={{
-                              color:
-                                selectedTransaction.transaction
-                                  ?.balanceAfterTransaction < 0
-                                  ? "var(--danger)"
-                                  : "var(--success)",
-                            }}
-                          >
-                            {selectedTransaction.transaction
-                              ?.balanceAfterTransaction < 0
-                              ? "DR"
-                              : "CR"}
-                          </span>
-                        </strong>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>Description</td>
-                      <td style={{ fontSize: "0.9375rem", lineHeight: "1.6" }}>
-                        {selectedTransaction.transaction?.description}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>Payment Mode</td>
-                      <td>
-                        <span
-                          style={{
-                            display: "inline-block",
-                            padding: "0.5rem 1rem",
-                            backgroundColor: "var(--bg-muted)",
-                            borderRadius: "6px",
-                            fontWeight: "600",
-                          }}
-                        >
-                          {selectedTransaction.transaction?.paymentMode}
-                        </span>
-                      </td>
-                    </tr>
-                    {selectedTransaction.transaction?.billPeriodId && (
-                      <tr>
-                        <td>Bill Period</td>
-                        <td>
-                          <strong>
-                            {selectedTransaction.transaction?.billPeriodId}
-                          </strong>
-                        </td>
-                      </tr>
-                    )}
-                    {selectedTransaction.transaction?.financialYear && (
-                      <tr>
-                        <td>Financial Year</td>
-                        <td>
-                          <strong>
-                            {selectedTransaction.transaction?.financialYear}
-                          </strong>
-                        </td>
-                      </tr>
-                    )}
-                    <tr>
-                      <td>Created By</td>
-                      <td>
-                        <strong>
-                          {selectedTransaction.transaction?.createdBy?.name}
-                        </strong>
-                        <br />
-                        <span
-                          style={{ fontSize: "0.8125rem", color: "var(--fg-4)" }}
-                        >
-                          {selectedTransaction.transaction?.createdBy?.role} •{" "}
-                          {selectedTransaction.transaction?.createdBy?.email}
-                        </span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              {/* Billing Breakdown */}
-              {selectedTransaction.breakdown &&
-                selectedTransaction.breakdown.length > 0 && (
-                  <div className={ledgerStyles.detailSection}>
-                    <h3>💰 Billing Breakdown</h3>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Charge Type</th>
-                          <th>Calculation Method</th>
-                          <th style={{ textAlign: "right" }}>Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedTransaction.breakdown.map((item, idx) => (
-                          <tr key={idx}>
-                            <td>
-                              <strong>{item.headName}</strong>
-                            </td>
-                            <td>
-                              <span
-                                style={{
-                                  fontSize: "0.8125rem",
-                                  color: "var(--fg-4)",
-                                  backgroundColor: "var(--bg-muted)",
-                                  padding: "0.25rem 0.5rem",
-                                  borderRadius: "4px",
-                                }}
-                              >
-                                {item.calculationType}
-                              </span>
-                            </td>
-                            <td
-                              style={{ textAlign: "right", fontWeight: "600" }}
-                            >
-                              ₹{item.amount.toLocaleString("en-IN")}
-                            </td>
-                          </tr>
-                        ))}
-                        <tr style={{ borderTop: "2px solid var(--border)" }}>
-                          <td colSpan="2">
-                            <strong>Total</strong>
-                          </td>
-                          <td
-                            style={{
-                              textAlign: "right",
-                              fontWeight: "700",
-                              fontSize: "1.125rem",
-                            }}
-                          >
-                            ₹
-                            {selectedTransaction.breakdown
-                              .reduce((sum, item) => sum + item.amount, 0)
-                              .toLocaleString("en-IN")}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              {/* Audit Trail */}
-              {selectedTransaction.auditTrail &&
-                selectedTransaction.auditTrail.length > 0 && (
-                  <div className={ledgerStyles.detailSection}>
-                    <h3>📜 Audit Trail</h3>
-                    <ul>
-                      {selectedTransaction.auditTrail.map((log, idx) => (
-                        <li key={idx}>
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "flex-start",
-                            }}
-                          >
-                            <div>
-                              <strong style={{ color: "var(--fg-3)" }}>
-                                {log.action}
-                              </strong>
-                              <br />
-                              <span
-                                style={{
-                                  fontSize: "0.8125rem",
-                                  color: "var(--fg-4)",
-                                }}
-                              >
-                                by {log.user?.name} ({log.user?.role})
-                              </span>
-                            </div>
-                            <span
-                              style={{ fontSize: "0.75rem", color: "var(--fg-5)" }}
-                            >
-                              {new Date(log.timestamp).toLocaleString("en-IN")}
-                            </span>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-            </div>
+      {(() => {
+        const t = selectedTransaction?.transaction;
+        if (!t) return null;
+        const isDebit = t.type === "Debit";
+        const amountColor = isDebit ? "var(--r-danger)" : "var(--r-success)";
+        const catTone =
+          t.category === "Interest" ? { bg: "var(--danger-bg)", fg: "var(--danger-fg)" }
+          : t.category === "Payment" ? { bg: "var(--success-bg)", fg: "var(--success-fg)" }
+          : { bg: "var(--info-bg)", fg: "var(--info)" };
+        const field = (label, value) => value ? (
+          <div>
+            <div style={{ fontSize: 10.5, fontWeight: 600, color: "var(--r-fg-4)", textTransform: "uppercase", letterSpacing: 0.4 }}>{label}</div>
+            <div style={{ fontSize: 13, color: "var(--r-fg-1)", marginTop: 3 }}>{value}</div>
           </div>
-        </div>
-      )}
+        ) : null;
+        return (
+          <Modal open={showDetailModal} onClose={() => setShowDetailModal(false)} title="Transaction Details" width={560}>
+            {/* Receipt-style header: the number that matters, first and biggest */}
+            <div style={{ textAlign: "center", paddingBottom: 18, borderBottom: "1px solid var(--r-hairline)" }}>
+              <span style={{
+                display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700,
+                padding: "3px 10px", borderRadius: 999, background: catTone.bg, color: catTone.fg, marginBottom: 10,
+              }}>
+                <Icon name={CATEGORY_ICON[t.category] || "circle"} size={11} /> {t.category}
+              </span>
+              <div className="revamp-num" style={{ fontSize: 34, fontWeight: 700, color: amountColor, letterSpacing: "-0.02em" }}>
+                {isDebit ? "−" : "+"}₹{t.amount.toLocaleString("en-IN")}
+              </div>
+              <div style={{ fontSize: 12.5, color: "var(--r-fg-4)", marginTop: 4 }}>
+                Balance after: ₹{Math.abs(t.balanceAfterTransaction).toLocaleString("en-IN")}{" "}
+                {t.balanceAfterTransaction < 0 ? "DR" : "CR"}
+              </div>
+            </div>
+
+            {t.memberId ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "16px 0", borderBottom: "1px solid var(--r-hairline)" }}>
+                <Avatar name={t.memberId.ownerName} size={36} />
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--r-fg-1)" }}>{t.memberId.wing}-{t.memberId.flatNo}</div>
+                  <div style={{ fontSize: 12, color: "var(--r-fg-4)" }}>
+                    {(() => {
+                      const area = t.memberId.carpetAreaSqft ?? t.memberId.builtUpAreaSqft;
+                      return <>{t.memberId.ownerName}{area ? ` · ${area} sq.ft` : ""}{t.memberId.contactNumber ? ` · ${t.memberId.contactNumber}` : ""}</>;
+                    })()}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, padding: "16px 0", borderBottom: "1px solid var(--r-hairline)" }}>
+              {field("Transaction ID", <span style={{ fontFamily: "ui-monospace, monospace" }}>{t.transactionId}</span>)}
+              {field("Date & time", new Date(t.date).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }))}
+              {field("Payment mode", t.paymentMode)}
+              {field("Bill period", t.billPeriodId)}
+              {field("Financial year", t.financialYear)}
+              {field("Recorded by", t.createdBy ? `${t.createdBy.name} (${t.createdBy.role})` : null)}
+            </div>
+
+            {t.description ? (
+              <div style={{ padding: "14px 0", borderBottom: "1px solid var(--r-hairline)", fontSize: 13, color: "var(--r-fg-2)", lineHeight: 1.6 }}>
+                {t.description}
+              </div>
+            ) : null}
+
+            {/* Billing Breakdown */}
+            {selectedTransaction.breakdown?.length > 0 && (
+              <div style={{ paddingTop: 16 }}>
+                <SectionLabel icon="receipt">Billing breakdown</SectionLabel>
+                <div style={{ display: "grid", gap: 1, borderRadius: 10, overflow: "hidden", border: "1px solid var(--r-hairline)" }}>
+                  {selectedTransaction.breakdown.map((item, idx) => (
+                    <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 12px", background: "var(--r-surface-2)" }}>
+                      <div>
+                        <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--r-fg-1)" }}>{item.headName}</div>
+                        <div style={{ fontSize: 11, color: "var(--r-fg-4)" }}>{item.calculationType}</div>
+                      </div>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--r-fg-2)" }}>₹{item.amount.toLocaleString("en-IN")}</div>
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", background: "var(--r-surface)" }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--r-fg-1)" }}>Total</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "var(--r-fg-1)" }}>
+                      ₹{selectedTransaction.breakdown.reduce((sum, item) => sum + item.amount, 0).toLocaleString("en-IN")}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Audit Trail */}
+            {selectedTransaction.auditTrail?.length > 0 && (
+              <div style={{ paddingTop: 16 }}>
+                <SectionLabel icon="history">Audit trail</SectionLabel>
+                <div style={{ display: "grid", gap: 10 }}>
+                  {selectedTransaction.auditTrail.map((log, idx) => (
+                    <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--r-fg-2)" }}>{log.action}</div>
+                        <div style={{ fontSize: 11.5, color: "var(--r-fg-4)", marginTop: 1 }}>by {log.user?.name} ({log.user?.role})</div>
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--r-fg-5)", whiteSpace: "nowrap" }}>{new Date(log.timestamp).toLocaleString("en-IN")}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Modal>
+        );
+      })()}
     </div>
   );
 }

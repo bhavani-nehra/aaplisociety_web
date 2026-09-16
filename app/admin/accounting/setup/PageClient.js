@@ -183,9 +183,13 @@ export default function AccountingSetupPage() {
    * picks up both the new `done` state and the persisted receipt.
    */
   const runStreaming = useCallback(async (key) => {
+    const startedAt = Date.now();
     setPlans((p) => ({ ...p, [key]: null }));
     setStreaming(key);
-    setStreamEvents((s) => ({ ...s, [key]: [] }));
+    // Show something the instant the button is pressed, rather than a blank
+    // panel for however long the request takes to reach the server — the
+    // real "start" event (with its own timestamp) still lands right after.
+    setStreamEvents((s) => ({ ...s, [key]: [{ t: "start", at: new Date().toISOString() }] }));
     setOpen((o) => ({ ...o, [key]: true }));
     const created = [];
     const skipped = [];
@@ -228,8 +232,15 @@ export default function AccountingSetupPage() {
         : { status: "done", message: `${created.length} created · ${skipped.length} already there.`, created, skipped },
     }));
     // Collapse on success (a failure stays open — the log is the thing that
-    // explains what went wrong, so there's nothing to hide there).
-    if (!failed) setOpen((o) => ({ ...o, [key]: false }));
+    // explains what went wrong, so there's nothing to hide there). A step
+    // that finishes in well under a second used to open and collapse fast
+    // enough to read as a glitch rather than a result — hold it open at
+    // least 900ms so the log is actually legible before it folds away.
+    if (!failed) {
+      const elapsed = Date.now() - startedAt;
+      const holdMs = Math.max(0, 900 - elapsed);
+      setTimeout(() => setOpen((o) => ({ ...o, [key]: false })), holdMs);
+    }
     setStreaming(null);
     await refreshStates();
   }, [refreshStates]);
@@ -241,24 +252,33 @@ export default function AccountingSetupPage() {
   const [batchPlan, setBatchPlan] = useState(null); // { items: [{key,title,willCreate,willSkip,willUpdate}] } | null
   const [batchPlanning, setBatchPlanning] = useState(false);
 
+  // Which steps in the current batch plan the admin has kept ticked — every
+  // step starts included, and unticking one is how "deny" actually works
+  // here: the plan can't rewrite what a single step does internally (each
+  // step is one atomic unit of work server-side), but the admin can refuse
+  // to run specific steps in this pass and come back to them separately.
+  const [batchIncluded, setBatchIncluded] = useState({});
+
   const prepareRunAll = useCallback(async () => {
     setBatchPlanning(true);
     try {
       const pending = steps.filter((s) => !(states[s.key]?.done === true || results[s.key]?.status === "done"));
-      const items = [];
-      for (const s of pending) {
+      // Fetched together, not one-at-a-time — a six-step dry run used to be
+      // six sequential round trips before the confirm screen even appeared.
+      const items = await Promise.all(pending.map(async (s) => {
         const res = await fetch("/api/accounting/setup/run?dryRun=1", {
           method: "POST", credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ step: s.key }),
         });
         const json = await res.json().catch(() => ({}));
-        items.push({
+        return {
           key: s.key, title: s.title,
           willCreate: json.willCreate || [], willSkip: json.willSkip || [], willUpdate: json.willUpdate || [],
           error: !res.ok || json.ok === false ? (json.error || "Could not preview this step.") : null,
-        });
-      }
+        };
+      }));
+      setBatchIncluded(Object.fromEntries(items.map((i) => [i.key, true])));
       setBatchPlan({ items });
     } finally {
       setBatchPlanning(false);
@@ -266,9 +286,14 @@ export default function AccountingSetupPage() {
   }, [steps, states, results]);
 
   const cancelRunAll = useCallback(() => setBatchPlan(null), []);
+  const toggleBatchItem = useCallback((key) => {
+    setBatchIncluded((b) => ({ ...b, [key]: !b[key] }));
+  }, []);
 
   const confirmRunAll = useCallback(async () => {
-    const keys = (batchPlan?.items || []).map((i) => i.key);
+    const keys = (batchPlan?.items || [])
+      .filter((i) => batchIncluded[i.key])
+      .map((i) => i.key);
     setBatchPlan(null);
     setRunAll(true);
     for (const key of keys) {
@@ -279,7 +304,7 @@ export default function AccountingSetupPage() {
     }
     setRunAll(false);
     await load();
-  }, [batchPlan, runOne, load]);
+  }, [batchPlan, batchIncluded, runOne, load]);
 
   const doneCount = steps.filter(
     (s) => results[s.key]?.status === "done" || states[s.key]?.done === true,
@@ -297,7 +322,7 @@ export default function AccountingSetupPage() {
         right={
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <Btn variant="primary" icon="play" disabled={busy || loading || batchPlanning || !!batchPlan} onClick={prepareRunAll}>
-              {runAll ? "Running…" : batchPlanning ? "Building preview…" : "Preview & run all six"}
+              {runAll ? "Running…" : batchPlanning ? "Building preview…" : `Preview & run all ${steps.length || ""}`}
             </Btn>
           </div>
         }
@@ -319,26 +344,51 @@ export default function AccountingSetupPage() {
         <>
           {batchPlan ? (
             <Card style={{ marginBottom: 18, border: "1px solid var(--r-brand)" }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
-                About to run {batchPlan.items.length} step{batchPlan.items.length === 1 ? "" : "s"} — here&apos;s what each will do
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>
+                About to run {batchPlan.items.filter((i) => batchIncluded[i.key]).length} of {batchPlan.items.length} step{batchPlan.items.length === 1 ? "" : "s"}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--r-fg-4)", marginBottom: 8 }}>
+                Untick anything you don&apos;t want run in this pass — it stays undone and you can come back to it on its own.
               </div>
               <div style={{ display: "grid", gap: 10 }}>
-                {batchPlan.items.map((it) => (
-                  <div key={it.key} style={{ padding: "8px 11px", borderRadius: 8, background: "var(--r-surface-2)", border: "1px solid var(--r-hairline)" }}>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{it.title}</div>
-                    {it.error ? (
-                      <div style={{ fontSize: 12, color: "var(--r-danger)", marginTop: 4 }}>{it.error}</div>
-                    ) : (
-                      <div style={{ fontSize: 12, color: "var(--r-fg-3)", marginTop: 4 }}>
-                        {it.willCreate.length} to create · {it.willUpdate.length} to update · {it.willSkip.length} already there
+                {batchPlan.items.map((it) => {
+                  const included = !!batchIncluded[it.key];
+                  return (
+                    <label key={it.key} style={{
+                      display: "flex", gap: 10, alignItems: "flex-start",
+                      padding: "8px 11px", borderRadius: 8, cursor: "pointer",
+                      background: "var(--r-surface-2)", border: "1px solid var(--r-hairline)",
+                      opacity: included ? 1 : 0.55,
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={included}
+                        onChange={() => toggleBatchItem(it.key)}
+                        style={{ marginTop: 3, width: 15, height: 15, flexShrink: 0, accentColor: "var(--r-brand)" }}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{it.title}</div>
+                        {it.error ? (
+                          <div style={{ fontSize: 12, color: "var(--r-danger)", marginTop: 4 }}>{it.error}</div>
+                        ) : (
+                          <div style={{ fontSize: 12, color: "var(--r-fg-3)", marginTop: 4 }}>
+                            {it.willCreate.length} to create · {it.willUpdate.length} to update · {it.willSkip.length} already there
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                ))}
+                    </label>
+                  );
+                })}
               </div>
               <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                 <Btn onClick={cancelRunAll}>Cancel</Btn>
-                <Btn variant="primary" onClick={confirmRunAll}>Confirm & run all</Btn>
+                <Btn
+                  variant="primary"
+                  disabled={!batchPlan.items.some((i) => batchIncluded[i.key])}
+                  onClick={confirmRunAll}
+                >
+                  Confirm &amp; run {batchPlan.items.filter((i) => batchIncluded[i.key]).length || ""}
+                </Btn>
               </div>
             </Card>
           ) : null}

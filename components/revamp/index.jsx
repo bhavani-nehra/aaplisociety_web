@@ -185,6 +185,57 @@ export function Sparkline({ data, w = 80, h = 24, color = "var(--r-brand)", fill
 }
 
 /* ------------------------------------------------------------------ *
+ * Donut — part-to-whole for a small (<=6) fixed-order categorical set.
+ * Per dataviz skill: color assigned by identity in a fixed order (never
+ * cycled/reassigned by rank), a 2px surface gap between segments, and
+ * every slice direct-labeled since n<=4 needs no separate legend box.
+ * `segments`: [{ label, value, color }], already in the order to draw.
+ * ------------------------------------------------------------------ */
+export function Donut({ segments = [], size = 120, thickness = 16, centerLabel, centerSub }) {
+  const total = segments.reduce((s, seg) => s + (seg.value || 0), 0);
+  const r = (size - thickness) / 2;
+  const c = size / 2;
+  const circumference = 2 * Math.PI * r;
+  const gapDeg = total > 0 ? 2 : 0; // 2px-equivalent surface gap between slices
+  let cursor = 0;
+  const arcs = total > 0
+    ? segments.filter((s) => s.value > 0).map((seg) => {
+      const frac = seg.value / total;
+      const dash = Math.max(circumference * frac - gapDeg, 0);
+      const gap = circumference - dash;
+      const rotation = (cursor / total) * 360 - 90;
+      cursor += seg.value;
+      return { ...seg, dash, gap, rotation, frac };
+    })
+    : [];
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: "block", flexShrink: 0 }}>
+      <circle cx={c} cy={c} r={r} fill="none" stroke="var(--r-surface-3)" strokeWidth={thickness} />
+      {arcs.map((a, i) => (
+        <circle
+          key={a.label || i}
+          cx={c} cy={c} r={r} fill="none"
+          stroke={a.color} strokeWidth={thickness}
+          strokeDasharray={`${a.dash} ${a.gap}`}
+          strokeLinecap="butt"
+          transform={`rotate(${a.rotation} ${c} ${c})`}
+        />
+      ))}
+      {centerLabel ? (
+        <text x={c} y={c - (centerSub ? 4 : 0)} textAnchor="middle" dominantBaseline="middle" fontSize={size * 0.13} fontWeight={700} fill="var(--r-fg-1)">
+          {centerLabel}
+        </text>
+      ) : null}
+      {centerSub ? (
+        <text x={c} y={c + 14} textAnchor="middle" dominantBaseline="middle" fontSize={size * 0.07} fill="var(--r-fg-4)">
+          {centerSub}
+        </text>
+      ) : null}
+    </svg>
+  );
+}
+
+/* ------------------------------------------------------------------ *
  * Avatar — deterministic gradient from the name
  * ------------------------------------------------------------------ */
 export function Avatar({ name = "?", size = 28, style }) {
@@ -594,9 +645,12 @@ export function DiffPreview({ willCreate = [], willSkip = [], willUpdate = [], e
 /* ------------------------------------------------------------------ *
  * RunLog — the STREAM phase. Consumes an array of SetupEvent (design doc
  * §6 event contract) already accumulated by the caller and renders them as
- * a terminal-style log, newest at the bottom, auto-scrolling. The caller
+ * a plain activity list, newest at the bottom, auto-scrolling. The caller
  * owns the actual NDJSON fetch/reader loop (it differs per endpoint); this
  * only renders what's been received so far.
+ *
+ * Renders in the app's own type and surface colors, not a monospace
+ * black-terminal costume — this is a list of what happened, not a console.
  * `aria-live="polite"` per the doc's accessibility primitive requirements.
  * ------------------------------------------------------------------ */
 export function RunLog({ events = [], height = 180 }) {
@@ -605,15 +659,28 @@ export function RunLog({ events = [], height = 180 }) {
     if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
   }, [events.length]);
 
-  const lineFor = (e) => {
+  const rowFor = (e, i) => {
     const t = e.at ? new Date(e.at).toLocaleTimeString("en-IN", { hour12: false }) : "";
     switch (e.t) {
-      case "start": return `${t}  Starting…`;
-      case "item": return `${t}  ${e.action === "skipped" ? "·" : "✓"}  ${e.label}  ${e.action}`;
-      case "verify": return `${t}  ${e.ok ? "✓" : "✗"}  ${e.detail || e.check}`;
-      case "done": return `${t}  ✓  ${e.created} created · ${e.skipped} skipped · ${e.updated} changed · ${((e.ms || 0) / 1000).toFixed(1)}s`;
-      case "error": return `${t}  ✗  ${e.message}`;
-      default: return `${t}  ${e.t}`;
+      case "start":
+        return { icon: "play", color: "var(--r-fg-4)", text: "Starting…" };
+      case "item":
+        return e.action === "skipped"
+          ? { icon: "minus-circle", color: "var(--r-fg-4)", text: `${e.label} — already there` }
+          : { icon: "check", color: "var(--r-success)", text: `${e.label} — ${e.action}` };
+      case "verify":
+        return e.ok
+          ? { icon: "check-circle", color: "var(--r-success)", text: e.detail || e.check }
+          : { icon: "x-circle", color: "var(--r-danger)", text: e.detail || e.check };
+      case "done":
+        return {
+          icon: "check-circle", color: "var(--r-success)",
+          text: `${e.created} created · ${e.skipped} skipped · ${e.updated} changed · ${((e.ms || 0) / 1000).toFixed(1)}s`,
+        };
+      case "error":
+        return { icon: "x-circle", color: "var(--r-danger)", text: e.message };
+      default:
+        return { icon: "circle", color: "var(--r-fg-4)", text: e.t };
     }
   };
 
@@ -623,16 +690,28 @@ export function RunLog({ events = [], height = 180 }) {
       role="log"
       aria-live="polite"
       style={{
-        height, overflowY: "auto", padding: "10px 12px", borderRadius: 8,
-        background: "var(--r-code-bg, #0b0f14)", color: "var(--r-code-fg, #c8d3df)",
-        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11.5, lineHeight: 1.7,
+        maxHeight: height, overflowY: "auto", padding: "4px 2px", borderRadius: 8,
+        background: "var(--r-surface-2)", border: "1px solid var(--r-hairline)",
       }}
     >
-      {events.map((e, i) => (
-        <div key={i} style={{ color: e.t === "error" ? "#ff6b6b" : e.t === "done" ? "#5fd97a" : "inherit", whiteSpace: "pre-wrap" }}>
-          {lineFor(e)}
-        </div>
-      ))}
+      {events.map((e, i) => {
+        const row = rowFor(e, i);
+        const t = e.at ? new Date(e.at).toLocaleTimeString("en-IN", { hour12: false }) : "";
+        return (
+          <div key={i} style={{
+            display: "flex", alignItems: "center", gap: 8,
+            padding: "5px 10px", fontSize: 12.5, color: "var(--r-fg-2)",
+            // Global @keyframes revamp-fade (styles/globals.css) — a plain
+            // className animation, not <style jsx> (unverified in this
+            // codebase, see docs/ANIMATION_GUIDE.md Pitfall #1).
+            animation: "revamp-fade 0.18s ease",
+          }}>
+            <Icon name={row.icon} size={13} color={row.color} style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1, minWidth: 0 }}>{row.text}</span>
+            {t ? <span style={{ fontSize: 11, color: "var(--r-fg-5)", flexShrink: 0 }}>{t}</span> : null}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -817,11 +896,13 @@ export function Modal({ open, onClose, title, sub, width = 720, children }) {
     <div style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div
         onClick={onClose}
+        className="revamp-modal-backdrop"
         style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)" }}
       />
       <div
         role="dialog"
         aria-modal="true"
+        className="revamp-modal-panel"
         style={{
           position: "relative", width: `min(${width}px, 100%)`, maxHeight: "88vh",
           background: "var(--r-surface)", border: "1px solid var(--r-hairline)", borderRadius: 16,
@@ -879,6 +960,7 @@ export function Drawer({ open, onClose, title, sub, width = 560, children }) {
       <div
         role="dialog"
         aria-modal="true"
+        className="revamp-drawer-panel"
         style={{
           position: "absolute", top: 0, right: 0, bottom: 0, width: `min(${width}px, 100vw)`,
           background: "var(--r-surface)", borderLeft: "1px solid var(--r-hairline)",

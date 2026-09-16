@@ -1,29 +1,31 @@
 "use client";
 /**
- * Layout for every /admin/accounting/* page — mounts QuickBar (universal
- * search + "New / Quick actions") and StepRail (the 6-page setup guide) once,
- * in a single row above whatever page renders below, instead of each page
- * rebuilding its own search or repeating `<StepRail currentKey="...">` by
- * hand. §7.6/§7.7 of docs/accounting-module-audit-and-consolidation-plan.md:
- * one search, one quick-actions menu, everywhere in the module.
+ * Layout for every /admin/accounting/* page — mounts StepRail (the 6-page
+ * setup guide) once, above whatever page renders below, instead of each
+ * page repeating `<StepRail currentKey="...">` by hand.
  *
- * StepRail sits on the left, QuickBar's search + actions on the right —
- * previously each of the 6 setup pages rendered its own full-width StepRail
- * row above QuickBar's row, costing two stacked bars where one does. Which
- * step is "current" used to be a prop each of those 6 pages passed by hand;
- * here it's derived once from the URL, so a page navigated to directly (or
- * one outside the 6, like Posting Rules) still gets the rail with the right
- * step lit, or none lit at all, without needing to know about StepRail.
+ * QuickBar (search + "New / Quick actions") used to mount here too, stacked
+ * next to StepRail — but the admin shell's own CommandBar
+ * (components/global/CommandBar.jsx, mounted for every /admin/* page via
+ * components/DashboardLayout.js) already renders that same search-box +
+ * quick-actions-button pair, and both bound the same "/" and "n" keydown
+ * shortcuts globally — so every accounting page carried two visibly
+ * overlapping search/quick-action bars, one of which silently ate the
+ * other's keystrokes depending on mount order. Removed; CommandBar is the
+ * one search/quick-actions bar for the whole admin area, accounting
+ * included. (QuickBar's accounting-only reach — account-head search, the
+ * validation-inbox bell, "continue unfinished wizard" — has no CommandBar
+ * equivalent yet; that gap is real, but folding it into CommandBar's
+ * extraPages/recordSources/inboxFetcher is a separate follow-up, not a
+ * revert of this fix.)
  *
- * Client layout (not server) because QuickBar itself is client-only (it
- * fetches on keystroke); Suspense here is defensive — none of the pages
- * below currently require it for this layout specifically, but a shared
- * layout is exactly the place a future page using useSearchParams would
- * need one anyway.
+ * Client layout (not server) because StepRail reads the current pathname;
+ * Suspense here is defensive — none of the pages below currently require it
+ * for this layout specifically, but a shared layout is exactly the place a
+ * future page using useSearchParams would need one anyway.
  */
 import { Suspense } from "react";
 import { usePathname } from "next/navigation";
-import QuickBar from "@/components/accounting/QuickBar";
 import StepRail, { STEP_RAIL_PAGES } from "@/components/accounting/StepRail";
 import Assistant from "@/components/accounting/Assistant";
 
@@ -45,10 +47,7 @@ export default function AccountingLayout({ children }) {
     <>
       <div style={{ maxWidth: 1280, margin: "0 auto" }}>
         <Suspense fallback={null}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
-            <StepRail currentKey={currentRailKey(pathname)} />
-            <QuickBar />
-          </div>
+          <StepRail currentKey={currentRailKey(pathname)} />
         </Suspense>
       </div>
       {children}

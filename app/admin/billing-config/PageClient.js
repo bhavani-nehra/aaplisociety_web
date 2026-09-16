@@ -5,6 +5,7 @@ import styles from "@/styles/BillingConfig.module.css";
 import gridStyles from "@/styles/BillingGrid.module.css";
 import { apiClient } from "@/lib/api-client";
 import notify from "@/lib/notify";
+import { PageHeader, Icon, Btn, RevampSkeleton } from "@/components/revamp";
 export default function BillingConfigPage() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("charges");
@@ -26,7 +27,7 @@ export default function BillingConfigPage() {
     queryKey: ["society-config"],
     queryFn: () => apiClient.get("/api/society/config"),
   });
-  const { data: billingHeadsData } = useQuery({
+  const { data: billingHeadsData, isLoading: billingHeadsLoading } = useQuery({
     queryKey: ["billing-heads"],
     queryFn: () => apiClient.get("/api/billing-heads/list"),
   });
@@ -434,62 +435,53 @@ export default function BillingConfigPage() {
   }, [customCharges]);
   // ─── TAB NAV ──────────────────────────────────────────────────────────────────
   const tabs = [
-    { id: "charges", label: "⚙️ Charge Structure" },
-    { id: "matrix", label: "📊 Live Matrix" },
-    { id: "grid", label: "🗃️ Billing Grid" },
+    { id: "charges", label: "Charge Structure", icon: "sliders-horizontal" },
+    { id: "matrix", label: "Live Matrix", icon: "grid-3x3" },
+    { id: "grid", label: "Billing Grid", icon: "table" },
   ];
   return (
     <div className={styles.container}>
       {/* ── HEADER ── */}
-      <div className={styles.header}>
-        <div>
-          <h1>Billing Configuration</h1>
-          <p>
-            Configure charges, review live matrix, and enter dynamic billing
-            amounts.
-          </p>
-        </div>
-        {activeTab === "charges" && (
-          <button
-            onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending}
-            className="btn btn-primary"
-          >
-            {saveMutation.isPending ? "Saving…" : "Save Configuration"}
-          </button>
-        )}
-      </div>
+      <PageHeader
+        eyebrow={<><Icon name="receipt" size={11} /> Accounting</>}
+        title="Billing configuration"
+        sub="Configure charges, review the live matrix, and enter dynamic billing amounts."
+        right={
+          activeTab === "charges" ? (
+            <Btn
+              variant="primary"
+              icon="save"
+              disabled={saveMutation.isPending}
+              onClick={() => saveMutation.mutate()}
+            >
+              {saveMutation.isPending ? "Saving…" : "Save Configuration"}
+            </Btn>
+          ) : null
+        }
+      />
       {/* ── TAB BAR ── */}
-      <div
-        style={{
-          display: "flex",
-          borderBottom: "2px solid var(--border)",
-          marginBottom: "1.5rem",
-          gap: 0,
-        }}
-      >
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            style={{
-              padding: "0.75rem 1.5rem",
-              border: "none",
-              borderBottom:
-                activeTab === tab.id
-                  ? "3px solid var(--primary-hover)"
-                  : "3px solid transparent",
-              background: "none",
-              fontWeight: activeTab === tab.id ? 700 : 400,
-              color: activeTab === tab.id ? "var(--primary-hover)" : "var(--fg-4)",
-              cursor: "pointer",
-              fontSize: "0.95rem",
-              transition: "all 0.15s ease",
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--r-hairline)", marginBottom: 20 }}>
+        {tabs.map((tab) => {
+          const active = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 7,
+                padding: "10px 16px", border: "none", background: "none",
+                borderBottom: active ? "2px solid var(--r-brand)" : "2px solid transparent",
+                fontWeight: active ? 600 : 500,
+                color: active ? "var(--r-brand)" : "var(--r-fg-3)",
+                cursor: "pointer", fontSize: 13.5, fontFamily: "inherit",
+                transition: "color 0.15s, border-color 0.15s",
+              }}
+            >
+              <Icon name={tab.icon} size={14} />
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
       {/* ════════════════════════════════════════════════════════════════════════
           TAB 1 — CHARGE STRUCTURE
@@ -506,7 +498,9 @@ export default function BillingConfigPage() {
               }}
             >
               <div>
-                <h2>🎯 Billing Heads</h2>
+                <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Icon name="list-checks" size={17} /> Billing Heads
+                </h2>
                 <p
                   style={{
                     color: "var(--fg-4)",
@@ -523,7 +517,15 @@ export default function BillingConfigPage() {
                 + Add Charge
               </button>
             </div>
-            {customCharges.length === 0 ? (
+            {billingHeadsLoading ? (
+              // Charges hadn't loaded yet, not "there are none" — showing
+              // the empty state here used to read as the society's billing
+              // heads had vanished for the 1-2s the request was in flight,
+              // then everything popped in at once.
+              <div className={styles.customChargesList}>
+                {Array.from({ length: 6 }).map((_, i) => <RevampSkeleton key={i} h={128} />)}
+              </div>
+            ) : customCharges.length === 0 ? (
               <div style={{ textAlign: "center", padding: "2rem" }}>
                 <p style={{ color: "var(--fg-4)", marginBottom: "1rem" }}>
                   No billing heads yet. Import from society config or add
@@ -531,6 +533,7 @@ export default function BillingConfigPage() {
                 </p>
                 <button
                   className="btn btn-primary"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
                   onClick={async () => {
                     try {
                       await apiClient.post(
@@ -548,122 +551,113 @@ export default function BillingConfigPage() {
                     }
                   }}
                 >
-                  ⚡ Import from Society Config
+                  <Icon name="download" size={14} /> Import from Society Config
                 </button>
               </div>
             ) : (
               <div className={styles.customChargesList}>
-                {/* Column Headers */}
-                <div
-                  style={{
-                    display: "flex",
-                    gap: "0.5rem",
-                    padding: "0.5rem 0.75rem",
-                    background: "var(--bg-sunken)",
-                    borderRadius: "6px",
-                    marginBottom: "0.5rem",
-                    fontSize: "0.8rem",
-                    fontWeight: 600,
-                    color: "var(--fg-4)",
-                  }}
-                >
-                  <span style={{ width: 28 }}>#</span>
-                  <span style={{ flex: 2 }}>Name</span>
-                  <span style={{ flex: 1 }}>Type</span>
-                  <span style={{ flex: 1 }}>Rate / Amount</span>
-                  {commercialBilling && (
-                    <span style={{ flex: 1.1 }}>
-                      Applies to{" "}
-                      <a
-                        href="/admin/commercial/rate-card"
-                        style={{ fontWeight: 400, textTransform: "none" }}
-                        title="Set a different amount for shops and offices"
-                      >
-                        (rates)
-                      </a>
-                    </span>
-                  )}
-                  <span style={{ width: 60, textAlign: "center" }}>Active</span>
-                  <span style={{ width: 60 }}></span>
-                </div>
                 {customCharges.map((charge, index) => (
                   <div
                     key={charge.id}
                     className={styles.customChargeRow}
                     style={{ opacity: charge.isActive === false ? 0.5 : 1 }}
                   >
-                    <div className={styles.rowNumber}>{index + 1}</div>
-                    <input
-                      type="text"
-                      placeholder="Charge name (e.g. Parking, Amenities)"
-                      value={charge.name}
-                      onChange={(e) =>
-                        updateCharge(charge.id, "name", e.target.value)
-                      }
-                      className={styles.input}
-                      style={{ flex: 2 }}
-                    />
-                    <select
-                      value={charge.calculationType}
-                      onChange={(e) =>
-                        updateCharge(
-                          charge.id,
-                          "calculationType",
-                          e.target.value,
-                        )
-                      }
-                      className={styles.select}
-                      style={{ flex: 1 }}
-                    >
-                      <option value="Fixed">Fixed (per flat)</option>
-                      <option value="Per Sq Ft">Per Sq Ft</option>
-                    </select>
-                    <div
-                      style={{
-                        flex: 1,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.25rem",
-                      }}
-                    >
+                    <div className={styles.customChargeRowHead}>
+                      <div className={styles.rowNumber}>{index + 1}</div>
                       <input
-                        type="number"
-                        step="0.01"
-                        placeholder="Amount"
-                        value={charge.defaultAmount}
+                        type="text"
+                        placeholder="Charge name (e.g. Parking, Amenities)"
+                        value={charge.name}
+                        onChange={(e) =>
+                          updateCharge(charge.id, "name", e.target.value)
+                        }
+                        className={styles.input}
+                        style={{ flex: 1 }}
+                      />
+                    </div>
+                    <div className={styles.customChargeRowFields}>
+                      <select
+                        value={charge.calculationType}
                         onChange={(e) =>
                           updateCharge(
                             charge.id,
-                            "defaultAmount",
+                            "calculationType",
                             e.target.value,
                           )
                         }
-                        className={styles.input}
-                        style={{ width: "100%" }}
-                      />
-                      <span
-                        style={{
-                          fontSize: "0.75rem",
-                          color: "var(--fg-5)",
-                          whiteSpace: "nowrap",
-                        }}
+                        className={styles.select}
+                        style={{ flex: 1 }}
                       >
-                        {charge.calculationType === "Per Sq Ft"
-                          ? "₹/sqft"
-                          : "₹/flat"}
-                      </span>
+                        <option value="Fixed">Fixed (per flat)</option>
+                        <option value="Per Sq Ft">Per Sq Ft</option>
+                      </select>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", flex: 1 }}>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="Amount"
+                          value={charge.defaultAmount}
+                          onChange={(e) =>
+                            updateCharge(
+                              charge.id,
+                              "defaultAmount",
+                              e.target.value,
+                            )
+                          }
+                          className={styles.input}
+                          style={{ width: "100%" }}
+                        />
+                        <span
+                          style={{
+                            fontSize: "0.7rem",
+                            color: "var(--fg-5)",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {charge.calculationType === "Per Sq Ft"
+                            ? "/sqft"
+                            : "/flat"}
+                        </span>
+                      </div>
+                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: "0.75rem", color: "var(--fg-3)", flexShrink: 0 }}>
+                        <input
+                          type="checkbox"
+                          checked={charge.isActive !== false}
+                          onChange={(e) =>
+                            updateCharge(charge.id, "isActive", e.target.checked)
+                          }
+                        />
+                        Active
+                      </label>
+                      <button
+                        onClick={() => deleteCharge(charge.id)}
+                        className={styles.deleteBtn}
+                        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+                        aria-label="Delete charge"
+                      >
+                        <Icon name="trash-2" size={14} />
+                      </button>
                     </div>
                     {commercialBilling && (
                       <div
                         style={{
-                          flex: 1.1,
                           display: "flex",
-                          gap: "0.5rem",
+                          gap: "0.75rem",
                           flexWrap: "wrap",
-                          fontSize: "0.72rem",
+                          fontSize: "0.75rem",
                           color: "var(--fg-3)",
                         }}
                       >
+                        <span style={{ color: "var(--fg-4)" }}>
+                          Applies to{" "}
+                          <a
+                            href="/admin/commercial/rate-card"
+                            style={{ fontWeight: 400 }}
+                            title="Set a different amount for shops and offices"
+                          >
+                            (rates)
+                          </a>:
+                        </span>
                         {["Residential", "Shop", "Office"].map((cls) => {
                           const list = charge.appliesToUnitClasses ?? [];
                           const all = list.length === 0;
@@ -703,29 +697,6 @@ export default function BillingConfigPage() {
                         })}
                       </div>
                     )}
-                    <label
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                        width: 60,
-                        justifyContent: "center",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={charge.isActive !== false}
-                        onChange={(e) =>
-                          updateCharge(charge.id, "isActive", e.target.checked)
-                        }
-                      />
-                    </label>
-                    <button
-                      onClick={() => deleteCharge(charge.id)}
-                      className={styles.deleteBtn}
-                    >
-                      🗑
-                    </button>
                   </div>
                 ))}
               </div>
@@ -747,7 +718,9 @@ export default function BillingConfigPage() {
             }}
           >
             <div>
-              <h2>📊 Live Billing Matrix</h2>
+              <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Icon name="grid-3x3" size={17} /> Live Billing Matrix
+              </h2>
               <p style={{ color: "var(--fg-4)", fontSize: "0.875rem" }}>
                 Auto-calculated from current billing heads. Save charges first
                 to update.
@@ -844,7 +817,9 @@ export default function BillingConfigPage() {
             }}
           >
             <div>
-              <h2>🗃️ Billing Grid</h2>
+              <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Icon name="table" size={17} /> Billing Grid
+              </h2>
               <p style={{ color: "var(--fg-4)", fontSize: "0.875rem" }}>
                 Enter dynamic/one-time charges per member before generating
                 bills.
@@ -978,26 +953,24 @@ export default function BillingConfigPage() {
                           <div style={{ display: "flex", gap: "0.25rem" }}>
                             <button
                               onClick={() => handleEditGridColumn(col.id)}
+                              aria-label="Edit column"
                               style={{
-                                background: "none",
-                                border: "none",
-                                cursor: "pointer",
-                                fontSize: "0.875rem",
+                                background: "none", border: "none", cursor: "pointer",
+                                display: "inline-flex", alignItems: "center",
                               }}
                             >
-                              ✏️
+                              <Icon name="pencil" size={13} />
                             </button>
                             <button
                               onClick={() => handleDeleteGridColumn(col.id)}
+                              aria-label="Delete column"
                               style={{
-                                background: "none",
-                                border: "none",
-                                cursor: "pointer",
-                                fontSize: "0.875rem",
-                                color: "var(--danger)",
+                                background: "none", border: "none", cursor: "pointer",
+                                display: "inline-flex", alignItems: "center",
+                                color: "var(--r-danger)",
                               }}
                             >
-                              ✕
+                              <Icon name="x" size={13} />
                             </button>
                           </div>
                         </div>
@@ -1143,15 +1116,14 @@ export default function BillingConfigPage() {
                   </div>
                   <button
                     onClick={() => setShowGridPreview(false)}
+                    aria-label="Close preview"
                     style={{
-                      background: "none",
-                      border: "none",
-                      fontSize: "2rem",
-                      cursor: "pointer",
+                      background: "none", border: "none", cursor: "pointer",
+                      display: "inline-flex", alignItems: "center",
                       color: "var(--fg-5)",
                     }}
                   >
-                    ✕
+                    <Icon name="x" size={22} />
                   </button>
                 </div>
                 <div

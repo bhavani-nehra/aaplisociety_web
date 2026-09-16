@@ -148,9 +148,12 @@
   height: 8px;
   border-radius: 5px;
   background: var(--border);
-  outline: none;
   margin-right: 0.75rem;
   cursor: pointer;
+}
+.control input[type="range"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--r-focus);
 }
 .control input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;

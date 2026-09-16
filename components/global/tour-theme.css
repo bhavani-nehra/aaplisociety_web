@@ -1,0 +1,69 @@
+/* Pulse-theme overrides for driver.js's default popover styling, so the
+ * guided-tour popover reads as the same design system as CommandBar/
+ * HelpPanel instead of a bolted-on library default. See "UI/UX (Pulse
+ * theme)" in docs/ux-overhaul/2026-09-01-guided-tours-design.md.
+ *
+ * Deliberately NOT overriding driver.js's overlay/scrim color: --r-fg-1
+ * inverts between themes (near-black in light mode, near-white in dark
+ * mode — see styles/globals.css), so wiring the scrim to it directly would
+ * turn the backdrop near-white in dark mode, which is backwards. driver.js's
+ * own default overlay color is a fixed dark tone independent of the token
+ * layer and already reads correctly as a dimming backdrop in both themes —
+ * see Task 3 Step 3's smoke test, which checks this explicitly.
+ */
+
+.driver-popover {
+  background-color: var(--r-surface);
+  color: var(--r-fg-1);
+  border: 1px solid var(--r-hairline);
+  border-radius: var(--r-radius);
+  box-shadow: var(--r-shadow-pop);
+}
+
+.driver-popover-title {
+  color: var(--r-fg-1);
+}
+
+.driver-popover-description {
+  color: var(--r-fg-3);
+}
+
+.driver-popover-progress-text {
+  color: var(--r-fg-3);
+}
+
+.driver-popover-close-btn {
+  color: var(--r-fg-3);
+}
+
+.driver-popover-close-btn:hover {
+  color: var(--r-fg-1);
+}
+
+.driver-popover-footer-btn {
+  color: var(--r-fg-1);
+  background-color: var(--r-surface);
+  border: 1px solid var(--r-hairline);
+  border-radius: var(--r-radius-sm);
+}
+
+.driver-popover-footer-btn:hover {
+  background-color: var(--r-surface-2);
+}
+
+.driver-popover-next-btn,
+.driver-popover-next-btn.driver-popover-done-btn {
+  color: var(--r-brand-ink);
+  background-color: var(--r-brand);
+  border-color: var(--r-brand);
+}
+
+/* The arrow is a CSS-triangle: driver.js sets all four border sides to the
+ * popover background color, then a more specific per-side rule (already
+ * shipped in driver.css, not redefined here) transparents out three of the
+ * four sides depending on which edge should show. Overriding the base
+ * 4-sided color here is enough — the more specific built-in side rules
+ * still win on the other three sides. */
+.driver-popover-arrow {
+  border-color: var(--r-surface);
+}

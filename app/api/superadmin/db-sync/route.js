@@ -25,10 +25,17 @@ async function listUserCollections(db) {
 // EmailOutbox, stray non-model collections, ...) naturally match zero docs
 // here and fall out of the per-society view — no hardcoded exclude list
 // needed.
+//
+// societyId is NOT stored consistently across schemas — most models keep it
+// as an ObjectId, but RoleAssignment.societyId is a String (see
+// models/RoleAssignment.js). This runs on the raw driver (no Mongoose
+// casting), so `{ societyId: ObjectId(...) }` against a String field matches
+// nothing — silently, with no error, and the collection reports "0 docs,
+// inSync: true" forever. Matching both representations is what actually
+// finds every document regardless of which type a given schema chose.
 function scopeFilter(collectionName, societyId) {
-  return collectionName === SOCIETIES_COLLECTION
-    ? { _id: societyId }
-    : { societyId };
+  if (collectionName === SOCIETIES_COLLECTION) return { _id: societyId };
+  return { societyId: { $in: [societyId, String(societyId)] } };
 }
 
 // Per-society diff across every collection, scoped by scopeFilter. Same

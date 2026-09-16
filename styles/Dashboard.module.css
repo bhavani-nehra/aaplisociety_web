@@ -235,6 +235,15 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  /* A flex item's default min-width is `auto`, which means it refuses to
+     shrink below its widest descendant's intrinsic content size — a page
+     with a wide table (e.g. the ledger) was dragging this whole column,
+     and everything in it (including content stacked above the table), past
+     the viewport edge, forcing the entire app into horizontal scroll.
+     min-width: 0 lets it actually shrink to the sidebar-adjusted viewport
+     width; inner overflow-x:auto wrappers (the table's own) still scroll
+     internally exactly as before. */
+  min-width: 0;
   /* NO overflow:hidden — would break position:sticky on topHeader */
 }
 /* ── Top Header — 56px, transparent, sticky ────── */
@@ -286,6 +295,7 @@
 /* ── Main Content — padding 24px ─────────────────── */
 .mainContent {
   flex: 1;
+  min-width: 0;
   margin-left: 260px;
   /* Top padding restored now that topHeader (which used to provide this
      56px of breathing room above page content) is gone. */

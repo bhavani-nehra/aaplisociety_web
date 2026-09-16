@@ -33,8 +33,10 @@ export async function GET(request, { params }) {
       societyId: decoded.societyId,
     })
       .populate(
+        // Member.js has no `mobile` field (real one: `contactNumber`) and
+        // no `areaSqFt` field (real ones: `carpetAreaSqft`/`builtUpAreaSqft`).
         "memberId",
-        "roomNo wing ownerName email mobile areaSqFt config",
+        "flatNo wing ownerName email contactNumber carpetAreaSqft builtUpAreaSqft config",
       )
       .populate("createdBy", "name email role")
       .lean();

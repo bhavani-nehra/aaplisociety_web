@@ -16,7 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
   PageHeader, SectionLabel, ActionTile, Card, CardHead, MiniMetric,
-  SmallStat, Progress, Pill, Btn, Icon, EmptyState, RevampSkeleton, Modal,
+  Progress, Pill, Btn, Icon, EmptyState, RevampSkeleton, Modal,
 } from "@/components/revamp";
 import FinancialYearsPage from "./financial-years/PageClient";
 import PostingRulesPage from "./posting-rules/PageClient";
@@ -200,8 +200,18 @@ function AccountingOverviewPageInner() {
               sliver on a ~900px-wide viewport (a laptop, not a phone — this
               page is never meant to need a media query). minmax lets the
               5 cards wrap to their own rows instead, same pattern the
-              SMALL STATS grid just below already uses. */}
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 1.4fr) repeat(auto-fit, minmax(150px, 1fr))", gap: 14, marginBottom: 14 }}>
+              SMALL STATS grid just below already uses.
+              align-items defaults to "stretch" in CSS Grid, so every
+              MiniMetric here was being force-stretched to match the much
+              taller "Setup progress" card's height — each one drew its
+              label/number/delta at the top and then just left a large
+              blank gap below, which is exactly the "thin content, dead
+              space underneath" look. "start" lets each card size to its
+              own content instead. Each MiniMetric also now carries a real
+              second data point via `extra` (a mini progress bar, a status
+              pill, a failing-check list) so the empty space that opens up
+              gets filled with more information, not left blank. */}
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 1.4fr) repeat(auto-fit, minmax(150px, 1fr))", gap: 14, marginBottom: 14, alignItems: "start" }}>
             <Card
               hover
               onClick={() => setOpenKey("setup")}
@@ -247,6 +257,23 @@ function AccountingOverviewPageInner() {
                   ? failing.length ? `${failing.length} check(s) failing` : "All checks passing"
                   : "Needs a financial year first"
               }
+              onClick={() => document.getElementById("bookhealth")?.scrollIntoView({ behavior: "smooth" })}
+              extra={
+                typeof health?.healthScore === "number" ? (
+                  <div style={{ marginTop: 12 }}>
+                    <Progress value={health.healthScore} total={100} color={failing.length ? "var(--r-danger)" : "var(--r-success)"} height={5} />
+                    {failing.length ? (
+                      <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
+                        {failing.slice(0, 2).map((h) => (
+                          <div key={h.key} style={{ fontSize: 10.5, color: "var(--r-fg-4)", display: "flex", alignItems: "center", gap: 5 }}>
+                            <Icon name="x" size={10} color="var(--r-danger)" /> {h.label}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null
+              }
             />
 
             <MiniMetric
@@ -254,6 +281,18 @@ function AccountingOverviewPageInner() {
               value={c.accounts ?? 0}
               delta={c.accountsExpected ? `of ${c.accountsExpected} standard heads` : null}
               tone={c.accounts >= (c.accountsExpected || 0) ? "success" : "danger"}
+              onClick={() => router.push("/admin/accounting/chart-of-accounts")}
+              extra={
+                c.accountsExpected ? (
+                  <div style={{ marginTop: 12 }}>
+                    <Progress
+                      value={c.accounts ?? 0} total={c.accountsExpected}
+                      color={(c.accounts ?? 0) >= c.accountsExpected ? "var(--r-success)" : "var(--r-warning)"}
+                      height={5}
+                    />
+                  </div>
+                ) : null
+              }
             />
 
             <MiniMetric
@@ -261,6 +300,11 @@ function AccountingOverviewPageInner() {
               value={c.vouchers ?? 0}
               delta={c.vouchers ? "receipt & payment slips" : "nothing recorded yet"}
               onClick={() => router.push("/admin/ledger")}
+              extra={
+                <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--r-brand)" }}>
+                  <Icon name="arrow-right" size={11} /> {c.vouchers ? "Open the ledger" : "Raise the first bill"}
+                </div>
+              }
             />
 
             <MiniMetric
@@ -268,22 +312,59 @@ function AccountingOverviewPageInner() {
               value={c.financialYears ?? 0}
               delta={fy ? `working year ${fy.label}` : "none created"}
               onClick={() => setOpenKey("financial-years")}
+              extra={
+                fy ? (
+                  <div style={{ marginTop: 12 }}>
+                    <Pill tone={fy.status === "Locked" ? "neutral" : "paid"}>{fy.status}</Pill>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 12, fontSize: 11, fontWeight: 600, color: "var(--r-brand)", display: "flex", alignItems: "center", gap: 5 }}>
+                    <Icon name="plus" size={11} /> Create one
+                  </div>
+                )
+              }
             />
           </div>
 
-          {/* ── SMALL STATS ─────────────────────────────────────────── */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 24 }}>
-            <SmallStat icon="git-branch" label="Journal entries" value={c.journalEntries ?? 0} />
-            <SmallStat icon="pie-chart" label="Funds" value={c.funds ?? 0} />
-            <SmallStat icon="settings" label="Entry rules" value={c.postingRules ?? 0} tone={c.postingRules ? undefined : "danger"} />
-            <SmallStat icon="shield" label="Health checks" value={c.validationRules ?? 0} tone={c.validationRules ? undefined : "danger"} />
-            <SmallStat icon="layout-template" label="Statement layouts" value={c.schedules ?? 0} tone={c.schedules ? undefined : "danger"} />
-          </div>
+          {/* ── SMALL STATS — one strip, not five separate cards ───────
+              Five identical bordered boxes in a row was the same tile
+              repeated five times with nothing but the number changed; one
+              Card with hairline dividers reads as one fact with five parts,
+              which is what this actually is. */}
+          <Card style={{ marginBottom: 24 }}>
+            <div style={{ display: "flex", flexWrap: "wrap" }}>
+              {[
+                { icon: "git-branch", label: "Journal entries", value: c.journalEntries ?? 0 },
+                { icon: "pie-chart", label: "Funds", value: c.funds ?? 0 },
+                { icon: "settings", label: "Entry rules", value: c.postingRules ?? 0, danger: !c.postingRules },
+                { icon: "shield", label: "Health checks", value: c.validationRules ?? 0, danger: !c.validationRules },
+                { icon: "layout-template", label: "Statement layouts", value: c.schedules ?? 0, danger: !c.schedules },
+              ].map((s, i) => (
+                <div key={s.label} style={{
+                  flex: "1 1 150px", padding: i ? "0 0 0 18px" : 0,
+                  marginLeft: i ? 18 : 0, borderLeft: i ? "1px solid var(--r-hairline)" : "none",
+                }}>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--r-fg-4)", fontWeight: 500 }}>
+                    <Icon name={s.icon} size={13} /> {s.label}
+                  </div>
+                  <div className="revamp-num" style={{
+                    fontSize: 24, fontWeight: 700, marginTop: 5, letterSpacing: "-0.02em",
+                    color: s.danger ? "var(--r-danger)" : "var(--r-fg-1)",
+                  }}>{s.value}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
 
-          {/* ── CHECKLIST ───────────────────────────────────────────── */}
+          {/* ── CHECKLIST — back to a card grid (list rows read as
+              documentation for what's meant to be a working config page;
+              cards with real CTAs are the right shape here). The earlier
+              dead-space problem was CSS Grid's default row-stretch forcing
+              every card in a row to match its tallest sibling — fixed with
+              alignItems:"start" instead of by giving up the card shape. */}
           <div id="checklist" style={{ marginBottom: 24 }}>
             <SectionLabel icon="list-checks">Setup checklist</SectionLabel>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12, alignItems: "start" }}>
               {steps.map((s) => (
                 <StepCard key={s.key} step={s} onGo={() => s.href && router.push(s.href)} />
               ))}
@@ -292,9 +373,9 @@ function AccountingOverviewPageInner() {
 
           {/* ── HEALTH ──────────────────────────────────────────────── */}
           {health?.components?.length ? (
-            <div style={{ marginBottom: 24 }}>
+            <div id="bookhealth" style={{ marginBottom: 24 }}>
               <SectionLabel icon="activity">Are the books correct?</SectionLabel>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12, alignItems: "start" }}>
                 {health.components.map((h) => (
                   <div
                     key={h.key}

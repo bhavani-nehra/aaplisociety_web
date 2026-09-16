@@ -79,7 +79,7 @@ export async function GET(request) {
     if (financialYear && financialYear !== "all")
       query.financialYear = financialYear;
     const transactions = await Transaction.find(query)
-      .populate("memberId", "roomNo wing ownerName")
+      .populate("memberId", "flatNo wing ownerName")
       .populate("createdBy", "name email")
       .sort({ date: -1, createdAt: -1 })
       .lean();
@@ -112,7 +112,7 @@ export async function GET(request) {
           date: new Date(t.date).toLocaleDateString("en-IN"),
           transactionId: t.transactionId,
           member: t.memberId
-            ? `${t.memberId.wing}-${t.memberId.roomNo} ${t.memberId.ownerName}`
+            ? `${t.memberId.wing}-${t.memberId.flatNo} ${t.memberId.ownerName}`
             : "",
           category: t.category,
           type: t.type,
@@ -261,7 +261,7 @@ export async function GET(request) {
         const tableData = transactions.map((t) => [
           new Date(t.date).toLocaleDateString("en-IN"),
           t.transactionId,
-          t.memberId ? `${t.memberId.wing}-${t.memberId.roomNo}` : "",
+          t.memberId ? `${t.memberId.wing}-${t.memberId.flatNo}` : "",
           t.category || "",
           t.description?.substring(0, 15) || "",
           t.paymentMode || "",

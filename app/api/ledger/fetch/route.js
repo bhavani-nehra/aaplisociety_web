@@ -133,20 +133,24 @@ export async function GET(request) {
         }
       }
       if (roomNoPattern) {
+        // Member.js has no `roomNo` field — the real path is `flatNo`. This
+        // filter (and the populate below) queried/selected a field that
+        // doesn't exist on the schema, so it silently matched nothing / came
+        // back undefined rather than erroring.
         if (roomNoPattern.includes("-")) {
           // Range: 1310-1350
           const [start, end] = roomNoPattern
             .split("-")
             .map((n) => parseInt(n.trim()));
-          memberFilter.roomNo = { $gte: start, $lte: end };
+          memberFilter.flatNo = { $gte: start, $lte: end };
         } else if (roomNoPattern.includes("*")) {
           // Starts with: 13*
           const escaped = roomNoPattern
             .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
             .replace(/\\\*/g, ""); // un-escape the wildcard token itself, then drop it
-          memberFilter.roomNo = new RegExp(`^${escaped}`);
+          memberFilter.flatNo = new RegExp(`^${escaped}`);
         } else {
-          memberFilter.roomNo = roomNoPattern;
+          memberFilter.flatNo = roomNoPattern;
         }
       }
       const matchingMembers = await Member.find(memberFilter)
@@ -197,7 +201,7 @@ export async function GET(request) {
       if (cached) return NextResponse.json(cached);
     }
     const transactions = await Transaction.find(query)
-      .populate("memberId", "roomNo wing ownerName areaSqFt")
+      .populate("memberId", "flatNo wing ownerName carpetAreaSqft builtUpAreaSqft")
       .populate("createdBy", "name email role")
       .sort({ [sortField]: sortOrder, createdAt: sortOrder })
       .skip((page - 1) * limit)
@@ -245,7 +249,7 @@ export async function GET(request) {
         let key = "Ungrouped";
         if (groupBy === "member") {
           key = t.memberId
-            ? `${t.memberId.wing || ""}-${t.memberId.roomNo} ${
+            ? `${t.memberId.wing || ""}-${t.memberId.flatNo} ${
                 t.memberId.ownerName
               }`
             : "Unknown";

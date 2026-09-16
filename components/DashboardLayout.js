@@ -60,10 +60,16 @@ export default function DashboardLayout({
     };
     fetchUser();
   }, []);
-  // Clear navigating state when route actually changes
+  // Clear navigating state when route actually changes, and scroll back to
+  // the top — the scroll container is `window` (mainWrapper/mainContent
+  // carry no overflow of their own), and <main key={pathname}> remounting
+  // does not reset that on its own, so a page navigated to from partway down
+  // a long previous page (e.g. the accounting nav list) would otherwise open
+  // already scrolled, with its own top content and header off-screen.
   useEffect(() => {
     setNavigating(false);
     clearTimeout(navTimeoutRef.current);
+    window.scrollTo(0, 0);
   }, [pathname]);
   const handleNav = useCallback((path) => {
     if (pathname === path) return;
@@ -171,8 +177,16 @@ export default function DashboardLayout({
           for the same JSX region as CommandBar's mount (that one lives
           inside .mainContent, above {children} — see the commandBarConfig
           block below); see
-          docs/superpowers/plans/2026-09-12-contextual-help-phase1.md. */}
-      <HelpButton role={role} />
+          docs/superpowers/plans/2026-09-12-contextual-help-phase1.md.
+          Skipped on /admin/accounting/* and /admin/opening-balances: those
+          routes already mount their own <Assistant> (components/accounting/
+          Assistant.jsx) at the exact same fixed bottom-right position —
+          having both meant two overlapping help buttons stacked on the
+          same 46-48px spot. Assistant is the accounting-specific one and
+          wins there; the generic HelpButton covers every other page. */}
+      {!(pathname.startsWith("/admin/accounting") || pathname === "/admin/opening-balances") && (
+        <HelpButton role={role} />
+      )}
       {/* MAIN AREA */}
       <div className={styles.mainWrapper}>
         {/* No top header: it used to hold only the user avatar+name (already

@@ -44,13 +44,11 @@
   to   { transform: scale(1) rotate(0deg); }
 }
 .dropdown {
-  position: absolute;
-  top: calc(100% + 10px);
-  /* Opens from the bell's LEFT edge, growing rightward — the bell now
-     lives in the 260px sidebar (see components/DashboardLayout.js), so
-     right:0 would grow the dropdown leftward off the edge of the screen. */
-  left: 0;
-  width: 360px;
+  /* Portaled to document.body (see NotificationBell.js) — the sidebar has
+     overflow-x:hidden for its own scroll behavior, which clipped this panel
+     when it was an absolutely-positioned child of the bell. top/left/width
+     are set inline from the bell's live bounding rect instead. */
+  position: fixed;
   background: var(--bg-primary);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);

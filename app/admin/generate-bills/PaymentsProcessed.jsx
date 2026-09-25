@@ -12,13 +12,13 @@
 // The commit itself is idempotent on the server (see commit/route.js). This
 // screen can be double-clicked without double-posting.
 
+import PulseLoader from "@/components/brand/PulseLoader";
 import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 import {
   CheckCircle2,
   Send,
   CalendarClock,
-  Loader2,
   ArrowLeft,
 } from "lucide-react";
 import s from "@/styles/CollectionsGrid.module.css";
@@ -111,8 +111,8 @@ export default function PaymentsProcessed({
         </p>
         {committed.warning && (
           <p className={s.doneWarning} data-pp-stagger>
-            ⚠ {committed.warning}{" "}
-            <a href="/admin/receipts">Open Receipts →</a>
+            {committed.warning}{" "}
+            <a href="/admin/receipts">Open receipts</a>
           </p>
         )}
       </div>
@@ -217,7 +217,7 @@ export default function PaymentsProcessed({
         >
           {committing ? (
             <>
-              <Loader2 size={15} className={s.spin} /> Posting…
+              <PulseLoader size={24} /> Posting…
             </>
           ) : choice === "schedule" ? (
             <>

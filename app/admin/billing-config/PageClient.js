@@ -1,11 +1,64 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import styles from "@/styles/BillingConfig.module.css";
-import gridStyles from "@/styles/BillingGrid.module.css";
 import { apiClient } from "@/lib/api-client";
 import notify from "@/lib/notify";
-import { PageHeader, Icon, Btn, RevampSkeleton } from "@/components/revamp";
+import {
+  PageHeader, Icon, Btn, RevampSkeleton, Card, Tabs, EmptyState,
+  Select, SearchInput, ToggleSwitch, Pill, Modal, DataTable,
+} from "@/components/revamp";
+
+// ─── Calm/minimal register (06-skills-and-execution-tooling.md §13) ──────────
+// Config is "infrequent, high-consequence" — maximum legibility, zero
+// decoration. Same --r-* tokens as the warmer Operations pages, just less
+// ornament: no brand-tinted icon chips, no colored row accents beyond the
+// warning tint that flags an actually-unsaved grid edit.
+const thStyle = {
+  textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 700,
+  color: "var(--r-fg-4)", 
+  borderBottom: "1px solid var(--r-hairline)", whiteSpace: "nowrap",
+  background: "var(--r-surface)",
+};
+const tdStyle = {
+  padding: "9px 14px", borderBottom: "1px solid var(--r-hairline)",
+  color: "var(--r-fg-2)", whiteSpace: "nowrap",
+};
+const iconBtnStyle = {
+  background: "none", border: "none", cursor: "pointer", display: "inline-flex",
+  alignItems: "center", justifyContent: "center", color: "var(--r-fg-4)", padding: 2,
+};
+const cellInputStyle = {
+  width: 90, padding: "5px 7px", border: "1px solid var(--r-hairline)", borderRadius: 6,
+  background: "var(--r-surface-2)", color: "var(--r-fg-1)", fontSize: 12.5, fontFamily: "inherit",
+};
+
+function SectionHead({ icon, title, sub, right }) {
+  // Was a flat neutral-grey badge ("no brand-tinted icon chips" — a
+  // deliberate zero-decoration choice from this page's original Calm
+  // register pass). Given direct feedback that the page reads as flat and
+  // washed out, section icons now carry the brand tint every other Card-
+  // based page already uses — still one colour, still Restrained, just no
+  // longer colourless.
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <div style={{
+          width: 30, height: 30, borderRadius: 8, background: "var(--r-brand-soft)", color: "var(--r-brand)",
+          display: "flex", alignItems: "center",
+          justifyContent: "center", flexShrink: 0, marginTop: 1,
+        }}>
+          <Icon name={icon} size={15} />
+        </div>
+        <div>
+          <h2 style={{ fontSize: 14.5, fontWeight: 700, color: "var(--r-fg-1)", margin: 0 }}>{title}</h2>
+          {sub ? <p style={{ fontSize: 12.5, color: "var(--r-fg-4)", margin: "3px 0 0", maxWidth: 560, lineHeight: 1.5 }}>{sub}</p> : null}
+        </div>
+      </div>
+      {right}
+    </div>
+  );
+}
+
 export default function BillingConfigPage() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("charges");
@@ -424,26 +477,43 @@ export default function BillingConfigPage() {
     html = html.replace("{{BILLING_TABLE}}", tableHtml);
     return html;
   };
-  // ─── MATRIX: column names ─────────────────────────────────────────────────────
-  const matrixColumns = useMemo(() => {
-    const cols = ["Member", "Name", "Area"];
-    customCharges.forEach((c) => {
-      if (c.name?.trim() && c.isActive !== false) cols.push(c.name);
-    });
-    cols.push("Total");
-    return cols;
+  // ─── MATRIX: DataTable columns (dynamic on active billing heads) ─────────────
+  const matrixTableCols = useMemo(() => {
+    const activeCharges = customCharges.filter(
+      (c) => c.name?.trim() && c.isActive !== false,
+    );
+    return [
+      { key: "member", label: "Member", render: (r) => <strong>{r.member}</strong> },
+      { key: "memberName", label: "Name" },
+      { key: "area", label: "Area", render: (r) => `${r.area} sq ft` },
+      ...activeCharges.map((c) => ({
+        key: c.id,
+        label: c.name,
+        align: "right",
+        render: (r) => <span className="revamp-num">{r[c.name]?.toFixed(2) ?? "0.00"}</span>,
+      })),
+      {
+        key: "total",
+        label: "Total",
+        align: "right",
+        render: (r) => <strong className="revamp-num">{r.total?.toFixed(2)}</strong>,
+      },
+    ];
   }, [customCharges]);
   // ─── TAB NAV ──────────────────────────────────────────────────────────────────
   const tabs = [
-    { id: "charges", label: "Charge Structure", icon: "sliders-horizontal" },
-    { id: "matrix", label: "Live Matrix", icon: "grid-3x3" },
-    { id: "grid", label: "Billing Grid", icon: "table" },
+    { key: "charges", label: "Charge Structure", icon: "sliders-horizontal" },
+    { key: "matrix", label: "Live Matrix", icon: "grid-3x3" },
+    { key: "grid", label: "Billing Grid", icon: "table" },
   ];
+  const activeGridCharges = customCharges.filter(
+    (c) => c.isActive !== false && c.name?.trim(),
+  );
   return (
-    <div className={styles.container}>
+    <div style={{ maxWidth: 1400, margin: "0 auto" }}>
       {/* ── HEADER ── */}
       <PageHeader
-        eyebrow={<><Icon name="receipt" size={11} /> Accounting</>}
+        eyebrow={<><Icon name="receipt" size={11} /> Config · Accounting</>}
         title="Billing configuration"
         sub="Configure charges, review the live matrix, and enter dynamic billing amounts."
         right={
@@ -454,86 +524,46 @@ export default function BillingConfigPage() {
               disabled={saveMutation.isPending}
               onClick={() => saveMutation.mutate()}
             >
-              {saveMutation.isPending ? "Saving…" : "Save Configuration"}
+              {saveMutation.isPending ? "Saving…" : "Save configuration"}
             </Btn>
           ) : null
         }
       />
       {/* ── TAB BAR ── */}
-      <div style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--r-hairline)", marginBottom: 20 }}>
-        {tabs.map((tab) => {
-          const active = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 7,
-                padding: "10px 16px", border: "none", background: "none",
-                borderBottom: active ? "2px solid var(--r-brand)" : "2px solid transparent",
-                fontWeight: active ? 600 : 500,
-                color: active ? "var(--r-brand)" : "var(--r-fg-3)",
-                cursor: "pointer", fontSize: 13.5, fontFamily: "inherit",
-                transition: "color 0.15s, border-color 0.15s",
-              }}
-            >
-              <Icon name={tab.icon} size={14} />
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+      <Tabs value={activeTab} onChange={setActiveTab} tabs={tabs} />
       {/* ════════════════════════════════════════════════════════════════════════
           TAB 1 — CHARGE STRUCTURE
       ════════════════════════════════════════════════════════════════════════ */}
       {activeTab === "charges" && (
-        <div className={styles.configSections}>
-          <div className={styles.section}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "1rem",
-              }}
-            >
-              <div>
-                <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <Icon name="list-checks" size={17} /> Billing Heads
-                </h2>
-                <p
-                  style={{
-                    color: "var(--fg-4)",
-                    fontSize: "0.875rem",
-                    marginTop: "0.25rem",
-                  }}
-                >
-                  All charges — Per Sq Ft, Fixed, and Custom — managed as
-                  unified billing heads. Changes here reflect live in Matrix
-                  &amp; Templates.
-                </p>
-              </div>
-              <button onClick={addCustomCharge} className="btn btn-success">
-                + Add Charge
-              </button>
+        <Card>
+          <SectionHead
+            icon="list-checks"
+            title="Billing heads"
+            sub="All charges — Per Sq Ft, Fixed, and Custom — managed as unified billing heads. Changes here reflect live in Matrix & Templates."
+            right={
+              <Btn variant="secondary" icon="plus" onClick={addCustomCharge}>
+                Add charge
+              </Btn>
+            }
+          />
+          {billingHeadsLoading ? (
+            // Charges hadn't loaded yet, not "there are none" — showing
+            // the empty state here used to read as the society's billing
+            // heads had vanished for the 1-2s the request was in flight,
+            // then everything popped in at once.
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12 }}>
+              {Array.from({ length: 6 }).map((_, i) => <RevampSkeleton key={i} h={104} />)}
             </div>
-            {billingHeadsLoading ? (
-              // Charges hadn't loaded yet, not "there are none" — showing
-              // the empty state here used to read as the society's billing
-              // heads had vanished for the 1-2s the request was in flight,
-              // then everything popped in at once.
-              <div className={styles.customChargesList}>
-                {Array.from({ length: 6 }).map((_, i) => <RevampSkeleton key={i} h={128} />)}
-              </div>
-            ) : customCharges.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "2rem" }}>
-                <p style={{ color: "var(--fg-4)", marginBottom: "1rem" }}>
-                  No billing heads yet. Import from society config or add
-                  manually.
-                </p>
-                <button
-                  className="btn btn-primary"
-                  style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+          ) : customCharges.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "48px 20px" }}>
+              <Icon name="inbox" size={26} color="var(--r-fg-5)" style={{ margin: "0 auto" }} />
+              <p style={{ marginTop: 12, fontSize: 13.5, color: "var(--r-fg-4)" }}>
+                No billing heads yet. Import from society config or add manually.
+              </p>
+              <div style={{ marginTop: 16 }}>
+                <Btn
+                  variant="primary"
+                  icon="download"
                   onClick={async () => {
                     try {
                       await apiClient.post(
@@ -551,318 +581,229 @@ export default function BillingConfigPage() {
                     }
                   }}
                 >
-                  <Icon name="download" size={14} /> Import from Society Config
-                </button>
+                  Import from society config
+                </Btn>
               </div>
-            ) : (
-              <div className={styles.customChargesList}>
-                {customCharges.map((charge, index) => (
-                  <div
-                    key={charge.id}
-                    className={styles.customChargeRow}
-                    style={{ opacity: charge.isActive === false ? 0.5 : 1 }}
-                  >
-                    <div className={styles.customChargeRowHead}>
-                      <div className={styles.rowNumber}>{index + 1}</div>
-                      <input
-                        type="text"
-                        placeholder="Charge name (e.g. Parking, Amenities)"
-                        value={charge.name}
-                        onChange={(e) =>
-                          updateCharge(charge.id, "name", e.target.value)
-                        }
-                        className={styles.input}
-                        style={{ flex: 1 }}
-                      />
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 12 }}>
+              {customCharges.map((charge, index) => (
+                <div
+                  key={charge.id}
+                  style={{
+                    border: "1px solid var(--r-hairline)",
+                    borderRadius: 10,
+                    padding: 14,
+                    background: "var(--r-surface)",
+                    opacity: charge.isActive === false ? 0.55 : 1,
+                    transition: "opacity 0.15s",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                    <div style={{
+                      width: 20, flexShrink: 0, fontSize: 11.5, fontWeight: 600,
+                      color: "var(--r-fg-5)", fontVariantNumeric: "tabular-nums",
+                    }}>
+                      {String(index + 1).padStart(2, "0")}
                     </div>
-                    <div className={styles.customChargeRowFields}>
-                      <select
-                        value={charge.calculationType}
+                    <input
+                      type="text"
+                      placeholder="Charge name (e.g. Parking, Amenities)"
+                      value={charge.name}
+                      onChange={(e) =>
+                        updateCharge(charge.id, "name", e.target.value)
+                      }
+                      className="input"
+                      style={{ flex: 1 }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginLeft: 30 }}>
+                    <Select
+                      value={charge.calculationType}
+                      onChange={(v) =>
+                        updateCharge(charge.id, "calculationType", v)
+                      }
+                      size="sm"
+                      style={{ minWidth: 138 }}
+                    >
+                      <option value="Fixed">Fixed (per flat)</option>
+                      <option value="Per Sq Ft">Per Sq Ft</option>
+                    </Select>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 130 }}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Amount"
+                        value={charge.defaultAmount}
                         onChange={(e) =>
                           updateCharge(
                             charge.id,
-                            "calculationType",
+                            "defaultAmount",
                             e.target.value,
                           )
                         }
-                        className={styles.select}
-                        style={{ flex: 1 }}
-                      >
-                        <option value="Fixed">Fixed (per flat)</option>
-                        <option value="Per Sq Ft">Per Sq Ft</option>
-                      </select>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", flex: 1 }}>
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder="Amount"
-                          value={charge.defaultAmount}
-                          onChange={(e) =>
-                            updateCharge(
-                              charge.id,
-                              "defaultAmount",
-                              e.target.value,
-                            )
-                          }
-                          className={styles.input}
-                          style={{ width: "100%" }}
-                        />
-                        <span
-                          style={{
-                            fontSize: "0.7rem",
-                            color: "var(--fg-5)",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {charge.calculationType === "Per Sq Ft"
-                            ? "/sqft"
-                            : "/flat"}
-                        </span>
-                      </div>
-                      <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: "0.75rem", color: "var(--fg-3)", flexShrink: 0 }}>
-                        <input
-                          type="checkbox"
-                          checked={charge.isActive !== false}
-                          onChange={(e) =>
-                            updateCharge(charge.id, "isActive", e.target.checked)
-                          }
-                        />
-                        Active
-                      </label>
-                      <button
-                        onClick={() => deleteCharge(charge.id)}
-                        className={styles.deleteBtn}
-                        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
-                        aria-label="Delete charge"
-                      >
-                        <Icon name="trash-2" size={14} />
-                      </button>
-                    </div>
-                    {commercialBilling && (
-                      <div
+                        className="input"
+                        style={{ width: "100%" }}
+                      />
+                      <span
                         style={{
-                          display: "flex",
-                          gap: "0.75rem",
-                          flexWrap: "wrap",
-                          fontSize: "0.75rem",
-                          color: "var(--fg-3)",
+                          fontSize: "0.7rem",
+                          color: "var(--r-fg-5)",
+                          whiteSpace: "nowrap",
                         }}
                       >
-                        <span style={{ color: "var(--fg-4)" }}>
-                          Applies to{" "}
-                          <a
-                            href="/admin/commercial/rate-card"
-                            style={{ fontWeight: 400 }}
-                            title="Set a different amount for shops and offices"
-                          >
-                            (rates)
-                          </a>:
-                        </span>
-                        {["Residential", "Shop", "Office"].map((cls) => {
-                          const list = charge.appliesToUnitClasses ?? [];
-                          const all = list.length === 0;
-                          return (
-                            <label
-                              key={cls}
-                              style={{ display: "flex", alignItems: "center", gap: 3 }}
-                              title={
-                                all
-                                  ? "Currently applies to every unit"
-                                  : `Applies to: ${list.join(", ")}`
-                              }
-                            >
-                              <input
-                                type="checkbox"
-                                checked={all || list.includes(cls)}
-                                onChange={(e) => {
-                                  const base = all
-                                    ? ["Residential", "Shop", "Office"]
-                                    : [...list];
-                                  const next = e.target.checked
-                                    ? [...new Set([...base, cls])]
-                                    : base.filter((c) => c !== cls);
-                                  // All three ticked is the same as no
-                                  // restriction, so store it as the empty
-                                  // list and keep legacy heads legacy.
-                                  updateCharge(
-                                    charge.id,
-                                    "appliesToUnitClasses",
-                                    next.length === 3 ? [] : next,
-                                  );
-                                }}
-                              />
-                              {cls === "Residential" ? "Flats" : cls}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
+                        {charge.calculationType === "Per Sq Ft"
+                          ? "/sqft"
+                          : "/flat"}
+                      </span>
+                    </div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--r-fg-3)", flexShrink: 0 }}>
+                      <ToggleSwitch
+                        on={charge.isActive !== false}
+                        onChange={(v) => updateCharge(charge.id, "isActive", v)}
+                        title="Active"
+                      />
+                      Active
+                    </label>
+                    <Btn
+                      variant="ghost"
+                      size="sm"
+                      icon="trash-2"
+                      title="Delete charge"
+                      onClick={() => deleteCharge(charge.id)}
+                      style={{ color: "var(--r-danger)" }}
+                    />
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+                  {commercialBilling && (
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 12,
+                        flexWrap: "wrap",
+                        fontSize: 12,
+                        color: "var(--r-fg-3)",
+                        marginTop: 10,
+                        marginLeft: 30,
+                        paddingTop: 10,
+                        borderTop: "1px solid var(--r-hairline)",
+                      }}
+                    >
+                      <span style={{ color: "var(--r-fg-4)" }}>
+                        Applies to{" "}
+                        <a
+                          href="/admin/commercial/rate-card"
+                          style={{ fontWeight: 400, color: "var(--r-brand)" }}
+                          title="Set a different amount for shops and offices"
+                        >
+                          (rates)
+                        </a>:
+                      </span>
+                      {["Residential", "Shop", "Office"].map((cls) => {
+                        const list = charge.appliesToUnitClasses ?? [];
+                        const all = list.length === 0;
+                        return (
+                          <label
+                            key={cls}
+                            style={{ display: "flex", alignItems: "center", gap: 4 }}
+                            title={
+                              all
+                                ? "Currently applies to every unit"
+                                : `Applies to: ${list.join(", ")}`
+                            }
+                          >
+                            <input
+                              type="checkbox"
+                              checked={all || list.includes(cls)}
+                              onChange={(e) => {
+                                const base = all
+                                  ? ["Residential", "Shop", "Office"]
+                                  : [...list];
+                                const next = e.target.checked
+                                  ? [...new Set([...base, cls])]
+                                  : base.filter((c) => c !== cls);
+                                // All three ticked is the same as no
+                                // restriction, so store it as the empty
+                                // list and keep legacy heads legacy.
+                                updateCharge(
+                                  charge.id,
+                                  "appliesToUnitClasses",
+                                  next.length === 3 ? [] : next,
+                                );
+                              }}
+                            />
+                            {cls === "Residential" ? "Flats" : cls}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
       )}
       {/* ════════════════════════════════════════════════════════════════════════
           TAB 2 — LIVE MATRIX
       ════════════════════════════════════════════════════════════════════════ */}
       {activeTab === "matrix" && (
-        <div className={styles.liveMatrixSection}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: "1rem",
-            }}
-          >
-            <div>
-              <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Icon name="grid-3x3" size={17} /> Live Billing Matrix
-              </h2>
-              <p style={{ color: "var(--fg-4)", fontSize: "0.875rem" }}>
-                Auto-calculated from current billing heads. Save charges first
-                to update.
-              </p>
-            </div>
-            <span
-              style={{
-                background: "var(--primary-tint)",
-                color: "var(--primary-hover)",
-                padding: "0.35rem 1rem",
-                borderRadius: 8,
-                fontWeight: 600,
-                fontSize: "0.875rem",
-              }}
-            >
-              {livePreview.length} members
-            </span>
-          </div>
+        <Card>
+          <SectionHead
+            icon="grid-3x3"
+            title="Live billing matrix"
+            sub="Auto-calculated from current billing heads. Save charges first to update."
+            right={<Pill tone="neutral" dot={false}>{livePreview.length} members</Pill>}
+          />
           {livePreview.length === 0 ? (
-            <div
-              style={{ textAlign: "center", padding: "3rem", color: "var(--fg-4)" }}
-            >
-              No members found. Import members first, or add billing heads in
-              Charge Structure tab.
-            </div>
+            <EmptyState
+              icon="inbox"
+              title="No members found"
+              sub="Import members first, or add billing heads in the Charge Structure tab."
+            />
           ) : (
             <>
-              <div className={styles.tableWrapper}>
-                <table className={styles.liveTable}>
-                  <thead>
-                    <tr>
-                      {matrixColumns.map((col) => (
-                        <th
-                          key={col}
-                          className={
-                            col === "Total" ? styles.totalColumn : undefined
-                          }
-                        >
-                          {col}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {livePreview.slice(0, 50).map((row, idx) => (
-                      <tr key={idx}>
-                        <td>
-                          <strong>{row.member}</strong>
-                        </td>
-                        <td>{row.memberName}</td>
-                        <td>{row.area} sq ft</td>
-                        {customCharges
-                          .filter((c) => c.name?.trim() && c.isActive !== false)
-                          .map((c) => (
-                            <td key={c.id}>
-                              {row[c.name]?.toFixed(2) ?? "0.00"}
-                            </td>
-                          ))}
-                        <td className={styles.totalCell}>
-                          <strong>{row.total?.toFixed(2)}</strong>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable cols={matrixTableCols} rows={livePreview.slice(0, 50)} />
               {livePreview.length > 50 && (
-                <div
-                  style={{
-                    textAlign: "center",
-                    padding: "1rem",
-                    color: "var(--fg-4)",
-                  }}
-                >
+                <p style={{ textAlign: "center", padding: "12px 0 0", fontSize: 12, color: "var(--r-fg-4)" }}>
                   Showing 50 of {livePreview.length} members
-                </div>
+                </p>
               )}
             </>
           )}
-        </div>
+        </Card>
       )}
       {/* ════════════════════════════════════════════════════════════════════════
           TAB 3 — BILLING GRID
       ════════════════════════════════════════════════════════════════════════ */}
       {activeTab === "grid" && (
         <div>
-          {/* Grid Controls */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: "1rem",
-            }}
-          >
-            <div>
-              <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Icon name="table" size={17} /> Billing Grid
-              </h2>
-              <p style={{ color: "var(--fg-4)", fontSize: "0.875rem" }}>
-                Enter dynamic/one-time charges per member before generating
-                bills.
-              </p>
-            </div>
-            <div style={{ display: "flex", gap: "0.75rem" }}>
-              <button
-                onClick={handleAddGridColumn}
-                className="btn btn-secondary"
-              >
-                + Add Column
-              </button>
-              <button
-                onClick={() => {
-                  setPreviewMemberIndex(0);
-                  setShowGridPreview(true);
-                }}
-                className="btn btn-primary"
-                disabled={!filteredMembers.length}
-              >
-                Preview Bills
-              </button>
-            </div>
-          </div>
+          <SectionHead
+            icon="table"
+            title="Billing grid"
+            sub="Enter dynamic or one-time charges per member before generating bills."
+            right={
+              <div style={{ display: "flex", gap: 8 }}>
+                <Btn variant="secondary" icon="plus" onClick={handleAddGridColumn}>
+                  Add column
+                </Btn>
+                <Btn
+                  variant="primary"
+                  icon="eye"
+                  disabled={!filteredMembers.length}
+                  onClick={() => {
+                    setPreviewMemberIndex(0);
+                    setShowGridPreview(true);
+                  }}
+                >
+                  Preview bills
+                </Btn>
+              </div>
+            }
+          />
           {/* Month/Year + Filter bar */}
-          <div
-            className={styles.section}
-            style={{ marginBottom: "1rem", padding: "1rem" }}
-          >
-            <div
-              style={{
-                display: "flex",
-                gap: "1rem",
-                alignItems: "center",
-                flexWrap: "wrap",
-              }}
-            >
-              <select
-                value={month}
-                onChange={(e) => setMonth(parseInt(e.target.value))}
-                className="input"
-                style={{ width: 140 }}
-              >
+          <Card style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+              <Select value={month} onChange={(v) => setMonth(parseInt(v))} style={{ width: 148 }}>
                 {Array.from({ length: 12 }, (_, i) => (
                   <option key={i} value={i + 1}>
                     {new Date(2000, i).toLocaleString("default", {
@@ -870,115 +811,81 @@ export default function BillingConfigPage() {
                     })}
                   </option>
                 ))}
-              </select>
+              </Select>
               <input
                 type="number"
                 value={year}
                 onChange={(e) => setYear(parseInt(e.target.value))}
                 className="input"
-                style={{ width: 90 }}
+                style={{ width: 94 }}
                 min={2020}
                 max={2035}
               />
-              <input
-                type="text"
-                placeholder="Search by room, name, or wing…"
+              <SearchInput
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="input"
-                style={{ flex: 1, minWidth: 180 }}
+                onChange={setSearchTerm}
+                placeholder="Search by room, name, or wing…"
+                style={{ flex: 1, minWidth: 200 }}
               />
-              <select
-                value={selectedWing}
-                onChange={(e) => setSelectedWing(e.target.value)}
-                className="input"
-                style={{ width: 150 }}
-              >
-                <option value="all">All Wings</option>
+              <Select value={selectedWing} onChange={setSelectedWing} style={{ width: 148 }}>
+                <option value="all">All wings</option>
                 {wings.map((wing) => (
                   <option key={wing} value={wing}>
                     Wing {wing}
                   </option>
                 ))}
-              </select>
-              <span
-                style={{
-                  padding: "0.5rem 1rem",
-                  background: "var(--primary-tint)",
-                  borderRadius: 8,
-                  fontWeight: 600,
-                  color: "var(--primary-hover)",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {filteredMembers.length} MEMBERS
-              </span>
+              </Select>
+              <Pill tone="neutral" dot={false}>{filteredMembers.length} members</Pill>
             </div>
-          </div>
+          </Card>
           {/* Grid Table */}
           {membersLoading ? (
-            <div
-              style={{ textAlign: "center", padding: "3rem", color: "var(--fg-4)" }}
-            >
-              Loading members…
-            </div>
+            <RevampSkeleton h={240} />
           ) : (
-            <div
-              className={styles.section}
-              style={{ padding: 0, overflowX: "auto" }}
-            >
-              <table className={gridStyles.billingTable}>
+            <Card padded={false} style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
-                  <tr>
-                    <th>Wing</th>
-                    <th>Room</th>
-                    <th>Owner</th>
-                    <th>Area sq.ft</th>
-                    {customCharges
-                      .filter((c) => c.isActive !== false && c.name?.trim())
-                      .map((c) => (
-                        <th key={c.id}>{c.name}</th>
-                      ))}
+                  <tr style={{ position: "sticky", top: 0, zIndex: 1 }}>
+                    <th style={thStyle}>Wing</th>
+                    <th style={thStyle}>Room</th>
+                    <th style={thStyle}>Owner</th>
+                    <th style={{ ...thStyle, textAlign: "right" }}>Area sq.ft</th>
+                    {activeGridCharges.map((c) => (
+                      <th key={c.id} style={{ ...thStyle, textAlign: "right" }}>{c.name}</th>
+                    ))}
                     {gridCustomColumns.map((col) => (
-                      <th key={col.id}>
+                      <th key={col.id} style={thStyle}>
                         <div
                           style={{
                             display: "flex",
                             alignItems: "center",
-                            gap: "0.5rem",
+                            gap: 8,
                             justifyContent: "space-between",
                           }}
                         >
                           <span>{col.name}</span>
-                          <div style={{ display: "flex", gap: "0.25rem" }}>
+                          <div style={{ display: "flex", gap: 2 }}>
                             <button
                               onClick={() => handleEditGridColumn(col.id)}
                               aria-label="Edit column"
-                              style={{
-                                background: "none", border: "none", cursor: "pointer",
-                                display: "inline-flex", alignItems: "center",
-                              }}
+                              style={iconBtnStyle}
                             >
-                              <Icon name="pencil" size={13} />
+                              <Icon name="pencil" size={12} />
                             </button>
                             <button
                               onClick={() => handleDeleteGridColumn(col.id)}
                               aria-label="Delete column"
-                              style={{
-                                background: "none", border: "none", cursor: "pointer",
-                                display: "inline-flex", alignItems: "center",
-                                color: "var(--r-danger)",
-                              }}
+                              style={{ ...iconBtnStyle, color: "var(--r-danger)" }}
                             >
-                              <Icon name="x" size={13} />
+                              <Icon name="x" size={12} />
                             </button>
                           </div>
                         </div>
                       </th>
                     ))}
-                    <th>Subtotal</th>
-                    <th>Tax</th>
-                    <th>Total</th>
+                    <th style={{ ...thStyle, textAlign: "right" }}>Subtotal</th>
+                    <th style={{ ...thStyle, textAlign: "right" }}>Tax</th>
+                    <th style={{ ...thStyle, textAlign: "right" }}>Total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -991,204 +898,140 @@ export default function BillingConfigPage() {
                         key={mid || idx}
                         style={{
                           backgroundColor: isModified
-                            ? "var(--warning-bg)"
+                            ? "var(--r-warning-soft)"
                             : "transparent",
                         }}
                       >
-                        <td>{member.wing}-</td>
-                        <td>
+                        <td style={tdStyle}>{member.wing}-</td>
+                        <td style={tdStyle}>
                           <strong>{member.flatNo}</strong>
                         </td>
-                        <td>{member.ownerName}</td>
-                        <td>
+                        <td style={tdStyle}>{member.ownerName}</td>
+                        <td style={{ ...tdStyle, textAlign: "right" }} className="revamp-num">
                           {member.carpetAreaSqft ??
                             member.builtUpAreaSqft ??
                             "-"}
                         </td>
-                        {customCharges
-                          .filter((c) => c.isActive !== false && c.name?.trim())
-                          .map((c) => (
-                            <td key={c.id}>
-                              {(calc.breakdown[c.name] ?? 0).toFixed(2)}
-                            </td>
-                          ))}
+                        {activeGridCharges.map((c) => (
+                          <td key={c.id} style={{ ...tdStyle, textAlign: "right" }} className="revamp-num">
+                            {(calc.breakdown[c.name] ?? 0).toFixed(2)}
+                          </td>
+                        ))}
                         {gridCustomColumns.map((col) => (
-                          <td key={col.id}>
+                          <td key={col.id} style={tdStyle}>
                             <input
                               type="number"
                               value={gridData[mid]?.[col.id] ?? ""}
                               onChange={(e) =>
                                 handleCellChange(mid, col.id, e.target.value)
                               }
-                              className={gridStyles.cellInput}
                               placeholder="0"
-                              style={{ width: 100 }}
+                              style={cellInputStyle}
                             />
                           </td>
                         ))}
-                        <td>{calc.subtotal.toFixed(2)}</td>
-                        <td>{calc.serviceTax.toFixed(2)}</td>
-                        <td>
-                          <strong style={{ color: "var(--danger)" }}>
-                            {calc.total.toFixed(2)}
-                          </strong>
+                        <td style={{ ...tdStyle, textAlign: "right" }} className="revamp-num">
+                          {calc.subtotal.toFixed(2)}
+                        </td>
+                        <td style={{ ...tdStyle, textAlign: "right" }} className="revamp-num">
+                          {calc.serviceTax.toFixed(2)}
+                        </td>
+                        <td style={{ ...tdStyle, textAlign: "right" }}>
+                          <strong className="revamp-num">{calc.total.toFixed(2)}</strong>
                         </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-            </div>
+            </Card>
           )}
           {/* Bottom actions */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              marginTop: "1rem",
-              gap: "0.75rem",
-            }}
-          >
-            <button
-              onClick={handleGridGenerate}
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+            <Btn
+              variant="primary"
+              size="lg"
+              icon="receipt"
               disabled={
                 generateGridBillsMutation.isPending || !filteredMembers.length
               }
-              className="btn btn-success"
+              onClick={handleGridGenerate}
               style={{ minWidth: 220 }}
             >
               {generateGridBillsMutation.isPending
                 ? "Generating…"
-                : `Generate ${filteredMembers.length} Bills`}
-            </button>
+                : `Generate ${filteredMembers.length} bills`}
+            </Btn>
           </div>
-          {/* Grid Preview Overlay */}
-          {showGridPreview && (
+          {/* Grid Preview Modal */}
+          <Modal
+            open={showGridPreview}
+            onClose={() => setShowGridPreview(false)}
+            title={`Bill preview — ${year}-${String(month).padStart(2, "0")}`}
+            sub={`Member ${previewMemberIndex + 1} of ${filteredMembers.length}`}
+            width={880}
+          >
+            <div
+              dangerouslySetInnerHTML={{
+                __html:
+                  renderGridBillPreview() ??
+                  '<p style="color:var(--r-fg-4);text-align:center">No template configured. Set up a template in Bill Templates first.</p>',
+              }}
+            />
             <div
               style={{
-                position: "fixed",
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                backgroundColor: "rgba(0,0,0,0.8)",
-                zIndex: 9999,
+                position: "sticky",
+                bottom: -22,
+                marginLeft: -22,
+                marginRight: -22,
+                marginTop: 24,
+                padding: "14px 22px",
+                background: "var(--r-surface)",
+                borderTop: "1px solid var(--r-hairline)",
                 display: "flex",
+                gap: 10,
                 alignItems: "center",
-                justifyContent: "center",
-                padding: "2rem",
               }}
-              onClick={() => setShowGridPreview(false)}
             >
-              <div
-                style={{
-                  backgroundColor: "var(--bg-surface)",
-                  borderRadius: 12,
-                  maxWidth: 900,
-                  width: "100%",
-                  maxHeight: "90vh",
-                  overflow: "auto",
-                  position: "relative",
-                }}
-                onClick={(e) => e.stopPropagation()}
+              <Btn
+                variant="secondary"
+                onClick={() =>
+                  setPreviewMemberIndex(Math.max(0, previewMemberIndex - 1))
+                }
+                disabled={previewMemberIndex === 0}
               >
-                <div
-                  style={{
-                    padding: "1.5rem",
-                    borderBottom: "2px solid var(--border)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    position: "sticky",
-                    top: 0,
-                    backgroundColor: "var(--bg-surface)",
-                    zIndex: 1,
-                  }}
-                >
-                  <div>
-                    <h2 style={{ margin: 0 }}>
-                      Bill Preview {year}-{String(month).padStart(2, "0")}
-                    </h2>
-                    <p style={{ margin: "0.5rem 0 0 0", color: "var(--fg-4)" }}>
-                      Member {previewMemberIndex + 1} of{" "}
-                      {filteredMembers.length}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setShowGridPreview(false)}
-                    aria-label="Close preview"
-                    style={{
-                      background: "none", border: "none", cursor: "pointer",
-                      display: "inline-flex", alignItems: "center",
-                      color: "var(--fg-5)",
-                    }}
-                  >
-                    <Icon name="x" size={22} />
-                  </button>
-                </div>
-                <div
-                  style={{ padding: "2rem" }}
-                  dangerouslySetInnerHTML={{
-                    __html:
-                      renderGridBillPreview() ??
-                      '<p style="color:var(--fg-4);text-align:center">No template configured. Set up a template in Bill Templates first.</p>',
-                  }}
-                />
-                <div
-                  style={{
-                    padding: "1.5rem",
-                    borderTop: "2px solid var(--border)",
-                    display: "flex",
-                    gap: "1rem",
-                    position: "sticky",
-                    bottom: 0,
-                    backgroundColor: "var(--bg-surface)",
-                  }}
-                >
-                  <button
-                    onClick={() =>
-                      setPreviewMemberIndex(Math.max(0, previewMemberIndex - 1))
-                    }
-                    disabled={previewMemberIndex === 0}
-                    className="btn btn-secondary"
-                  >
-                    ← Previous
-                  </button>
-                  <button
-                    onClick={() =>
-                      setPreviewMemberIndex(
-                        Math.min(
-                          filteredMembers.length - 1,
-                          previewMemberIndex + 1,
-                        ),
-                      )
-                    }
-                    disabled={previewMemberIndex === filteredMembers.length - 1}
-                    className="btn btn-secondary"
-                  >
-                    Next →
-                  </button>
-                  <div style={{ flex: 1 }} />
-                  <button
-                    onClick={() => setShowGridPreview(false)}
-                    className="btn btn-secondary"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleGridGenerate}
-                    disabled={generateGridBillsMutation.isPending}
-                    className="btn btn-success"
-                    style={{ minWidth: 200 }}
-                  >
-                    {generateGridBillsMutation.isPending
-                      ? "Generating…"
-                      : `Generate ${filteredMembers.length} Bills`}
-                  </button>
-                </div>
-              </div>
+                ← Previous
+              </Btn>
+              <Btn
+                variant="secondary"
+                onClick={() =>
+                  setPreviewMemberIndex(
+                    Math.min(
+                      filteredMembers.length - 1,
+                      previewMemberIndex + 1,
+                    ),
+                  )
+                }
+                disabled={previewMemberIndex === filteredMembers.length - 1}
+              >
+                Next →
+              </Btn>
+              <div style={{ flex: 1 }} />
+              <Btn variant="secondary" onClick={() => setShowGridPreview(false)}>
+                Cancel
+              </Btn>
+              <Btn
+                variant="primary"
+                disabled={generateGridBillsMutation.isPending}
+                onClick={handleGridGenerate}
+                style={{ minWidth: 180 }}
+              >
+                {generateGridBillsMutation.isPending
+                  ? "Generating…"
+                  : `Generate ${filteredMembers.length} bills`}
+              </Btn>
             </div>
-          )}
+          </Modal>
         </div>
       )}
     </div>

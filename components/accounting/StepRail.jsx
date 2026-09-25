@@ -99,7 +99,7 @@ export default function StepRail({ currentKey }) {
               background: "var(--r-brand)", color: "var(--r-brand-ink)", border: "1px solid var(--r-brand)", cursor: "pointer",
             }}
           >
-            Go there <Icon name="arrow-right" size={12} />
+            Go there
           </button>
         </div>
       ) : steps && currentIdx !== -1 ? (

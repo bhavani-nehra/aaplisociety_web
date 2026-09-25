@@ -909,7 +909,7 @@ const resetLab = () =>
                     <span className="text-xs text-gray-500">
                       {p.errorCount > 0 ? (
                         <span className="text-amber-700">
-                          ⚠ {p.errorCount} of {p.rows.length} failed (likely already billed)
+                          {p.errorCount} of {p.rows.length} failed (likely already billed)
                         </span>
                       ) : (
                         <>billed {inr(p.billedTotal)} · collected {inr(p.collectedTotal)} · {p.rows.length} members</>

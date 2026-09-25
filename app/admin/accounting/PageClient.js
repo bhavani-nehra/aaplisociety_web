@@ -15,8 +15,8 @@ import { Suspense, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
-  PageHeader, SectionLabel, ActionTile, Card, CardHead, MiniMetric,
-  Progress, Pill, Btn, Icon, EmptyState, RevampSkeleton, Modal,
+  PageHeader, SectionLabel, ActionTile, Card, CardHead,
+  Progress, Pill, Btn, Icon, EmptyState, RevampSkeleton, Modal, SmallStat,
 } from "@/components/revamp";
 import FinancialYearsPage from "./financial-years/PageClient";
 import PostingRulesPage from "./posting-rules/PageClient";
@@ -104,19 +104,12 @@ function AccountingOverviewPageInner() {
   return (
     <div style={{ maxWidth: 1480, margin: "0 auto" }}>
       <PageHeader
-        eyebrow={
-          fy ? (
-            <><Icon name="calendar" size={11} /> {fy.label} · {fullDate(fy.startDate)} — {fullDate(fy.endDate)}</>
-          ) : (
-            <><Icon name="alert-triangle" size={11} /> No financial year yet</>
-          )
-        }
         title="Configuration"
-        sub="Where the society's books stand, and everything small needed to set them up — one page."
+        sub={fy ? `Working year ${fy.label}, ${fullDate(fy.startDate)} to ${fullDate(fy.endDate)}.` : "No financial year yet. Create one to start keeping books."}
         right={
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             {fy ? <Pill tone={fy.status === "Locked" ? "neutral" : "paid"}>{fy.status}</Pill> : null}
-            <Btn icon="refresh-cw" onClick={() => refetch()} title="Re-check">Re-check</Btn>
+            <Btn variant="secondary" onClick={() => refetch()}>Check again</Btn>
           </div>
         }
       />
@@ -134,225 +127,65 @@ function AccountingOverviewPageInner() {
         </Card>
       ) : (
         <>
-          {/* ── NEEDS ATTENTION ─────────────────────────────────────── */}
-          <div style={{ marginBottom: 24 }}>
-            <SectionLabel icon="sparkles">
-              {next ? "Do this next" : "Needs attention"}
-            </SectionLabel>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12 }}>
-              {next ? (
-                <ActionTile
-                  tone={next.urgent ? "danger" : "warning"}
-                  icon={STEP_ICON[next.key] || "circle"}
-                  headline={next.label}
-                  sub={next.detail}
-                  cta={next.fix ? "Fix it" : "Open"}
-                  onClick={() => next.href && router.push(next.href)}
-                />
-              ) : (
-                <ActionTile
-                  tone="success"
-                  icon="check-circle"
-                  headline="Setup is complete"
-                  sub="From here it is the monthly work — bills, payments, and statements at year end."
-                  cta="Raise bills"
-                  onClick={() => router.push("/admin/generate-bills")}
-                />
-              )}
-
-              {failing.length ? (
-                <ActionTile
-                  tone="danger"
-                  icon="alert-triangle"
-                  headline={`${failing.length} book check${failing.length === 1 ? "" : "s"} failing`}
-                  sub={failing[0]?.reason || "Statements may not print correctly."}
-                  cta="See why"
-                  onClick={() => failing[0]?.navigationTarget && router.push(failing[0].navigationTarget)}
-                />
-              ) : null}
-
-              {openQueryCount ? (
-                <ActionTile
-                  tone="warning"
-                  icon="message-circle-question"
-                  headline={`${openQueryCount} auditor quer${openQueryCount === 1 ? "y" : "ies"} open`}
-                  sub="Raised against an entry or head — the auditor is waiting on these."
-                  cta="Answer"
-                  onClick={() => router.push("/admin/accounting/auditor?tab=queries")}
-                />
-              ) : null}
-
-              {outstanding.length > 1 ? (
-                <ActionTile
-                  tone="info"
-                  icon="list-checks"
-                  headline={`${outstanding.length} steps still to do`}
-                  sub="Each one waits on the one above it. Work down the list."
-                  cta="See list"
-                  onClick={() => document.getElementById("checklist")?.scrollIntoView({ behavior: "smooth" })}
-                />
-              ) : null}
-            </div>
-          </div>
-
-          {/* ── BENTO ───────────────────────────────────────────────── */}
-          {/* Fixed 3-col "1.4fr 1fr 1fr" cramped every card into a squeezed
-              sliver on a ~900px-wide viewport (a laptop, not a phone — this
-              page is never meant to need a media query). minmax lets the
-              5 cards wrap to their own rows instead, same pattern the
-              SMALL STATS grid just below already uses.
-              align-items defaults to "stretch" in CSS Grid, so every
-              MiniMetric here was being force-stretched to match the much
-              taller "Setup progress" card's height — each one drew its
-              label/number/delta at the top and then just left a large
-              blank gap below, which is exactly the "thin content, dead
-              space underneath" look. "start" lets each card size to its
-              own content instead. Each MiniMetric also now carries a real
-              second data point via `extra` (a mini progress bar, a status
-              pill, a failing-check list) so the empty space that opens up
-              gets filled with more information, not left blank. */}
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 1.4fr) repeat(auto-fit, minmax(150px, 1fr))", gap: 14, marginBottom: 14, alignItems: "start" }}>
-            <Card
-              hover
-              onClick={() => setOpenKey("setup")}
-              style={{
-                display: "flex", flexDirection: "column", justifyContent: "space-between",
-                cursor: "pointer",
-              }}
-              title="Open the guided setup"
-            >
-              <div>
-                <CardHead
-                  title="Setup progress"
-                  sub={fy ? `Working year ${fy.label}` : "No financial year yet"}
-                  right={<Pill tone={pct === 100 ? "paid" : "partial"}>{pct}%</Pill>}
-                />
-                <div className="revamp-num" style={{ fontSize: 52, fontWeight: 700, color: "var(--r-fg-1)", letterSpacing: "-0.025em", lineHeight: 1, marginBottom: 10 }}>
-                  {done.length}<span style={{ fontSize: 26, color: "var(--r-fg-4)" }}> / {steps.length}</span>
-                </div>
-                <div style={{ fontSize: 13, color: "var(--r-fg-3)", marginBottom: 18 }}>
-                  steps done · <span style={{ color: "var(--r-fg-1)", fontWeight: 600 }}>{outstanding.length}</span> remaining
-                </div>
-                <Progress value={pct} total={100} color={pctColor} height={8} />
+          <Card style={{ marginBottom: 20 }}>
+            <SectionLabel icon="alert-circle">{next ? "Do this next" : "Needs attention"}</SectionLabel>
+            {!next && !failing.length && !openQueryCount ? (
+              <p style={{ fontSize: 13, color: "var(--r-fg-3)" }}>Setup is complete and every book check passes.</p>
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                {next ? (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 13 }}><strong>{next.label}.</strong> {next.detail}</span>
+                    {next.href ? <Btn size="sm" onClick={() => router.push(next.href)}>{next.fix ? "Fix it" : "Open"}</Btn> : null}
+                  </div>
+                ) : null}
+                {failing.length ? (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 13 }}><strong>{failing.length} book check{failing.length === 1 ? "" : "s"} failing.</strong> {failing[0]?.reason || "Statements may not print correctly."}</span>
+                    {failing[0]?.navigationTarget ? <Btn size="sm" onClick={() => router.push(failing[0].navigationTarget)}>See why</Btn> : null}
+                  </div>
+                ) : null}
+                {openQueryCount ? (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 13 }}><strong>{openQueryCount} auditor quer{openQueryCount === 1 ? "y" : "ies"}</strong> waiting for an answer.</span>
+                    <Btn size="sm" onClick={() => router.push("/admin/accounting/auditor?tab=queries")}>Answer queries</Btn>
+                  </div>
+                ) : null}
               </div>
-              {fy ? (
-                <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--r-hairline)", fontSize: 12, color: "var(--r-fg-3)", lineHeight: 1.7 }}>
-                  <div><strong style={{ color: "var(--r-fg-1)" }}>{fy.label}</strong> runs {fullDate(fy.startDate)} to {fullDate(fy.endDate)}</div>
-                  <div>
-                    Opening figures:{" "}
-                    {fy.openingBalancesConfirmed
-                      ? <span style={{ color: "var(--r-success)", fontWeight: 600 }}>carried in</span>
-                      : <span style={{ color: "var(--r-danger)", fontWeight: 600 }}>not entered</span>}
-                  </div>
-                </div>
-              ) : null}
-            </Card>
+            )}
+          </Card>
 
-            <MiniMetric
-              label="Books health" icon="activity"
-              value={typeof health?.healthScore === "number" ? `${Math.round(health.healthScore)}%` : "—"}
-              tone={failing.length ? "danger" : "success"}
-              delta={
-                typeof health?.healthScore === "number"
-                  ? failing.length ? `${failing.length} check(s) failing` : "All checks passing"
-                  : "Needs a financial year first"
-              }
-              onClick={() => document.getElementById("bookhealth")?.scrollIntoView({ behavior: "smooth" })}
-              extra={
-                typeof health?.healthScore === "number" ? (
-                  <div style={{ marginTop: 12 }}>
-                    <Progress value={health.healthScore} total={100} color={failing.length ? "var(--r-danger)" : "var(--r-success)"} height={5} />
-                    {failing.length ? (
-                      <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
-                        {failing.slice(0, 2).map((h) => (
-                          <div key={h.key} style={{ fontSize: 10.5, color: "var(--r-fg-4)", display: "flex", alignItems: "center", gap: 5 }}>
-                            <Icon name="x" size={10} color="var(--r-danger)" /> {h.label}
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null
-              }
-            />
-
-            <MiniMetric
-              label="Account heads" icon="book-open"
-              value={c.accounts ?? 0}
-              delta={c.accountsExpected ? `of ${c.accountsExpected} standard heads` : null}
-              tone={c.accounts >= (c.accountsExpected || 0) ? "success" : "danger"}
-              onClick={() => router.push("/admin/accounting/chart-of-accounts")}
-              extra={
-                c.accountsExpected ? (
-                  <div style={{ marginTop: 12 }}>
-                    <Progress
-                      value={c.accounts ?? 0} total={c.accountsExpected}
-                      color={(c.accounts ?? 0) >= c.accountsExpected ? "var(--r-success)" : "var(--r-warning)"}
-                      height={5}
-                    />
-                  </div>
-                ) : null
-              }
-            />
-
-            <MiniMetric
-              label="Entries recorded" icon="receipt"
-              value={c.vouchers ?? 0}
-              delta={c.vouchers ? "receipt & payment slips" : "nothing recorded yet"}
-              onClick={() => router.push("/admin/ledger")}
-              extra={
-                <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "var(--r-brand)" }}>
-                  <Icon name="arrow-right" size={11} /> {c.vouchers ? "Open the ledger" : "Raise the first bill"}
-                </div>
-              }
-            />
-
-            <MiniMetric
-              label="Financial years" icon="calendar"
-              value={c.financialYears ?? 0}
-              delta={fy ? `working year ${fy.label}` : "none created"}
-              onClick={() => setOpenKey("financial-years")}
-              extra={
-                fy ? (
-                  <div style={{ marginTop: 12 }}>
-                    <Pill tone={fy.status === "Locked" ? "neutral" : "paid"}>{fy.status}</Pill>
-                  </div>
-                ) : (
-                  <div style={{ marginTop: 12, fontSize: 11, fontWeight: 600, color: "var(--r-brand)", display: "flex", alignItems: "center", gap: 5 }}>
-                    <Icon name="plus" size={11} /> Create one
-                  </div>
-                )
-              }
-            />
-          </div>
-
-          {/* ── SMALL STATS — one strip, not five separate cards ───────
-              Five identical bordered boxes in a row was the same tile
-              repeated five times with nothing but the number changed; one
-              Card with hairline dividers reads as one fact with five parts,
-              which is what this actually is. */}
           <Card style={{ marginBottom: 24 }}>
-            <div style={{ display: "flex", flexWrap: "wrap" }}>
-              {[
-                { icon: "git-branch", label: "Journal entries", value: c.journalEntries ?? 0 },
-                { icon: "pie-chart", label: "Funds", value: c.funds ?? 0 },
-                { icon: "settings", label: "Entry rules", value: c.postingRules ?? 0, danger: !c.postingRules },
-                { icon: "shield", label: "Health checks", value: c.validationRules ?? 0, danger: !c.validationRules },
-                { icon: "layout-template", label: "Statement layouts", value: c.schedules ?? 0, danger: !c.schedules },
-              ].map((s, i) => (
-                <div key={s.label} style={{
-                  flex: "1 1 150px", padding: i ? "0 0 0 18px" : 0,
-                  marginLeft: i ? 18 : 0, borderLeft: i ? "1px solid var(--r-hairline)" : "none",
-                }}>
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--r-fg-4)", fontWeight: 500 }}>
-                    <Icon name={s.icon} size={13} /> {s.label}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 32, alignItems: "start" }}>
+              <div>
+                <SmallStat icon="check-circle" label="Accounting setup" value={`${done.length} of ${steps.length}`} />
+                <p style={{ fontSize: 12.5, color: "var(--r-fg-3)", marginTop: 8, lineHeight: 1.6 }}>
+                  {outstanding.length ? <><strong>{outstanding.length}</strong> step{outstanding.length === 1 ? "" : "s"} left, each waiting on the one above it. </> : "Every setup step is done. "}
+                  {fy ? <>{fy.label} runs {fullDate(fy.startDate)} to {fullDate(fy.endDate)}; opening figures are {fy.openingBalancesConfirmed ? "carried in" : <strong>not entered yet</strong>}.</> : <strong>No financial year has been created.</strong>}
+                </p>
+                <Btn variant={outstanding.length ? "primary" : "secondary"} style={{ marginTop: 10 }} onClick={() => setOpenKey("setup")}>{outstanding.length ? "Continue setup" : "Open guided setup"}</Btn>
+              </div>
+              <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "1fr auto", fontSize: 14 }}>
+                {[
+                  { label: "Book checks passing", value: typeof health?.healthScore === "number" ? `${Math.round(health.healthScore)}%` : "Needs a financial year", tone: failing.length ? "due" : null, go: () => document.getElementById("bookhealth")?.scrollIntoView({ behavior: "smooth" }) },
+                  { label: "Account heads", value: c.accountsExpected ? `${c.accounts ?? 0} of ${c.accountsExpected}` : (c.accounts ?? 0), go: () => router.push("/admin/accounting/chart-of-accounts") },
+                  { label: "Receipt and payment slips", value: c.vouchers ?? 0, go: () => router.push("/admin/accounting/vouchers") },
+                  { label: "Journal entries", value: c.journalEntries ?? 0, go: () => router.push("/admin/accounting/journal-entries") },
+                  { label: "Financial years", value: c.financialYears ?? 0, go: () => setOpenKey("financial-years") },
+                  { label: "Funds", value: c.funds ?? 0 },
+                  { label: "Entry rules", value: c.postingRules ?? 0, tone: !c.postingRules ? "due" : null },
+                  { label: "Health checks", value: c.validationRules ?? 0, tone: !c.validationRules ? "due" : null },
+                  { label: "Statement layouts", value: c.schedules ?? 0, tone: !c.schedules ? "due" : null },
+                ].map((row, i) => (
+                  <div key={row.label} style={{ display: "contents" }}>
+                    <dt style={{ padding: "9px 0", borderTop: i ? "1px solid var(--r-border)" : "none", color: "var(--r-fg-3)", display: "flex", alignItems: "center", gap: 8 }}>
+                      {row.tone ? <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--r-danger)", flexShrink: 0 }} /> : null}
+                      {row.go ? <button type="button" onClick={row.go} style={{ background: "none", border: "none", padding: 0, font: "inherit", color: "inherit", cursor: "pointer", textAlign: "left" }}>{row.label}</button> : row.label}
+                    </dt>
+                    <dd style={{ margin: 0, padding: "9px 0", borderTop: i ? "1px solid var(--r-border)" : "none", textAlign: "right", fontVariantNumeric: "tabular-nums", color: "var(--r-fg-1)", fontWeight: 600 }}>{row.value}</dd>
                   </div>
-                  <div className="revamp-num" style={{
-                    fontSize: 24, fontWeight: 700, marginTop: 5, letterSpacing: "-0.02em",
-                    color: s.danger ? "var(--r-danger)" : "var(--r-fg-1)",
-                  }}>{s.value}</div>
-                </div>
-              ))}
+                ))}
+              </dl>
             </div>
           </Card>
 

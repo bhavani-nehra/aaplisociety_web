@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import styles from "@/styles/BillTemplate.module.css";
@@ -88,6 +89,8 @@ const DEFAULT_TEMPLATES = {
 };
 export default function BillTemplateDesigner() {
   const queryClient = useQueryClient();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const [activeTab, setActiveTab] = useState("select"); // select, design, upload
   const [scope, setScope] = useState("bill"); // bill | receipt (which template is being edited)
   const [selectedTemplate, setSelectedTemplate] = useState("modern");
@@ -473,7 +476,7 @@ export default function BillTemplateDesigner() {
           sampleData.previousBalance > 0
             ? `
           <div style="background: var(--danger-bg); border-left: 4px solid var(--danger); padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-            <h3 style="margin: 0 0 15px 0; color: var(--danger-fg); font-size: 16px;">⚠️ Previous Outstanding</h3>
+            <h3 style="margin: 0 0 15px 0; color: var(--danger-fg); font-size: 16px;">Previous Outstanding</h3>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
               <div>
                 <div style="font-size: 12px; color: var(--danger-fg); margin-bottom: 5px;">Previous Balance</div>
@@ -668,7 +671,7 @@ export default function BillTemplateDesigner() {
     <div className={styles.container}>
       <div className={styles.header}>
         <div>
-          <h1>🎨 Bill Template Designer</h1>
+          <h1>Bill Template Designer</h1>
           <p>Professional bill template with interest calculation</p>
         </div>
         <button
@@ -678,15 +681,15 @@ export default function BillTemplateDesigner() {
           className="btn btn-primary"
         >
           {saveMutation.isPending
-            ? "⏳ Saving..."
-            : `💾 Save ${scope === "receipt" ? "Receipt" : "Bill"} Template`}
+            ? "Saving..."
+            : `Save ${scope === "receipt" ? "Receipt" : "Bill"} Template`}
         </button>
       </div>
       {/* Bill vs Receipt scope */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         {[
-          ["bill", "🧾 Bill Template"],
-          ["receipt", "🧾 Receipt Template"],
+          ["bill", "Bill Template"],
+          ["receipt", "Receipt Template"],
         ].map(([s, label]) => (
           <button
             key={s}
@@ -731,19 +734,19 @@ export default function BillTemplateDesigner() {
           className={`${styles.tab} ${activeTab === "select" ? styles.tabActive : ""}`}
           onClick={() => setActiveTab("select")}
         >
-          📋 Choose Template
+          Choose Template
         </button>
         <button
           className={`${styles.tab} ${activeTab === "design" ? styles.tabActive : ""}`}
           onClick={() => setActiveTab("design")}
         >
-          🎨 Customize Design
+          Customize Design
         </button>
         <button
           className={`${styles.tab} ${activeTab === "upload" ? styles.tabActive : ""}`}
           onClick={() => setActiveTab("upload")}
         >
-          📤 Upload Custom PDF/Image
+          Upload Custom PDF/Image
         </button>
       </div>
       {/* Tab 1: Select Default Template */}
@@ -994,7 +997,7 @@ export default function BillTemplateDesigner() {
           </div>
           {/* Preview with FULL DATA */}
           <div className={styles.previewPanel}>
-            <h2>👁️ Live Preview — real member bill</h2>
+            <h2>Live Preview — real member bill</h2>
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
               <label style={{ fontSize: 13, fontWeight: 600 }}>Preview as member:</label>
               <select value={previewMemberId} onChange={(e) => setPreviewMemberId(e.target.value)}>
@@ -1030,7 +1033,7 @@ export default function BillTemplateDesigner() {
               <button type="button" className="btn btn-success"
                 onClick={() => setPreviewConfirmed(true)} style={{ marginTop: "1rem" }}>
                 {previewConfirmed
-                  ? "✅ Preview confirmed — you can now save"
+                  ? "Preview confirmed — you can now save"
                   : previewBill
                     ? "Confirm this real-member preview"
                     : "Confirm preview (no real bill available)"}
@@ -1043,7 +1046,7 @@ export default function BillTemplateDesigner() {
       {activeTab === "upload" && (
         <div className={styles.uploadSection}>
           <div className={styles.uploadCard}>
-            <h3>📄 Upload Your PDF {scope === "receipt" ? "Receipt" : "Bill"} Template</h3>
+            <h3>Upload Your PDF {scope === "receipt" ? "Receipt" : "Bill"} Template</h3>
             <p style={{ marginBottom: "1.5rem", lineHeight: "1.6" }}>
               Upload your society's existing PDF {scope === "receipt" ? "receipt" : "bill"} format.
               <br />
@@ -1056,11 +1059,11 @@ export default function BillTemplateDesigner() {
                 lineHeight: "1.8",
               }}
             >
-              <li>✅ Detect if PDF has fillable form fields</li>
-              <li>✅ Auto-fill member name, flat no, charges, totals</li>
-              <li>✅ Use your billing heads from configuration</li>
-              <li>✅ Calculate interest & previous balance</li>
-              <li>✅ No manual field mapping needed!</li>
+              <li>Detect if PDF has fillable form fields</li>
+              <li>Auto-fill member name, flat no, charges, totals</li>
+              <li>Use your billing heads from configuration</li>
+              <li>Calculate interest & previous balance</li>
+              <li>No manual field mapping needed!</li>
             </ul>
             <input
               type="file"
@@ -1077,7 +1080,7 @@ export default function BillTemplateDesigner() {
                     marginBottom: "1rem",
                   }}
                 >
-                  ✅ PDF Template Uploaded Successfully!
+                  PDF Template Uploaded Successfully!
                 </p>
                 {pdfHasFormFields ? (
                   <div
@@ -1095,7 +1098,7 @@ export default function BillTemplateDesigner() {
                         color: "var(--success-fg)",
                       }}
                     >
-                      🎉 Great! Your PDF has {detectedFields.length} fillable
+                      Great! Your PDF has {detectedFields.length} fillable
                       fields:
                     </p>
                     <div
@@ -1159,15 +1162,15 @@ export default function BillTemplateDesigner() {
                   }}
                 >
                   <button type="button" className="btn btn-primary" onClick={openPDFEditor}>
-                    ⚙️ Configure fields & preview a real sample {scope === "receipt" ? "receipt" : "bill"}
+                    Configure fields & preview a real sample {scope === "receipt" ? "receipt" : "bill"}
                   </button>
                   {previewConfirmed ? (
                     <span style={{ color: "var(--success)", fontWeight: 600, fontSize: 13 }}>
-                      ✅ Sample confirmed — Save is unlocked
+                      Sample confirmed — Save is unlocked
                     </span>
                   ) : (
                     <span style={{ color: "var(--warning-fg)", fontWeight: 600, fontSize: 13 }}>
-                      ⚠️ Save is locked until you preview &amp; confirm a real sample {scope === "receipt" ? "receipt" : "bill"}
+                      Save is locked until you preview &amp; confirm a real sample {scope === "receipt" ? "receipt" : "bill"}
                     </span>
                   )}
                 </div>
@@ -1188,7 +1191,7 @@ export default function BillTemplateDesigner() {
             )}
           </div>
           <div className={styles.uploadCard}>
-            <h3>🖼️ Or Upload Image {scope === "receipt" ? "Receipt" : "Bill"} Template</h3>
+            <h3>Or Upload Image {scope === "receipt" ? "Receipt" : "Bill"} Template</h3>
             <p>
               Upload {scope === "receipt" ? "receipt" : "bill"} as JPG/PNG. System will overlay text
               fields you position on top of it.
@@ -1210,15 +1213,15 @@ export default function BillTemplateDesigner() {
                   }}
                 >
                   <button type="button" className="btn btn-primary" onClick={openImageEditor}>
-                    ⚙️ Configure fields & preview a real sample {scope === "receipt" ? "receipt" : "bill"}
+                    Configure fields & preview a real sample {scope === "receipt" ? "receipt" : "bill"}
                   </button>
                   {previewConfirmed ? (
                     <span style={{ color: "var(--success)", fontWeight: 600, fontSize: 13 }}>
-                      ✅ Sample confirmed — Save is unlocked
+                      Sample confirmed — Save is unlocked
                     </span>
                   ) : (
                     <span style={{ color: "var(--warning-fg)", fontWeight: 600, fontSize: 13 }}>
-                      ⚠️ Save is locked until you preview &amp; confirm a real sample {scope === "receipt" ? "receipt" : "bill"}
+                      Save is locked until you preview &amp; confirm a real sample {scope === "receipt" ? "receipt" : "bill"}
                     </span>
                   )}
                 </div>
@@ -1236,7 +1239,7 @@ export default function BillTemplateDesigner() {
         </div>
       )}
       {/* PDF/image field-mapping / sample-preview modal */}
-      {editorMode && (
+      {editorMode && mounted && createPortal(
         <div
           style={{
             position: "fixed",
@@ -1263,7 +1266,7 @@ export default function BillTemplateDesigner() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <h2 style={{ margin: 0 }}>
-                {editorMode === "image" ? "🖼️ Image" : "📄 PDF"} Field Mapping &amp; Sample Preview
+                {editorMode === "image" ? "Image" : "PDF"} Field Mapping &amp; Sample Preview
                 {scope === "receipt" ? " (Receipt)" : " (Bill)"}
               </h2>
               <button type="button" onClick={() => setEditorMode(null)} style={{ fontSize: 20, background: "none", border: "none", cursor: "pointer" }}>
@@ -1382,7 +1385,7 @@ export default function BillTemplateDesigner() {
                   disabled={previewFillMutation.isPending || !previewMemberId}
                   onClick={() => previewFillMutation.mutate()}
                 >
-                  {previewFillMutation.isPending ? "⏳ Rendering…" : "🖨️ Generate sample preview"}
+                  {previewFillMutation.isPending ? "Rendering…" : "Generate sample preview"}
                 </button>
               </div>
               {pdfPreviewError ? (
@@ -1402,7 +1405,7 @@ export default function BillTemplateDesigner() {
                     className="btn btn-success"
                     onClick={() => setPreviewConfirmed(true)}
                   >
-                    {previewConfirmed ? "✅ Confirmed — you can now save" : "Confirm this real-member sample"}
+                    {previewConfirmed ? "Confirmed — you can now save" : "Confirm this real-member sample"}
                   </button>
                 </>
               ) : (
@@ -1412,7 +1415,8 @@ export default function BillTemplateDesigner() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

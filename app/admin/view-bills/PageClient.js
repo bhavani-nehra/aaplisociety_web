@@ -133,7 +133,7 @@ function BillPdfTab({ bill }) {
   if (loading) return <div style={{ padding: 60, textAlign: "center", color: "var(--fg-4)" }}>Loading bill...</div>;
   if (error) return (
     <div style={{ padding: 40, textAlign: "center" }}>
-      <div style={{ fontSize: 32 }}>📄</div>
+      <div style={{ fontSize: 32 }}></div>
       <p style={{ color: "var(--fg-4)", marginTop: 8 }}>{error}</p>
     </div>
   );
@@ -142,7 +142,7 @@ function BillPdfTab({ bill }) {
   );
   if (!html) return (
     <div style={{ padding: 60, textAlign: "center" }}>
-      <div style={{ fontSize: 32 }}>📄</div>
+      <div style={{ fontSize: 32 }}></div>
       <p style={{ color: "var(--fg-4)", marginTop: 8 }}>No bill content. Click Print to regenerate.</p>
     </div>
   );
@@ -324,7 +324,7 @@ export default function ViewBillsPage() {
       <Card style={{ marginBottom: 18 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr auto", gap: 28, alignItems: "center" }}>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--r-fg-4)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--r-fg-4)", marginBottom: 6 }}>
               Total due in view
             </div>
             <div className="revamp-num" style={{ fontSize: 26, fontWeight: 700, color: "var(--r-fg-1)", letterSpacing: "-0.02em", marginBottom: 8 }}>
@@ -405,7 +405,7 @@ export default function ViewBillsPage() {
                     <th key={i} style={{
                       textAlign: i >= 4 && i <= 9 ? "right" : "left", padding: "8px 12px",
                       fontSize: 10, fontWeight: 600, color: "var(--r-fg-4)",
-                      textTransform: "uppercase", letterSpacing: "0.6px", whiteSpace: "nowrap",
+                      whiteSpace: "nowrap",
                       borderBottom: "1px solid var(--r-border)", background: "var(--r-surface-2)",
                       position: "sticky", top: 0, zIndex: 1,
                     }}>{h}</th>
@@ -449,7 +449,7 @@ export default function ViewBillsPage() {
                       <td style={{ ...td, color: "var(--r-fg-3)" }}>{fmtDate(bill.dueDate)}</td>
                       <td style={td}>
                         <Pill tone={STATUS_TONE[bill.status] || "neutral"}>{bill.status}</Pill>
-                        {isHistorical && <span title="Locked — immutable audit record" style={{ marginLeft: 4, fontSize: 12 }}>🔒</span>}
+                        {isHistorical && <span title="Locked — immutable audit record" style={{ marginLeft: 4, fontSize: 12 }}></span>}
                       </td>
                       <td style={td} onClick={(e) => e.stopPropagation()}>
                         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -474,7 +474,7 @@ export default function ViewBillsPage() {
             {/* Modal Header */}
             <div className={styles.modalHeader}>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <div style={{ background: "var(--accent)", color: "white", borderRadius: 10, padding: "8px 14px", fontWeight: 700, fontSize: 18, letterSpacing: 1 }}>
+                <div style={{ background: "var(--accent)", color: "var(--on-solid)", borderRadius: 10, padding: "8px 14px", fontWeight: 700, fontSize: 18, letterSpacing: 1 }}>
 {flatLabel(viewingBill.memberId)}                </div>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 18, color: "var(--fg-1)" }}>{viewingBill.memberId?.ownerName}</div>
@@ -490,7 +490,7 @@ export default function ViewBillsPage() {
             {/* Historical bill notice */}
             {(viewingBill.isHistoricalArchive || viewingBill.importedFrom === "BulkImport" || viewingBill.isLocked) && (
               <div style={{ margin: "0 2rem", padding: "10px 16px", background: "var(--primary-tint)", border: "1px solid var(--primary-tint)", borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "var(--primary)" }}>
-                <span>🔒</span>
+                <span></span>
                 <span><strong>Historical Record</strong> — This bill was imported as an audit record and is immutable. It cannot be edited, deleted, or regenerated.</span>
               </div>
             )}
@@ -527,7 +527,7 @@ export default function ViewBillsPage() {
                       ...((viewingBill.balanceAmount || 0) > 0.005 ? [{ label: "Balance Due", value: `₹${fmt(viewingBill.balanceAmount)}`, color: "var(--danger-fg)", large: true }] : []),
                     ].map((c) => (
                       <div key={c.label} style={{ background: "var(--bg-sunken)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", textAlign: "center" }}>
-                        <div style={{ fontSize: 11, color: "var(--fg-5)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>{c.label}</div>
+                        <div style={{ fontSize: 11, color: "var(--fg-5)", marginBottom: 6 }}>{c.label}</div>
                         <div style={{ fontSize: c.large ? 20 : 15, fontWeight: 700, color: c.color }}>{c.value}</div>
                       </div>
                     ))}
@@ -594,7 +594,7 @@ export default function ViewBillsPage() {
                     </div>
                   ) : (
                     <div className={styles.emptyState} style={{ padding: 60 }}>
-                      <div className={styles.emptyIcon}>🧾</div>
+                      <div className={styles.emptyIcon}></div>
                       <h3>No payments recorded</h3>
                       <p>No receipts for this bill yet</p>
                     </div>

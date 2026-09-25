@@ -19,10 +19,12 @@
  * extraPages/recordSources/inboxFetcher is a separate follow-up, not a
  * revert of this fix.)
  *
- * Client layout (not server) because StepRail reads the current pathname;
- * Suspense here is defensive — none of the pages below currently require it
- * for this layout specifically, but a shared layout is exactly the place a
- * future page using useSearchParams would need one anyway.
+ * Client layout (not server) because StepRail reads the current pathname.
+ * {children} is also wrapped in its own Suspense: statements/registers/
+ * books/auditor's PageClients all call useSearchParams(), and with no
+ * boundary above them, client-side navigation into any of the four threw
+ * Next's "missing-suspense-with-csr-bailout" error overlay on every nav
+ * click — the sidebar link worked, the page just never rendered.
  */
 import { Suspense } from "react";
 import { usePathname } from "next/navigation";
@@ -50,7 +52,7 @@ export default function AccountingLayout({ children }) {
           <StepRail currentKey={currentRailKey(pathname)} />
         </Suspense>
       </div>
-      {children}
+      <Suspense fallback={null}>{children}</Suspense>
       <Assistant />
     </>
   );

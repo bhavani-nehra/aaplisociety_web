@@ -16,6 +16,7 @@ export default async function Page() {
     "accounting.assets.view",
     "accounting.funds.view",
     "accounting.liabilities.view",
+    "accounting.bankAccounts.view",
   ]);
   return <PageClient />;
 }

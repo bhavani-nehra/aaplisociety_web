@@ -59,7 +59,7 @@ export function CountUp({ value, duration = 450 }) {
 
 export function GroupCaption({ children }) {
   return (
-    <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--fg-5)", margin: "12px 0 4px" }}>
+    <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--fg-5)", margin: "12px 0 4px" }}>
       {children}
     </div>
   );

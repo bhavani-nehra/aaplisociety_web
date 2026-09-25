@@ -203,13 +203,9 @@ function AuditTrailBody() {
         </Card>
       ) : (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 18 }}>
-            <SmallStat icon="history" label="Corrections recorded" value={trail.length} />
-            <SmallStat
-              icon="calendar"
-              label="Most recent"
-              value={trail[0]?.adjustedAt ? dateText(trail[0].adjustedAt).split(",")[0] : "—"}
-            />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 20 }}>
+            <SmallStat icon="history" label="Corrections on record" value={trail.length} />
+            <SmallStat icon="clock" label="Most recent" value={trail[0]?.adjustedAt ? dateText(trail[0].adjustedAt).split(",")[0] : "—"} />
           </div>
 
           <Card style={{ marginBottom: 16 }}>
@@ -241,21 +237,16 @@ function AuditTrailBody() {
                 const open = openId === id;
                 const act = ACTIONS[r.action] || { label: r.action, tone: "neutral" };
                 return (
-                  <div
-                    key={id}
-                    style={{ borderBottom: i === visible.length - 1 ? "none" : "1px solid var(--r-hairline)" }}
-                  >
+                  <div key={id} style={{ borderBottom: i === visible.length - 1 ? "none" : "1px solid var(--r-hairline)" }}>
                     <div
                       onClick={() => setOpenId(open ? null : id)}
                       style={{ display: "flex", gap: 12, padding: "12px 15px", alignItems: "center", cursor: "pointer" }}
                     >
                       <Icon name={open ? "chevron-down" : "chevron-right"} size={14} color="var(--r-fg-5)" />
-                      <span style={{ fontSize: 12, color: "var(--r-fg-4)", width: 150, flexShrink: 0 }}>
+                      <span style={{ fontSize: 12, color: "var(--r-fg-4)", width: 140, flexShrink: 0 }}>
                         {dateText(r.adjustedAt)}
                       </span>
-                      <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--r-fg-1)" }}>
-                        {r.reason}
-                      </span>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--r-fg-1)" }}>{r.reason}</span>
                       <Pill tone={act.tone}>{act.label}</Pill>
                     </div>
 
@@ -263,28 +254,15 @@ function AuditTrailBody() {
                       <div style={{ padding: "0 15px 14px 41px" }}>
                         <SectionLabel icon="columns">What changed</SectionLabel>
                         <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginTop: 4 }}>
-                          <Lines
-                            title="AS IT WAS"
-                            lines={r.beforeLines}
-                            accountName={accountName}
-                            muted
-                          />
-                          <Lines
-                            title="WHAT WAS WRITTEN TO PUT IT RIGHT"
-                            lines={r.afterLines}
-                            accountName={accountName}
-                          />
+                          <Lines title="AS IT WAS" lines={r.beforeLines} accountName={accountName} muted />
+                          <Lines title="WHAT WAS WRITTEN TO PUT IT RIGHT" lines={r.afterLines} accountName={accountName} />
                         </div>
                         <p style={{ fontSize: 11.5, color: "var(--r-fg-4)", marginTop: 10, lineHeight: 1.65 }}>
                           The left-hand entry is still in the books exactly as it
                           was. The right-hand one was added beside it. Both count,
                           and together they give the corrected figure.
                         </p>
-                        <Btn
-                          size="sm"
-                          style={{ marginTop: 8 }}
-                          onClick={() => router.push("/admin/accounting/journal-entries")}
-                        >
+                        <Btn size="sm" style={{ marginTop: 8 }} onClick={() => router.push("/admin/accounting/journal-entries")}>
                           Open the books
                         </Btn>
                       </div>

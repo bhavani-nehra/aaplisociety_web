@@ -784,7 +784,7 @@ export default function BillingSimulatorPage() {
         {/* Real Mode warning banner */}
         {realMode && step === "running" && (
           <div className="mb-4 bg-red-50 border border-red-300 rounded-xl px-5 py-3 flex items-start gap-3">
-            <span className="text-red-500 text-lg mt-0.5">⚠</span>
+            <span className="text-red-500 text-lg mt-0.5"></span>
             <div>
               <div className="font-bold text-red-700 text-sm">Real Mode Active — actions write to the database</div>
               <div className="text-red-600 text-xs mt-0.5">Generate Bill → creates real Bill document. Record Payment → creates real Transaction and updates Bill closing state. Cannot be undone from the simulator.</div>

@@ -631,7 +631,7 @@ export default function Assistant() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {relevantKeys ? (
-              <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--r-fg-4)", textTransform: "uppercase", letterSpacing: 0.4, margin: "2px 0 2px 2px" }}>
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--r-fg-4)", margin: "2px 0 2px 2px" }}>
                 For this page
               </div>
             ) : null}

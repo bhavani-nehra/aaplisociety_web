@@ -38,7 +38,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import notify from "@/lib/notify";
 import {
   SectionLabel, Card, Pill, Btn, Icon,
-  EmptyState, RevampSkeleton, SmallStat, ToggleSwitch,
+  EmptyState, RevampSkeleton, ToggleSwitch, SmallStat,
 } from "@/components/revamp";
 
 /** The moment each rule fires, said the way it would be said out loud. */
@@ -269,10 +269,12 @@ export default function PostingRulesPage() {
             </div>
           </Card>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 18 }}>
-            <SmallStat icon="repeat" label="Rules active" value={rules.length} />
-            <SmallStat icon="layers" label="Moments covered" value={groups.length} />
-            <SmallStat icon="edit" label="Added by this society" value={ownCount} />
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+              <SmallStat icon="repeat" label="Rules active" value={rules.length} />
+              <SmallStat icon="layers" label="Moments covered" value={groups.length} />
+              <SmallStat icon="edit" label="Added by this society" value={ownCount} />
+            </div>
           </div>
 
           {groups.map(([eventType, list]) => (

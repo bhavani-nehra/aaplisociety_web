@@ -28,7 +28,7 @@ export function AccordionItem({ label, passed, reason, fix, navigationTarget, de
           <Icon name={passed ? "check-circle" : "alert-triangle"} size={14} />
         </span>
         <span style={{ flex: 1, fontSize: 13.5, color: "var(--fg-3)", fontWeight: 500 }}>{label}</span>
-        <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.4px", color: colors.fg, background: colors.bg, borderRadius: 999, padding: "3px 10px" }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: colors.fg, background: colors.bg, borderRadius: 999, padding: "3px 10px" }}>
           {passed ? "Passed" : "Failed"}
         </span>
         <span style={{ color: "var(--fg-5)", transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s", display: "flex" }}>▸</span>
@@ -42,9 +42,9 @@ export function AccordionItem({ label, passed, reason, fix, navigationTarget, de
               {navigationTarget && (
                 <button
                   onClick={() => router.push(navigationTarget)}
-                  style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 6, background: "var(--primary)", border: "none", borderRadius: 7, padding: "5px 12px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "inherit" }}
+                  style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 6, background: "var(--primary)", border: "none", borderRadius: 7, padding: "5px 12px", fontSize: 12, fontWeight: 600, color: "var(--on-solid)", cursor: "pointer", fontFamily: "inherit" }}
                 >
-                  Go fix it <Icon name="arrow-right" size={12} />
+                  Go fix it
                 </button>
               )}
             </div>

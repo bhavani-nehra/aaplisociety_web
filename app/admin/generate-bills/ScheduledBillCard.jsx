@@ -10,8 +10,9 @@
 // Deliberately NOT a settings panel or a table. One card, one sentence, one
 // action. If there's nothing to say, it renders nothing at all.
 
+import PulseLoader from "@/components/brand/PulseLoader";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CalendarClock, CheckCircle2, Loader2, TriangleAlert, X } from "lucide-react";
+import { CalendarClock, CheckCircle2, TriangleAlert, X } from "lucide-react";
 
 function monthLabel(periodId) {
   const [y, m] = String(periodId).split("-").map(Number);
@@ -132,7 +133,7 @@ function RunRow({ run, busy, onRunNow, onCancel, onReschedule, onDismiss }) {
   if (run.status === "RUNNING") {
     return (
       <Shell tone="info">
-        <Loader2 size={22} className="spin" style={{ flexShrink: 0 }} />
+        <PulseLoader size={30} />
         <div style={{ flex: 1 }}>
           <Big>Creating {month} bills right now…</Big>
           <Small>This can take a minute. This box will update on its own — no need to refresh.</Small>
@@ -146,7 +147,7 @@ function RunRow({ run, busy, onRunNow, onCancel, onReschedule, onDismiss }) {
       <Shell tone="success">
         <CheckCircle2 size={22} style={{ flexShrink: 0 }} />
         <div style={{ flex: 1 }}>
-          <Big>{month} bills are created and sent ✅</Big>
+          <Big>{month} bills are created and sent </Big>
           <Small>
             {run.billsCreated} bill{run.billsCreated === 1 ? "" : "s"} created — every member
             was notified.
@@ -317,19 +318,6 @@ function Shell({ tone, children, column }) {
       }}
     >
       {children}
-      <style jsx>{`
-        :global(.spin) {
-          animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-          from {
-            transform: rotate(0deg);
-          }
-          to {
-            transform: rotate(360deg);
-          }
-        }
-      `}</style>
     </div>
   );
 }
@@ -373,7 +361,7 @@ function BigButton({ tone, busy, onClick, children }) {
         whiteSpace: "nowrap",
       }}
     >
-      {busy && <Loader2 size={16} className="spin" />}
+      {busy && <PulseLoader size={24} />}
       {busy ? "Working…" : children}
     </button>
   );

@@ -27,7 +27,7 @@ import { useRouter } from "next/navigation";
 import notify from "@/lib/notify";
 import {
   PageHeader, SectionLabel, Card, Pill, Btn, Icon, SearchInput,
-  Segmented, EmptyState, RevampSkeleton, SmallStat, GuardedAction,
+  Segmented, EmptyState, RevampSkeleton, GuardedAction,
 } from "@/components/revamp";
 import Term from "@/components/accounting/Term";
 import { pushRecent } from "@/lib/accounting/recents";
@@ -478,26 +478,17 @@ export default function ChartOfAccountsPage() {
             </Card>
           ) : null}
 
-          {/* ── stats ───────────────────────────────────────────────── */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 18 }}>
-            <SmallStat icon="book-open" label="Heads in use" value={activeCount} />
-            {TYPES.map((t) => (
-              <SmallStat
-                key={t.key}
-                icon="circle"
-                label={t.label}
-                value={accounts.filter((a) => a.type === t.key && a.isActive !== false).length}
-              />
-            ))}
-          </div>
-
+          {/* Counts live on the type filter itself (plan §7.7), not in cards. */}
           {/* ── filters ─────────────────────────────────────────────── */}
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
             <SearchInput value={q} onChange={setQ} placeholder="Search by name or code…" style={{ maxWidth: 280 }} />
             <Segmented
               value={type}
               onChange={setType}
-              options={[{ value: "all", label: "All" }, ...TYPES.map((t) => ({ value: t.key, label: t.label }))]}
+              options={[
+                { value: "all", label: "All heads in use", count: activeCount },
+                ...TYPES.map((t) => ({ value: t.key, label: t.label, count: accounts.filter((a) => a.type === t.key && a.isActive !== false).length })),
+              ]}
             />
             {inactiveCount ? (
               <Btn size="sm" variant={showInactive ? "primary" : "secondary"} onClick={() => setShowInactive((v) => !v)}>

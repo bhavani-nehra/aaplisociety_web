@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import LateBand from "@/components/money/LateBand";
 const MONTH_NAMES = [
   "",
   "Jan",
@@ -55,7 +56,8 @@ export default function LatePaymentsPage() {
       setModal(null);
       setPayAmt("");
       setPayNote("");
-      qc.invalidateQueries(["late-payments-list"]);
+      qc.invalidateQueries({ queryKey: ["late-payments-list"] });
+      qc.invalidateQueries({ queryKey: ["money-insights"] });
     },
     onError: (e) => {
       setError(e?.message || "Payment failed");
@@ -95,6 +97,7 @@ export default function LatePaymentsPage() {
         window is closed for them — record cash/cheque payments manually here.
         Interest-satisfy-first allocation applied automatically.
       </p>
+      <LateBand onRecord={(m) => openModal({ ...m, totalOutstanding: m.balance, principalOutstanding: m.balance - m.interest, interestOutstanding: m.interest })} />
       {success && (
         <div
           style={{

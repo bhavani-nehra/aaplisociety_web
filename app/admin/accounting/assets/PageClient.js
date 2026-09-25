@@ -307,9 +307,10 @@ function AssetsBody() {
       // An asset with no run at all this calendar year. The seeded check
       // (assetsMissingDepreciationThisYear) flags the same thing, but only
       // when someone generates a statement — far too late to act on.
-      undepreciated: active.filter(
+      undepreciatedList: active.filter(
         (a) => !(a.depreciationRuns || []).some((r) => new Date(r.date).getFullYear() === thisYear),
-      ).length,
+      ),
+      get undepreciated() { return this.undepreciatedList.length; },
     };
   }, [assets]);
 
@@ -512,29 +513,12 @@ function AssetsBody() {
             </Card>
           ) : assets.length ? (
             <>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 18 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 20 }}>
                 <SmallStat icon="package" label="Items owned" value={stats.active} />
-                <SmallStat icon="receipt" label="What they cost" value={money(stats.cost)} />
+                <SmallStat icon="banknote" label="What they cost" value={money(stats.cost)} />
                 <SmallStat icon="trending-down" label="Worth now, in the books" value={money(stats.book)} />
                 <SmallStat icon="alert-triangle" label="Not depreciated this year" value={stats.undepreciated} />
               </div>
-
-              {stats.undepreciated ? (
-                <Card style={{ marginBottom: 16, borderColor: "var(--r-warning)" }}>
-                  <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                    <Icon name="alert-triangle" size={18} color="var(--r-warning)" />
-                    <div style={{ flex: 1, fontSize: 12.5, color: "var(--r-fg-3)", lineHeight: 1.65 }}>
-                      <strong>
-                        {stats.undepreciated} item{stats.undepreciated === 1 ? " has" : "s have"} had
-                        no depreciation charged this year.
-                      </strong>{" "}
-                      Until it is, the accounts show the society spending less
-                      than it really does, and the property is carried at more
-                      than it is worth. Open an item below and run it.
-                    </div>
-                  </div>
-                </Card>
-              ) : null}
 
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
                 <SearchInput value={q} onChange={setQ} placeholder="Search name, code or place…" style={{ maxWidth: 260 }} />
@@ -555,7 +539,7 @@ function AssetsBody() {
               {visible.length === 0 ? (
                 <Card><EmptyState icon="search" title="Nothing matches" sub="Try a different search or filter." /></Card>
               ) : (
-                <Card padded={false}>
+                  <Card padded={false}>
                   {visible.map((a, i) => {
                     const id = String(a._id);
                     const open = openId === id;
@@ -577,8 +561,7 @@ function AssetsBody() {
                           <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--r-fg-1)" }}>
                             {a.name}
                             <span style={{ color: "var(--r-fg-4)", fontSize: 11.5 }}>
-                              {" · "}{a.category}
-                              {a.location ? `, ${a.location}` : ""}
+                              {a.location ? ` · ${a.location}` : ""}
                             </span>
                           </span>
                           <span className="revamp-num" style={{ fontSize: 12.5, color: "var(--r-fg-2)" }}>
@@ -783,7 +766,7 @@ function AssetsBody() {
                       </div>
                     );
                   })}
-                </Card>
+                  </Card>
               )}
 
               <p style={{ fontSize: 12, color: "var(--r-fg-4)", lineHeight: 1.65, marginTop: 12 }}>

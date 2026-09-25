@@ -1,11 +1,15 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import RSelect from "react-select";
-import {
-  Card, PageHeader, Button, Badge, Spinner, Toast, EmptyState,
-  Modal, StatCard, tokens, grid, Field, Input, Select, Textarea,
-} from "@/components/visitor/ui";
+import { useQueryClient } from "@tanstack/react-query";
+import { motion, AnimatePresence } from "framer-motion";
 import notify from "@/lib/notify";
+import {
+  PageHeader, Card, CardHead, Btn, Pill, Icon, Avatar, SearchInput, Select,
+  Tabs, DataTable, EmptyState, Modal, RevampSkeleton, Toast,
+} from "@/components/revamp";
+import PaymentsBand from "@/components/money/PaymentsBand";
+import LateBand from "@/components/money/LateBand";
 
 async function api(url, opts) {
   const res = await fetch(url, {
@@ -22,45 +26,65 @@ async function api(url, opts) {
 const MODES = ["", "Cash", "Cheque", "Online", "UPI", "NEFT", "RTGS", "System"];
 const RECORD_MODES = ["Cash", "Cheque", "Online", "UPI", "NEFT", "RTGS"];
 const DASH = "—";
-const money = (n) => `Rs ${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money = (n) => `₹${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtDate = (v) => {
   if (!v) return DASH;
   const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? DASH : d.toLocaleDateString("en-IN");
+  return Number.isNaN(d.getTime()) ? DASH : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 };
+const MODE_ICON = { Cash: "banknote", Cheque: "file-text", Online: "globe", UPI: "smartphone", NEFT: "landmark", RTGS: "landmark", System: "cog" };
 
-const S = {
-  tabs: { display: "flex", gap: 6, marginBottom: 18, borderBottom: `1px solid ${tokens.border.split(" ").pop()}` },
-  tab: (active) => ({
-    padding: "10px 16px",
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: "pointer",
-    color: active ? tokens.primary : tokens.sub,
-    borderBottom: active ? `2px solid ${tokens.primary}` : "2px solid transparent",
-    marginBottom: -1,
-    background: "none",
-    border: "none",
-    borderBottomWidth: 2,
+// Themed to match the --r-* token system rather than react-select's default
+// palette, so the member picker actually repaints in dark mode instead of
+// staying a light-mode-only control on a dark page.
+const rselectTheme = {
+  control: (base, state) => ({
+    ...base, minHeight: 36, background: "var(--r-surface)",
+    borderColor: state.isFocused ? "var(--r-brand)" : "var(--r-border)",
+    boxShadow: state.isFocused ? "0 0 0 3px var(--r-brand-soft)" : "none",
+    borderRadius: 8, fontSize: 13,
   }),
-  filters: { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 16 },
-  fl: { display: "grid", gap: 4 },
-  lbl: { fontSize: 11.5, color: tokens.sub, fontWeight: 600 },
-  inp: { padding: "7px 10px", borderRadius: 8, border: `1px solid ${tokens.border}`, fontSize: 13 },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
-  th: { textAlign: "left", padding: "10px 8px", borderBottom: `2px solid ${tokens.border}`, color: tokens.sub, fontSize: 11.5, textTransform: "uppercase", letterSpacing: 0.3, whiteSpace: "nowrap" },
-  td: { padding: "10px 8px", borderBottom: `1px solid ${tokens.border}`, verticalAlign: "top" },
-  num: { textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" },
-  center: { display: "flex", justifyContent: "center", padding: 48 },
-  pager: { display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end", marginTop: 14 },
-  sub: { fontSize: 11.5, color: tokens.sub },
+  valueContainer: (base) => ({ ...base, padding: "2px 10px" }),
+  input: (base) => ({ ...base, color: "var(--r-fg-1)" }),
+  singleValue: (base) => ({ ...base, color: "var(--r-fg-1)" }),
+  placeholder: (base) => ({ ...base, color: "var(--r-fg-4)" }),
+  menu: (base) => ({ ...base, zIndex: 9999, background: "var(--r-surface)", border: "1px solid var(--r-hairline)", boxShadow: "var(--r-shadow-pop)" }),
+  option: (base, state) => ({
+    ...base, fontSize: 13,
+    background: state.isSelected ? "var(--r-brand)" : state.isFocused ? "var(--r-surface-2)" : "transparent",
+    color: state.isSelected ? "var(--r-brand-ink)" : "var(--r-fg-1)",
+  }),
+  indicatorSeparator: (base) => ({ ...base, background: "var(--r-border)" }),
+  dropdownIndicator: (base) => ({ ...base, color: "var(--r-fg-4)" }),
+  clearIndicator: (base) => ({ ...base, color: "var(--r-fg-4)" }),
 };
 
 const EMPTY_FILTERS = { paymentMode: "", from: "", to: "", includeReversed: false };
 
+/** Label + `.input`/`.label` (styles/globals.css) form field — payments has
+ * no form fields of its own in the revamp kit, so this reuses the app-wide
+ * token-driven input styling instead of inventing a third one. */
+function Field({ label, required, children }) {
+  return (
+    <div>
+      <label className="label">{label}{required ? " *" : ""}</label>
+      {children}
+    </div>
+  );
+}
+
 export default function PaymentsPage() {
   const [tab, setTab] = useState("received"); // received | pending
+  const qc = useQueryClient();
+  // The bands above the lists cache their figures; refresh them after any change.
+  const refreshBands = useCallback(() => qc.invalidateQueries({ queryKey: ["money-insights"] }), [qc]);
   const [toast, setToast] = useState(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   // ── Received list state (folded in from the old payments-received page) ──
   const [data, setData] = useState(null);
@@ -118,6 +142,7 @@ export default function PaymentsPage() {
         }),
       });
       setToast({ type: "success", message: "Payment updated" });
+      refreshBands();
       setEdit(null);
       load();
     } catch (err) {
@@ -139,6 +164,7 @@ export default function PaymentsPage() {
         body: JSON.stringify({ action: "reverse", reason }),
       });
       setToast({ type: "success", message: res.warning || "Payment reversed" });
+      refreshBands();
       load();
     } catch (err) {
       setToast({ type: "error", message: err.message });
@@ -307,6 +333,7 @@ export default function PaymentsPage() {
       });
       setToast({ type: "success", message: `Payment ${res?.transaction?.transactionId || ""} recorded` });
       setRecordOpen(false);
+      refreshBands();
       resetRecordForm();
       if (tab === "received") load();
       if (tab === "pending") loadPending();
@@ -336,6 +363,7 @@ export default function PaymentsPage() {
       });
       setToast({ type: "success", message: "Marked as Payment Done (pending Excel confirmation)" });
       setRecordOpen(false);
+      refreshBands();
       resetRecordForm();
       if (tab === "pending") loadPending();
     } catch (err) {
@@ -345,322 +373,294 @@ export default function PaymentsPage() {
     }
   }
 
+  // ── DataTable column sets ────────────────────────────────────────────
+  const receivedCols = [
+    {
+      key: "txn", label: "Transaction", render: (r) => (
+        <div>
+          <div style={{ fontWeight: 700, color: "var(--r-fg-1)", display: "flex", alignItems: "center", gap: 6 }}>
+            {r.transactionId}
+            {r.isReversed && <Pill tone="unpaid" dot={false}>Reversed</Pill>}
+          </div>
+          {r.billPeriodId && <div style={{ fontSize: 11, color: "var(--r-fg-4)", marginTop: 2 }}>{r.billPeriodId}</div>}
+        </div>
+      ),
+    },
+    { key: "date", label: "Date", render: (r) => <span style={{ color: "var(--r-fg-3)" }}>{fmtDate(r.date)}</span> },
+    {
+      key: "member", label: "Flat / owner", render: (r) => {
+        const flat = r.member ? `${r.member.wing ? `${r.member.wing}-` : ""}${r.member.flatNo || DASH}` : DASH;
+        const name = r.member ? r.member.ownerName : "";
+        return (
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Avatar name={name || flat} size={28} />
+            <div>
+              <div style={{ fontWeight: 600, color: "var(--r-fg-1)" }}>{flat}</div>
+              <div style={{ fontSize: 11, color: "var(--r-fg-4)" }}>{name}</div>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: "amount", label: "Amount", align: "right", render: (r) => (
+        <span className="revamp-num" style={{ fontWeight: 800, color: r.isReversed ? "var(--r-fg-4)" : "var(--r-success)" }}>
+          {money(r.amount)}
+        </span>
+      ),
+    },
+    {
+      key: "mode", label: "Mode", render: (r) => (
+        <div>
+          <Pill tone="info" dot={false}><Icon name={MODE_ICON[r.paymentMode] || "credit-card"} size={11} /> {r.paymentMode || DASH}</Pill>
+          {(r.transactionRef || r.chequeNo) && (
+            <div style={{ fontSize: 11, color: "var(--r-fg-4)", marginTop: 4 }}>{r.chequeNo || r.transactionRef}</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "alloc", label: "Allocation", render: (r) => {
+        const b = r.breakdown || {};
+        return (
+          <div style={{ fontSize: 11.5, color: "var(--r-fg-4)" }}>
+            <div>Interest {money(b.interestCleared)}</div>
+            <div>Principal {money(b.principalCleared)}</div>
+            {b.advanceCredit ? <div style={{ color: "var(--r-accent)", fontWeight: 700 }}>Advance {money(b.advanceCredit)}</div> : null}
+          </div>
+        );
+      },
+    },
+    {
+      key: "actions", label: "", render: (r) => (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <Btn size="sm" variant="ghost" icon="pencil" disabled={r.isReversed}
+            onClick={() => setEdit({ ...r, date: r.date ? String(r.date).slice(0, 10) : "" })}>Edit</Btn>
+          <Btn size="sm" variant="ghost" icon="rotate-ccw" disabled={r.isReversed} onClick={() => reverse(r)}>Reverse</Btn>
+        </div>
+      ),
+    },
+  ];
+
+  const pendingCols = [
+    { key: "flat", label: "Flat", render: (m) => <span style={{ fontWeight: 600 }}>{m.wing}-{m.flatNo}</span> },
+    { key: "member", label: "Member", render: (m) => m.ownerName },
+    { key: "period", label: "Oldest period", render: (m) => <span style={{ color: "var(--r-fg-3)" }}>{m.oldestPeriod}</span> },
+    { key: "deadline", label: "Deadline", render: (m) => <span style={{ color: "var(--r-danger)", fontWeight: 700 }}>{fmtDate(m.deadline)}</span> },
+    { key: "principal", label: "Principal", align: "right", render: (m) => <span className="revamp-num">{money(m.principalOutstanding)}</span> },
+    { key: "interest", label: "Interest", align: "right", render: (m) => <span className="revamp-num" style={{ color: "var(--r-danger)" }}>{money(m.interestOutstanding)}</span> },
+    { key: "total", label: "Total due", align: "right", render: (m) => <span className="revamp-num" style={{ fontWeight: 800 }}>{money(m.totalOutstanding)}</span> },
+    { key: "actions", label: "", render: (m) => <Btn size="sm" variant="primary" icon="plus" onClick={() => openRecordModal(m.memberId)}>Record</Btn> },
+  ];
+
+  const pendingDoneCols = [
+    { key: "flat", label: "Flat" },
+    { key: "memberName", label: "Member" },
+    { key: "billPeriodId", label: "Period" },
+    { key: "amount", label: "Amount", align: "right", render: (b) => <span className="revamp-num" style={{ fontWeight: 700 }}>{money(b.amount)}</span> },
+    { key: "paymentMode", label: "Mode" },
+    { key: "paymentDate", label: "Date", render: (b) => fmtDate(b.paymentDate) },
+    { key: "notes", label: "Notes", render: (b) => <span style={{ color: "var(--r-fg-4)", fontSize: 12 }}>{b.notes || DASH}</span> },
+  ];
+
   return (
-    <div>
+    <div style={{ maxWidth: 1480, margin: "0 auto" }}>
       <PageHeader
+        eyebrow={<><Icon name="wallet" size={11} /> Money · Payments</>}
         title="Payments"
-        subtitle="Record payments, review what's been received, and track members who are pending or overdue."
-        actions={
+        sub="Record payments, review what's been received, and track members who are pending or overdue."
+        right={
           <div style={{ display: "flex", gap: 8 }}>
-            <Button onClick={() => openRecordModal()}>+ Record payment</Button>
-            {tab === "received" && <Button variant="ghost" onClick={exportCsv}>Export CSV</Button>}
-            <Button variant="ghost" onClick={() => (tab === "received" ? load() : loadPending())}>Refresh</Button>
+            <Btn variant="primary" icon="plus" onClick={() => openRecordModal()}>Record payment</Btn>
+            {tab === "received" && <Btn variant="secondary" icon="download" onClick={exportCsv}>Export</Btn>}
+            <Btn variant="ghost" icon="refresh-cw" onClick={() => (tab === "received" ? load() : loadPending())} title="Refresh" />
           </div>
         }
       />
 
-      <div style={S.tabs}>
-        <button style={S.tab(tab === "received")} onClick={() => setTab("received")}>Received</button>
-        <button style={S.tab(tab === "pending")} onClick={() => setTab("pending")}>Pending / Outstanding</button>
-      </div>
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { key: "received", label: "Received", icon: "arrow-down-circle" },
+          { key: "pending", label: "Pending / Outstanding", icon: "alarm-clock", badge: pending?.totalMembers || undefined },
+        ]}
+      />
 
       {tab === "received" && (
         <>
-          <div style={{ ...grid(190), marginBottom: 18 }}>
-            <StatCard label="Payments" value={summary.count} color={tokens.primary} />
-            <StatCard label="Total received" value={money(summary.amount)} color="var(--success)" />
-            <StatCard label="Interest cleared" value={money(summary.interest)} color="var(--warning)" />
-            <StatCard label="Principal cleared" value={money(summary.principal)} color="var(--primary)" />
-            <StatCard label="Advance credit" value={money(summary.advance)} color="var(--accent)" />
+          <PaymentsBand />
+          <div style={{ fontSize: 12.5, color: "var(--r-fg-4)", margin: "-4px 0 10px" }}>
+            Showing {summary.count} payment{summary.count === 1 ? "" : "s"} · {money(summary.amount)} for these filters
           </div>
 
-          <Card>
-            <div style={S.filters}>
-              <div style={S.fl}>
-                <span style={S.lbl}>From</span>
-                <input type="date" style={S.inp} value={filters.from}
+          <Card style={{ marginBottom: 14 }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div>
+                <div className="label" style={{ marginBottom: 4 }}>From</div>
+                <input type="date" className="input" style={{ padding: "7px 10px", width: "auto" }} value={filters.from}
                   onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, from: e.target.value })); }} />
               </div>
-              <div style={S.fl}>
-                <span style={S.lbl}>To</span>
-                <input type="date" style={S.inp} value={filters.to}
+              <div>
+                <div className="label" style={{ marginBottom: 4 }}>To</div>
+                <input type="date" className="input" style={{ padding: "7px 10px", width: "auto" }} value={filters.to}
                   onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, to: e.target.value })); }} />
               </div>
-              <div style={S.fl}>
-                <span style={S.lbl}>Mode</span>
-                <select style={S.inp} value={filters.paymentMode}
-                  onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, paymentMode: e.target.value })); }}>
+              <div style={{ width: 160 }}>
+                <div className="label" style={{ marginBottom: 4 }}>Mode</div>
+                <Select value={filters.paymentMode} size="md"
+                  onChange={(v) => { setPage(1); setFilters((f) => ({ ...f, paymentMode: v })); }}>
                   {MODES.map((m) => <option key={m} value={m}>{m || "All modes"}</option>)}
-                </select>
+                </Select>
               </div>
-              <label style={{ ...S.lbl, display: "flex", gap: 6, alignItems: "center", paddingBottom: 8 }}>
+              <label style={{ display: "flex", gap: 6, alignItems: "center", paddingBottom: 9, fontSize: 12.5, color: "var(--r-fg-3)" }}>
                 <input type="checkbox" checked={filters.includeReversed}
                   onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, includeReversed: e.target.checked })); }} />
                 Show reversed
               </label>
-              <div style={S.fl}>
-                <span style={S.lbl}>Search</span>
-                <input style={{ ...S.inp, minWidth: 220 }} value={q} onChange={(e) => setQ(e.target.value)}
-                  placeholder="Txn id, flat, owner, ref..." />
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div className="label" style={{ marginBottom: 4 }}>Search</div>
+                <SearchInput value={q} onChange={setQ} placeholder="Txn id, flat, owner, ref..." size="md" />
               </div>
-              <Button variant="ghost" onClick={() => { setQ(""); setPage(1); setFilters(EMPTY_FILTERS); }}>Clear</Button>
+              <Btn variant="ghost" onClick={() => { setQ(""); setPage(1); setFilters(EMPTY_FILTERS); }}>Clear</Btn>
             </div>
-
-            {loading ? (
-              <div style={S.center}><Spinner /></div>
-            ) : rows.length === 0 ? (
-              <EmptyState title="No payments" subtitle="Nothing matches these filters." />
-            ) : (
-              <div style={{ overflowX: "auto" }}>
-                <table style={S.table}>
-                  <thead>
-                    <tr>
-                      <th style={S.th}>Txn</th>
-                      <th style={S.th}>Date</th>
-                      <th style={S.th}>Flat / owner</th>
-                      <th style={{ ...S.th, ...S.num }}>Amount</th>
-                      <th style={S.th}>Mode</th>
-                      <th style={S.th}>Allocation</th>
-                      <th style={S.th}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((r) => {
-                      const b = r.breakdown || {};
-                      return (
-                        <tr key={r._id} style={r.isReversed ? { opacity: 0.55 } : undefined}>
-                          <td style={S.td}>
-                            <div style={{ fontWeight: 700 }}>{r.transactionId}</div>
-                            {r.isReversed && <Badge color="var(--danger-fg)">Reversed</Badge>}
-                            {r.billPeriodId && <div style={S.sub}>{r.billPeriodId}</div>}
-                          </td>
-                          <td style={S.td}>{fmtDate(r.date)}</td>
-                          <td style={S.td}>
-                            <div style={{ fontWeight: 600 }}>
-                              {r.member ? `${r.member.wing ? `${r.member.wing}-` : ""}${r.member.flatNo || DASH}` : DASH}
-                            </div>
-                            <div style={S.sub}>{r.member ? r.member.ownerName : ""}</div>
-                          </td>
-                          <td style={{ ...S.td, ...S.num, fontWeight: 800 }}>{money(r.amount)}</td>
-                          <td style={S.td}>
-                            <div>{r.paymentMode || DASH}</div>
-                            {(r.transactionRef || r.chequeNo) && (
-                              <div style={S.sub}>{r.chequeNo || r.transactionRef}</div>
-                            )}
-                          </td>
-                          <td style={S.td}>
-                            <div style={S.sub}>Interest {money(b.interestCleared)}</div>
-                            <div style={S.sub}>Principal {money(b.principalCleared)}</div>
-                            {b.advanceCredit ? <div style={{ ...S.sub, color: "var(--accent)", fontWeight: 700 }}>Advance {money(b.advanceCredit)}</div> : null}
-                          </td>
-                          <td style={S.td}>
-                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                              <Button size="sm" variant="ghost" disabled={r.isReversed}
-                                onClick={() => setEdit({ ...r, date: r.date ? String(r.date).slice(0, 10) : "" })}>Edit</Button>
-                              <Button size="sm" variant="ghost" disabled={r.isReversed} onClick={() => reverse(r)}>Reverse</Button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {data && data.pages > 1 && (
-              <div style={S.pager}>
-                <Button size="sm" variant="ghost" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-                <span style={S.sub}>Page {data.page} of {data.pages}</span>
-                <Button size="sm" variant="ghost" disabled={page >= data.pages} onClick={() => setPage((p) => p + 1)}>Next</Button>
-              </div>
-            )}
           </Card>
+
+          {loading ? (
+            <RevampSkeleton h={320} />
+          ) : (
+            <DataTable
+              cols={receivedCols}
+              rows={rows}
+              rowKey="_id"
+              emptyIcon="inbox"
+              emptyTitle="No payments"
+              emptySub="Nothing matches these filters."
+            />
+          )}
+
+          {data && data.pages > 1 && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end", marginTop: 14 }}>
+              <Btn size="sm" variant="ghost" icon="chevron-left" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Btn>
+              <span style={{ fontSize: 12, color: "var(--r-fg-4)" }}>Page {data.page} of {data.pages}</span>
+              <Btn size="sm" variant="ghost" iconR="chevron-right" disabled={page >= data.pages} onClick={() => setPage((p) => p + 1)}>Next</Btn>
+            </div>
+          )}
         </>
       )}
 
       {tab === "pending" && (
         <>
           {pendingDone?.bills?.length > 0 && (
-            <Card style={{ marginBottom: 18, borderLeft: "4px solid var(--warning)" }}>
-              <div style={{ fontWeight: 700, marginBottom: 10 }}>
-                Payment Done — awaiting Excel confirmation ({pendingDone.bills.length})
+            <Card style={{ marginBottom: 18 }} padded={false}>
+              <div style={{ padding: "14px 18px 4px", display: "flex", alignItems: "center", gap: 8 }}>
+                <Icon name="clock" size={16} color="var(--r-warning)" />
+                <div style={{ fontWeight: 700, color: "var(--r-fg-1)" }}>
+                  Payment Done — awaiting Excel confirmation
+                </div>
+                <Pill tone="warning" dot={false}>{pendingDone.bills.length}</Pill>
               </div>
-              <div style={{ overflowX: "auto" }}>
-                <table style={S.table}>
+              <div style={{ overflowX: "auto", padding: "0 0 4px" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
                     <tr>
-                      <th style={S.th}>Flat</th>
-                      <th style={S.th}>Member</th>
-                      <th style={S.th}>Period</th>
-                      <th style={{ ...S.th, ...S.num }}>Amount</th>
-                      <th style={S.th}>Mode</th>
-                      <th style={S.th}>Date</th>
-                      <th style={S.th}>Notes</th>
+                      {pendingDoneCols.map((c) => (
+                        <th key={c.key} style={{ textAlign: c.align || "left", padding: "8px 18px", fontSize: 11, fontWeight: 700, color: "var(--r-fg-4)", textTransform: "uppercase", letterSpacing: 0.3, borderBottom: "1px solid var(--r-hairline)" }}>{c.label}</th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
                     {pendingDone.bills.map((b) => (
                       <tr key={b.billId}>
-                        <td style={S.td}>{b.flat}</td>
-                        <td style={S.td}>{b.memberName}</td>
-                        <td style={S.td}>{b.billPeriodId}</td>
-                        <td style={{ ...S.td, ...S.num, fontWeight: 700 }}>{money(b.amount)}</td>
-                        <td style={S.td}>{b.paymentMode}</td>
-                        <td style={S.td}>{fmtDate(b.paymentDate)}</td>
-                        <td style={{ ...S.td, ...S.sub }}>{b.notes || DASH}</td>
+                        {pendingDoneCols.map((c) => (
+                          <td key={c.key} style={{ padding: "10px 18px", textAlign: c.align || "left", color: "var(--r-fg-2)" }}>
+                            {c.render ? c.render(b) : b[c.key]}
+                          </td>
+                        ))}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <div style={{ ...S.sub, marginTop: 10 }}>
+              <div style={{ padding: "4px 18px 14px", fontSize: 11.5, color: "var(--r-fg-4)" }}>
                 Acknowledged cash/manual payments. Upload the payment Excel to allocate them and mark the bills Paid.
               </div>
             </Card>
           )}
 
-          <div style={{ ...grid(190), marginBottom: 18 }}>
-            <StatCard label="Late members" value={pending?.totalMembers ?? 0} color={tokens.danger} />
-            <StatCard label="Total due" value={money(pending?.totalDue)} color="var(--danger)" />
-            <StatCard label="Interest due" value={money(pending?.totalInterestDue)} color="var(--warning)" />
-            <StatCard label="Principal due" value={money(pending?.totalPrincipalDue)} color="var(--primary)" />
+          <LateBand onRecord={(m) => openRecordModal(m.memberId)} />
+
+          <div style={{ fontSize: 12.5, color: "var(--r-fg-4)", marginBottom: 12, lineHeight: 1.6 }}>
+            Members whose oldest unpaid bill is past the payment deadline (payment window closed for them).
+            Members with dues still inside the payment window are not listed here — see the "Received" tab
+            totals or record a payment directly for any member via "Record payment".
           </div>
 
-          <Card>
-            <div style={{ ...S.sub, marginBottom: 14 }}>
-              Members whose oldest unpaid bill is past the payment deadline (payment window closed for them).
-              Members with dues still inside the payment window are not listed here — see the "Received" tab
-              totals or record a payment directly for any member via "+ Record payment".
-            </div>
-            {pendingLoading ? (
-              <div style={S.center}><Spinner /></div>
-            ) : !pending?.members?.length ? (
-              <EmptyState icon="✅" title="No overdue members" subtitle="Nobody is past their payment deadline." />
-            ) : (
-              <div style={{ overflowX: "auto" }}>
-                <table style={S.table}>
-                  <thead>
-                    <tr>
-                      <th style={S.th}>Flat</th>
-                      <th style={S.th}>Member</th>
-                      <th style={S.th}>Oldest period</th>
-                      <th style={S.th}>Deadline</th>
-                      <th style={{ ...S.th, ...S.num }}>Principal</th>
-                      <th style={{ ...S.th, ...S.num }}>Interest</th>
-                      <th style={{ ...S.th, ...S.num }}>Total due</th>
-                      <th style={S.th}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pending.members.map((m) => (
-                      <tr key={m.memberId}>
-                        <td style={S.td}>{m.wing}-{m.flatNo}</td>
-                        <td style={S.td}>{m.ownerName}</td>
-                        <td style={S.td}>{m.oldestPeriod}</td>
-                        <td style={{ ...S.td, color: "var(--danger)", fontWeight: 700 }}>{fmtDate(m.deadline)}</td>
-                        <td style={{ ...S.td, ...S.num }}>{money(m.principalOutstanding)}</td>
-                        <td style={{ ...S.td, ...S.num, color: "var(--danger)" }}>{money(m.interestOutstanding)}</td>
-                        <td style={{ ...S.td, ...S.num, fontWeight: 800 }}>{money(m.totalOutstanding)}</td>
-                        <td style={S.td}>
-                          <Button size="sm" onClick={() => openRecordModal(m.memberId)}>Record payment</Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
+          {pendingLoading ? (
+            <RevampSkeleton h={320} />
+          ) : (
+            <DataTable
+              cols={pendingCols}
+              rows={pending?.members || []}
+              rowKey="memberId"
+              emptyIcon="check-circle-2"
+              emptyTitle="No overdue members"
+              emptySub="Nobody is past their payment deadline."
+            />
+          )}
         </>
       )}
 
       {/* EDIT MODAL — metadata only, amount is intentionally immutable */}
-      <Modal
-        open={Boolean(edit)}
-        title={edit ? `Edit ${edit.transactionId}` : ""}
-        onClose={() => setEdit(null)}
-        width={520}
-        footer={
-          <div style={{ display: "flex", gap: 8 }}>
-            <Button disabled={saving} onClick={saveEdit}>{saving ? "Saving..." : "Save changes"}</Button>
-            <Button variant="ghost" onClick={() => setEdit(null)}>Cancel</Button>
-          </div>
-        }
-      >
+      <Modal open={Boolean(edit)} onClose={() => setEdit(null)} title={edit ? `Edit ${edit.transactionId}` : ""} width={520}>
         {edit && (
-          <div style={{ display: "grid", gap: 12 }}>
-            <div style={{ padding: 10, borderRadius: 8, background: "var(--bg-muted)", fontSize: 12.5, color: tokens.sub }}>
-              Amount ({money(edit.amount)}) cannot be edited here - changing it would desynchronise
-              bill allocation and receipts. Reverse this payment and record a corrected one instead.
+          <div style={{ display: "grid", gap: 14 }}>
+            <div style={{ padding: 12, borderRadius: 8, background: "var(--r-surface-2)", fontSize: 12.5, color: "var(--r-fg-4)", display: "flex", gap: 8 }}>
+              <Icon name="info" size={15} color="var(--r-fg-4)" style={{ marginTop: 1, flexShrink: 0 }} />
+              <span>Amount ({money(edit.amount)}) cannot be edited here — changing it would desynchronise
+                bill allocation and receipts. Reverse this payment and record a corrected one instead.</span>
             </div>
-            <div style={S.fl}>
-              <span style={S.lbl}>Value date</span>
-              <input type="date" style={S.inp} value={edit.date || ""}
+            <Field label="Value date">
+              <input type="date" className="input" value={edit.date || ""}
                 onChange={(e) => setEdit((s) => ({ ...s, date: e.target.value }))} />
-            </div>
-            <div style={S.fl}>
-              <span style={S.lbl}>Payment mode</span>
-              <select style={S.inp} value={edit.paymentMode || ""}
+            </Field>
+            <Field label="Payment mode">
+              <select className="input" value={edit.paymentMode || ""}
                 onChange={(e) => setEdit((s) => ({ ...s, paymentMode: e.target.value }))}>
                 {MODES.filter(Boolean).map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
-            </div>
-            <div style={S.fl}>
-              <span style={S.lbl}>Reference / UTR</span>
-              <input style={S.inp} value={edit.transactionRef || ""}
+            </Field>
+            <Field label="Reference / UTR">
+              <input className="input" value={edit.transactionRef || ""}
                 onChange={(e) => setEdit((s) => ({ ...s, transactionRef: e.target.value }))} />
-            </div>
-            <div style={S.fl}>
-              <span style={S.lbl}>Cheque no.</span>
-              <input style={S.inp} value={edit.chequeNo || ""}
+            </Field>
+            <Field label="Cheque no.">
+              <input className="input" value={edit.chequeNo || ""}
                 onChange={(e) => setEdit((s) => ({ ...s, chequeNo: e.target.value }))} />
-            </div>
-            <div style={S.fl}>
-              <span style={S.lbl}>Bank</span>
-              <input style={S.inp} value={edit.bankName || ""}
+            </Field>
+            <Field label="Bank">
+              <input className="input" value={edit.bankName || ""}
                 onChange={(e) => setEdit((s) => ({ ...s, bankName: e.target.value }))} />
-            </div>
-            <div style={S.fl}>
-              <span style={S.lbl}>UPI id</span>
-              <input style={S.inp} value={edit.upiId || ""}
+            </Field>
+            <Field label="UPI id">
+              <input className="input" value={edit.upiId || ""}
                 onChange={(e) => setEdit((s) => ({ ...s, upiId: e.target.value }))} />
-            </div>
-            <div style={S.fl}>
-              <span style={S.lbl}>Notes</span>
-              <textarea rows={3} style={S.inp} value={edit.notes || ""}
+            </Field>
+            <Field label="Notes">
+              <textarea rows={3} className="input" value={edit.notes || ""}
                 onChange={(e) => setEdit((s) => ({ ...s, notes: e.target.value }))} />
+            </Field>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn variant="primary" disabled={saving} onClick={saveEdit}>{saving ? "Saving..." : "Save changes"}</Btn>
+              <Btn variant="ghost" onClick={() => setEdit(null)}>Cancel</Btn>
             </div>
           </div>
         )}
       </Modal>
 
       {/* RECORD PAYMENT MODAL — ported CREATE flow */}
-      <Modal
-        open={recordOpen}
-        title="Record a payment"
-        onClose={() => { setRecordOpen(false); resetRecordForm(); }}
-        width={640}
-        footer={
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Button
-              variant="subtle"
-              disabled={!selectedMemberId || !amount || markingDone}
-              onClick={markDone}
-            >
-              {markingDone ? "Marking..." : "Mark done (cash, confirm via Excel)"}
-            </Button>
-            <Button
-              disabled={!selectedMemberId || !amount || submitting}
-              onClick={submitPayment}
-            >
-              {submitting ? "Recording..." : "Record payment"}
-            </Button>
-            <Button variant="ghost" onClick={() => { setRecordOpen(false); resetRecordForm(); }}>Cancel</Button>
-          </div>
-        }
-      >
-        <form onSubmit={submitPayment} style={{ display: "grid", gap: 14 }}>
+      <Modal open={recordOpen} onClose={() => { setRecordOpen(false); resetRecordForm(); }} title="Record a payment" width={640}>
+        <form onSubmit={submitPayment} style={{ display: "grid", gap: 16 }}>
           <Field label="Member" required>
             <RSelect
               options={memberOptions}
@@ -670,78 +670,108 @@ export default function PaymentsPage() {
               isClearable
               isSearchable
               isLoading={membersLoading}
-              styles={{ menu: (base) => ({ ...base, zIndex: 9999 }) }}
+              styles={rselectTheme}
             />
           </Field>
 
           {outstandingLoading && (
-            <div style={{ ...S.center, padding: 16 }}><Spinner size={18} /></div>
+            <div style={{ display: "flex", justifyContent: "center", padding: 16 }}>
+              <span className="pulse-loader" style={{ width: 28, height: 28 }} />
+            </div>
           )}
 
-          {outstanding && (
-            <Card pad={14} style={{ background: outstanding.isPaymentBlocked ? "var(--danger-bg)" : "var(--primary-tint)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                <div>
-                  <div style={{ fontWeight: 700 }}>{selectedMember?.wing}-{selectedMember?.roomNo}</div>
-                  <div style={S.sub}>{selectedMember?.ownerName}</div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={S.sub}>Total outstanding</div>
-                  <div style={{ fontWeight: 800, fontSize: 18, color: "var(--danger)" }}>{money(outstanding.totalOutstanding)}</div>
-                </div>
-              </div>
-              <div style={S.sub}>Principal {money(outstanding.principalAmount)} · Interest {money(outstanding.interestAmount)}</div>
-              {outstanding.isPaymentBlocked && (
-                <div style={{ marginTop: 8, fontSize: 12.5, color: "var(--danger-fg)", fontWeight: 600 }}>
-                  {outstanding.blockMessage || "Payment window closed for this member."}
-                </div>
-              )}
-              {outstanding.totalOutstanding > 0 && (
-                <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-                  {[25, 50, 75, 100].map((pct) => (
-                    <Button key={pct} type="button" size="sm" variant="subtle" onClick={() => quickPay(pct)}>
-                      {pct}% ({money((outstanding.totalOutstanding * pct) / 100)})
-                    </Button>
-                  ))}
-                </div>
-              )}
-            </Card>
-          )}
+          <AnimatePresence>
+            {outstanding && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.18 }}
+                style={{ overflow: "hidden" }}
+              >
+                <Card
+                  style={{
+                    background: outstanding.isPaymentBlocked ? "var(--r-danger-soft)" : "var(--r-brand-soft)",
+                    border: "none",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: "var(--r-fg-1)" }}>{selectedMember?.wing}-{selectedMember?.roomNo}</div>
+                      <div style={{ fontSize: 12, color: "var(--r-fg-4)" }}>{selectedMember?.ownerName}</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 11, color: "var(--r-fg-4)" }}>Total outstanding</div>
+                      <div className="revamp-num" style={{ fontWeight: 800, fontSize: 19, color: "var(--r-danger)" }}>{money(outstanding.totalOutstanding)}</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--r-fg-3)" }}>
+                    Principal {money(outstanding.principalAmount)} · Interest {money(outstanding.interestAmount)}
+                  </div>
+                  {outstanding.isPaymentBlocked && (
+                    <div style={{ marginTop: 8, fontSize: 12, color: "var(--r-danger)", fontWeight: 600, display: "flex", gap: 6 }}>
+                      <Icon name="alert-triangle" size={14} />
+                      {outstanding.blockMessage || "Payment window closed for this member."}
+                    </div>
+                  )}
+                  {outstanding.totalOutstanding > 0 && (
+                    <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                      {[25, 50, 75, 100].map((pct) => (
+                        <Btn key={pct} type="button" size="sm" variant="secondary" onClick={() => quickPay(pct)}>
+                          {pct}% ({money((outstanding.totalOutstanding * pct) / 100)})
+                        </Btn>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          <Field label="Payment amount (Rs)" required>
-            <Input type="number" min="1" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Enter amount" />
+          <Field label="Payment amount (₹)" required>
+            <input type="number" min="1" step="0.01" className="input" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Enter amount" />
           </Field>
 
           <Field label="Payment mode" required>
-            <Select value={mode} onChange={(e) => setMode(e.target.value)}>
+            <Select value={mode} size="md" onChange={setMode}>
               {RECORD_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
             </Select>
           </Field>
 
           {mode === "Cheque" && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Field label="Cheque no."><Input value={chequeNo} onChange={(e) => setChequeNo(e.target.value)} /></Field>
-              <Field label="Bank"><Input value={bankName} onChange={(e) => setBankName(e.target.value)} /></Field>
+              <Field label="Cheque no."><input className="input" value={chequeNo} onChange={(e) => setChequeNo(e.target.value)} /></Field>
+              <Field label="Bank"><input className="input" value={bankName} onChange={(e) => setBankName(e.target.value)} /></Field>
             </div>
           )}
           {mode === "UPI" && (
-            <Field label="UPI id"><Input value={upiId} onChange={(e) => setUpiId(e.target.value)} /></Field>
+            <Field label="UPI id"><input className="input" value={upiId} onChange={(e) => setUpiId(e.target.value)} /></Field>
           )}
           {["Online", "NEFT", "RTGS"].includes(mode) && (
-            <Field label="Reference / UTR"><Input value={transactionRef} onChange={(e) => setTransactionRef(e.target.value)} /></Field>
+            <Field label="Reference / UTR"><input className="input" value={transactionRef} onChange={(e) => setTransactionRef(e.target.value)} /></Field>
           )}
 
           <Field label="Payment date" required>
-            <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+            <input type="date" className="input" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
           </Field>
 
           <Field label="Notes">
-            <Textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" />
+            <textarea rows={3} className="input" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" />
           </Field>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Btn type="submit" variant="primary" disabled={!selectedMemberId || !amount || submitting}>
+              {submitting ? "Recording..." : "Record payment"}
+            </Btn>
+            <Btn type="button" variant="secondary" disabled={!selectedMemberId || !amount || markingDone} onClick={markDone}>
+              {markingDone ? "Marking..." : "Mark done (cash, confirm via Excel)"}
+            </Btn>
+            <Btn type="button" variant="ghost" onClick={() => { setRecordOpen(false); resetRecordForm(); }}>Cancel</Btn>
+          </div>
         </form>
       </Modal>
 
-      {toast ? <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} /> : null}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

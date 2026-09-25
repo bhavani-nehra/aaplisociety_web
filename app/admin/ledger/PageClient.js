@@ -1,33 +1,80 @@
 "use client";
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+/**
+ * Ledger — makeover plan §7.3. "What's the complete money history of a flat
+ * or the society?" A real ledger table (Date · Voucher · Flat · Particulars ·
+ * Debit · Credit · Balance), read from the society's books: a positive
+ * balance is a receivable and prints as Dr, an advance prints as Cr — no
+ * minus signs, no red/green on the figure itself. Every total above the
+ * table follows the active filter. Pick a flat and the page reads as its
+ * statement (opening, charged, paid, closing).
+ */
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
-import styles from "@/styles/Dashboard.module.css";
-import ledgerStyles from "@/styles/Ledger.module.css";
 import Select from "react-select";
 import notify from "@/lib/notify";
 import {
-  PageHeader, Card, CardHead, SectionLabel, Icon, Pill, Btn, MiniMetric,
-  RevampSkeleton, Donut, Avatar, Drawer, Modal,
+  PageHeader, Icon, Btn, SearchInput, DataTable, RevampSkeleton, Drawer, Modal,
 } from "@/components/revamp";
+import PassbookBand from "@/components/money/PassbookBand";
 
-const CATEGORY_ICON = {
-  Maintenance: "wrench", Payment: "banknote", Interest: "percent",
-  Adjustment: "sliders-horizontal", "Opening Balance": "flag", Refund: "undo-2", Fine: "gavel",
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const fullMoney = (n) =>
+  typeof n === "number"
+    ? n.toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 })
+    : "₹0";
+const formatBalance = (v) => {
+  const n = Number(v || 0);
+  if (Math.abs(n) < 0.005) return "Settled";
+  return `${fullMoney(Math.abs(n))} ${n > 0 ? "Dr" : "Cr"}`;
 };
+const formatDate = (d) => (d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—");
+const formatDateTime = (d) => (d ? new Date(d).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
+const formatPeriod = (m, y) => `${MONTHS[(m || 1) - 1]?.slice(0, 3) || ""} ${y || ""}`.trim();
+const flatLabel = (wing, flatNo) => `${wing ? `${wing}-` : ""}${flatNo || ""}`;
+const properName = (n) => n || "";
+const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
+function OverflowMenu({ items }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ position: "relative" }}>
+      <Btn variant="secondary" icon="more-vertical" onClick={() => setOpen((v) => !v)} />
+      {open ? (
+        <div style={{ position: "absolute", right: 0, top: "100%", marginTop: 4, background: "var(--r-surface)", border: "1px solid var(--r-border)", borderRadius: 8, boxShadow: "var(--r-shadow-pop)", zIndex: 20, minWidth: 160 }}>
+          {items.map((it) => (
+            <button key={it.label} type="button" onClick={() => { setOpen(false); it.onClick(); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "none", fontSize: 13, textAlign: "left", cursor: "pointer", color: "var(--r-fg-1)" }}>
+              <Icon name={it.icon} size={14} />{it.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const selectTheme = {
+  control: (base, state) => ({
+    ...base, minHeight: 32, height: 32, fontSize: 13, background: "var(--r-surface-3)",
+    borderColor: state.isFocused ? "var(--r-brand)" : "var(--r-border-strong)", borderRadius: 8,
+    boxShadow: state.isFocused ? "0 0 0 3px var(--r-brand-soft)" : "none",
+  }),
+  valueContainer: (base) => ({ ...base, padding: "0 8px" }),
+  indicatorsContainer: (base) => ({ ...base, height: 30 }),
+  input: (base) => ({ ...base, color: "var(--r-fg-1)" }),
+  singleValue: (base) => ({ ...base, color: "var(--r-fg-1)" }),
+  placeholder: (base) => ({ ...base, color: "var(--r-fg-4)" }),
+  menu: (base) => ({ ...base, zIndex: 50, fontSize: 13, background: "var(--r-surface)", border: "1px solid var(--r-border)", boxShadow: "var(--r-shadow-pop)" }),
+  option: (base, state) => ({
+    ...base,
+    background: state.isSelected ? "var(--r-brand)" : state.isFocused ? "var(--r-surface-3)" : "transparent",
+    color: state.isSelected ? "var(--r-brand-ink)" : "var(--r-fg-1)",
+  }),
+  indicatorSeparator: () => ({ display: "none" }),
+};
+const VIEWS_KEY = "ledger-saved-views";
+
 export default function UltraAdvancedLedgerPage() {
   const queryClient = useQueryClient();
-  // docs/ANIMATION_GUIDE.md §2 — distance-based transforms must respect
-  // prefers-reduced-motion; opacity-only fades are left as-is.
-  const [reduceMotion, setReduceMotion] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduceMotion(mq.matches);
-    const onChange = (e) => setReduceMotion(e.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
   // ========== STATE MANAGEMENT ==========
   const [filters, setFilters] = useState({
     memberId: "all",
@@ -60,7 +107,8 @@ export default function UltraAdvancedLedgerPage() {
   // /admin/ledger?memberId=<id> — read once on mount via window.location so
   // this doesn't need a Suspense boundary just for one query param.
   useEffect(() => {
-    const mid = new URLSearchParams(window.location.search).get("memberId");
+    const sp = new URLSearchParams(window.location.search);
+    const mid = sp.get("memberId") || sp.get("member");
     if (mid) setFilters((f) => ({ ...f, memberId: mid }));
   }, []);
   const [visibleColumns, setVisibleColumns] = useState({
@@ -257,22 +305,34 @@ export default function UltraAdvancedLedgerPage() {
     const queryString = buildQueryString();
     window.open(`/api/ledger/export?${queryString}&format=${format}`, "_blank");
   };
-  const saveCurrentView = () => {
-    if (!newViewName.trim()) {
-      notify.warning("Please enter a view name");
+  // Saved views live in this browser (a per-viewer convenience).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(VIEWS_KEY);
+      if (raw) setSavedViews(JSON.parse(raw));
+    } catch (_) {}
+  }, []);
+  const persistViews = (views) => {
+    setSavedViews(views);
+    try { localStorage.setItem(VIEWS_KEY, JSON.stringify(views)); } catch (_) {}
+  };
+  const saveCurrentView = (nameArg) => {
+    const name = String(nameArg ?? newViewName).trim();
+    if (!name) {
+      notify.warning("Give the view a name");
       return;
     }
     const view = {
-      name: newViewName,
+      name,
       filters: { ...filters },
       sortBy,
       sortOrder,
       groupBy,
       visibleColumns: { ...visibleColumns },
     };
-    setSavedViews([...savedViews, view]);
+    persistViews([...savedViews.filter((v) => v.name !== name), view]);
     setNewViewName("");
-    notify.success(`View "${newViewName}" saved!`);
+    notify.success(`View “${name}” saved`);
   };
   const loadSavedView = (view) => {
     setFilters(view.filters);
@@ -283,8 +343,7 @@ export default function UltraAdvancedLedgerPage() {
     setPage(1);
   };
   const deleteSavedView = (index) => {
-    const newViews = savedViews.filter((_, i) => i !== index);
-    setSavedViews(newViews);
+    persistViews(savedViews.filter((_, i) => i !== index));
   };
   // Filter transactions by search term
   const filteredTransactions = ledgerData?.transactions?.filter((txn) => {
@@ -300,7 +359,7 @@ export default function UltraAdvancedLedgerPage() {
   });
   // ========== MEMBER OPTIONS FOR SELECT ==========
   const memberOptions = [
-    { value: "all", label: "All Members" },
+    { value: "all", label: "All flats" },
     ...(membersData?.members || [])
       .sort((a, b) => {
         const wingCompare = (a.wing || "").localeCompare(b.wing || "");
@@ -309,10 +368,12 @@ export default function UltraAdvancedLedgerPage() {
       })
       .map((member) => ({
         value: member._id,
-        label: `${member.wing || ""}-${member.flatNo} | ${member.ownerName}`,
+        label: `${flatLabel(member.wing, member.flatNo)}  ${properName(member.ownerName)}`,
         member,
       })),
   ];
+  const wings = useMemo(() => [...new Set((membersData?.members || []).map((m) => m.wing).filter(Boolean))].sort(), [membersData]);
+  const yearsBack = useMemo(() => { const y = new Date().getFullYear(); return [y, y - 1, y - 2, y - 3, y - 4]; }, []);
   // How many of the "More filters" drawer's fields are actually set, shown
   // as a badge on its trigger button so it's not a mystery black box.
   const advancedFilterCount = [
@@ -327,667 +388,393 @@ export default function UltraAdvancedLedgerPage() {
     !!groupBy,
   ].filter(Boolean).length;
 
+  // ========== DERIVED, FOLLOWS THE FILTER (plan §5.6 / S8) ==========
+  const shown = filteredTransactions || [];
+  const shownDebit = shown.filter((t) => t.type === "Debit").reduce((s, t) => s + (t.amount || 0), 0);
+  const shownCredit = shown.filter((t) => t.type === "Credit").reduce((s, t) => s + (t.amount || 0), 0);
+  const totalEntries = ledgerData?.summary?.totalTransactions ?? ledgerData?.transactions?.length ?? 0;
+  const selectedMember = filters.memberId !== "all" ? memberOptions.find((o) => o.value === filters.memberId)?.member : null;
+  const categoryCounts = (ledgerData?.transactions || []).reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + 1; return acc; }, {});
+  const totalPages = ledgerData?.summary?.totalPages || 1;
+  const anyFilter = Boolean(searchTerm) || Object.entries(filters).some(([k, v]) => v && v !== "all" && k !== "memberId") || !!groupBy;
+
+  const balanceCell = (bal) => {
+    const v = Number(bal || 0);
+    if (Math.abs(v) < 0.005) return <span style={{ color: "var(--r-fg-4)" }}>{fullMoney(0)}</span>;
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: v > 0 ? "var(--r-danger)" : "var(--r-success)", flexShrink: 0 }} />
+        {formatBalance(v)}
+      </span>
+    );
+  };
+
+  const cols = [
+    { key: "date", label: "Date", render: (t) => <span style={{ whiteSpace: "nowrap", color: "var(--r-fg-3)" }}>{formatDate(t.date)}</span> },
+    { key: "voucher", label: "Voucher", render: (t) => <span style={{ fontVariantNumeric: "tabular-nums", color: "var(--r-fg-3)", whiteSpace: "nowrap" }}>{t.transactionId || "—"}</span> },
+    ...(selectedMember ? [] : [{
+      key: "flat", label: "Flat", render: (t) => (t.memberId ? (
+        <div style={{ minWidth: 0 }}>
+          <div style={{ color: "var(--r-fg-1)", fontWeight: 500, whiteSpace: "nowrap" }}>{flatLabel(t.memberId.wing, t.memberId.flatNo)}</div>
+          <div style={{ fontSize: 12.5, color: "var(--r-fg-4)", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{properName(t.memberId.ownerName)}</div>
+        </div>
+      ) : <span style={{ color: "var(--r-fg-4)" }}>Society</span>),
+    }]),
+    {
+      key: "particulars", label: "Particulars", render: (t) => (
+        <div style={{ minWidth: 180, maxWidth: 360 }}>
+          <div style={{ color: "var(--r-fg-1)" }}>{t.category}{t.billPeriodId ? <span style={{ color: "var(--r-fg-4)" }}> · {t.billPeriodId}</span> : null}</div>
+          {t.description && <div style={{ fontSize: 12.5, color: "var(--r-fg-4)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.description}>{t.description}</div>}
+        </div>
+      ),
+    },
+    { key: "debit", label: "Debit", align: "right", render: (t) => (t.type === "Debit" ? fullMoney(t.amount) : "") },
+    { key: "credit", label: "Credit", align: "right", render: (t) => (t.type === "Credit" ? fullMoney(t.amount) : "") },
+    { key: "balance", label: selectedMember ? "Balance" : "Flat balance", align: "right", render: (t) => balanceCell(t.balanceAfterTransaction) },
+  ];
+
+  const interestRows = interestAnalytics.interestTrend.map((i) => {
+    const [y, m] = i.month.split("-").map(Number);
+    return { label: formatPeriod(m, y), value: i.total, note: `${i.count} ${i.count === 1 ? "entry" : "entries"}` };
+  });
+  const modeSegments = [
+    { label: "UPI", value: paymentAnalytics.upiPayments },
+    { label: "Online", value: paymentAnalytics.onlinePayments },
+    { label: "Cash", value: paymentAnalytics.cashPayments },
+    { label: "Cheque", value: paymentAnalytics.chequePayments },
+  ];
+
   // ========== RENDER ==========
   return (
-    <div>
-      {/* ========== PAGE HEADER ========== */}
+    <div style={{ maxWidth: 1440, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
       <PageHeader
-        eyebrow={<><Icon name="book-open" size={11} /> Accounting</>}
-        title="Ledger"
-        sub="Every transaction, with interest and payment-mode analytics behind it."
+        title={selectedMember ? `Ledger · ${flatLabel(selectedMember.wing, selectedMember.flatNo)}` : "Ledger"}
+        sub={selectedMember
+          ? `${properName(selectedMember.ownerName)}. Debits are charges to the flat, credits are payments; the balance is from the society's books (Dr = owes).`
+          : "Every entry in the members' books. Pick a flat to read it as a statement."}
         right={
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Btn icon="file-spreadsheet" onClick={() => exportData("xlsx")}>Export Excel</Btn>
-            <Btn icon="file-text" onClick={() => exportData("pdf")}>Export PDF</Btn>
-            <Btn variant="primary" icon="refresh-cw" onClick={() => refetch()}>Refresh</Btn>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {selectedMember && <Btn variant="secondary" icon="x" onClick={() => handleFilterChange("memberId", "all")}>All flats</Btn>}
+            <OverflowMenu items={[
+              { label: "Export Excel", icon: "file-spreadsheet", onClick: () => exportData("xlsx") },
+              { label: "Export PDF", icon: "file-text", onClick: () => exportData("pdf") },
+              { label: "Print", icon: "printer", onClick: () => window.print() },
+            ]} />
           </div>
         }
       />
-      {/* ========== ANALYTICS DASHBOARD ========== */}
-      {isLoading ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 18 }}>
-          <RevampSkeleton h={92} /><RevampSkeleton h={92} /><RevampSkeleton h={92} /><RevampSkeleton h={92} />
+
+      {/* Passbook band: the whole society, or one flat's year once a flat is picked */}
+      <div>
+        <PassbookBand memberId={filters.memberId} />
+        {selectedMember && !isLoading && (
+          <div style={{ fontSize: 12.5, color: "var(--r-fg-4)", marginTop: -6 }}>
+            Rows below: opening {formatBalance(analytics.openingBalance)} · charged {fullMoney(shownDebit)} · paid {fullMoney(shownCredit)} · closing {formatBalance(analytics.netBalance)}
+          </div>
+        )}
+      </div>
+
+      {/* Filters — one row */}
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+        <div style={{ flex: "1 1 220px", maxWidth: 320 }}>
+          <SearchInput value={searchTerm} onChange={setSearchTerm} placeholder="Search voucher, flat, owner, particulars" size="sm" />
         </div>
-      ) : (
-        <>
-      <motion.div
-        initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.22, ease: "easeOut" }}
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: 12,
-          marginBottom: 18,
-        }}
-      >
-        <MiniMetric
-          icon="list"
-          label="Total transactions"
-          value={analytics.totalTransactions}
-          extra={
-            <div style={{ fontSize: 11, color: "var(--r-fg-4)", marginTop: 6 }}>
-              {ledgerData?.transactions?.filter((t) => t.type === "Debit").length || 0} debit ·{" "}
-              {ledgerData?.transactions?.filter((t) => t.type === "Credit").length || 0} credit
-            </div>
-          }
-        />
-        <MiniMetric
-          icon="arrow-up-circle"
-          label="Total debit"
-          value={`₹${analytics.totalDebit.toLocaleString("en-IN")}`}
-          delta="Money owed by members"
-        />
-        <MiniMetric
-          icon="arrow-down-circle"
-          label="Total credit"
-          value={`₹${analytics.totalCredit.toLocaleString("en-IN")}`}
-          tone="paid"
-          delta="Payments received"
-        />
-        <MiniMetric
-          icon="scale"
-          label="Net balance"
-          value={`₹${Math.abs(analytics.netBalance).toLocaleString("en-IN")} ${analytics.netBalance < 0 ? "DR" : "CR"}`}
-          tone={analytics.netBalance < 0 ? "danger" : "paid"}
-          delta={analytics.netBalance < 0 ? "Outstanding dues" : "Credit balance"}
-        />
-      </motion.div>
-      {/* ========== INTEREST ANALYTICS + PAYMENT MIX ==========
-          One shared Card, not two side-by-side ones — a "2fr 1fr" grid of
-          two independent cards left the shorter one (whichever had less to
-          show, e.g. Payment mix, or Interest analytics in a month with no
-          interest charged) stretched to match the taller one's height by
-          CSS Grid's default stretch, with nothing of its own to fill that
-          space. One container sized to its own tallest column can't do
-          that — there's no second box left over to be emptier than. */}
-      <Card style={{ marginBottom: 18 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
-          {/* Interest Summary */}
-          <div>
-            <CardHead title="Interest analytics" sub="Charged on overdue balances" />
-            <div style={{ display: "flex", borderTop: "1px solid var(--r-hairline)", paddingTop: 14 }}>
-              {[
-                { label: "Total charged", value: `₹${interestAnalytics.totalInterest.toLocaleString("en-IN")}`, sub: `${interestAnalytics.interestCount} transactions` },
-                { label: "Average", value: `₹${Math.round(interestAnalytics.avgInterest).toLocaleString("en-IN")}`, sub: "per transaction" },
-                { label: "Highest single charge", value: `₹${interestAnalytics.maxInterest.toLocaleString("en-IN")}`, sub: "in this view" },
-              ].map((s, i) => (
-                <div key={s.label} style={{
-                  flex: 1, paddingLeft: i ? 16 : 0,
-                  borderLeft: i ? "1px solid var(--r-hairline)" : "none",
-                }}>
-                  <div style={{ fontSize: 11, color: "var(--r-fg-4)", fontWeight: 600 }}>{s.label}</div>
-                  <div className="revamp-num" style={{ fontSize: 22, fontWeight: 700, color: "var(--r-fg-1)", marginTop: 6, letterSpacing: "-0.02em" }}>{s.value}</div>
-                  <div style={{ fontSize: 11, color: "var(--r-fg-4)", marginTop: 3 }}>{s.sub}</div>
-                </div>
-              ))}
-            </div>
-            {/* Interest Trend Chart */}
-            {interestAnalytics.interestTrend.length > 0 ? (
-              <div style={{ marginTop: 20 }}>
-                <SectionLabel icon="trending-up">Last 6 months</SectionLabel>
-                <div style={{ display: "flex", alignItems: "flex-end", gap: 12, height: 130 }}>
-                  {interestAnalytics.interestTrend.map((item, idx) => {
-                    const maxValue = Math.max(...interestAnalytics.interestTrend.map((i) => i.total));
-                    const heightPercent = (item.total / maxValue) * 100;
-                    return (
-                      <div key={idx} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%", justifyContent: "flex-end" }}>
-                        <div style={{ fontSize: 10.5, fontWeight: 600, color: "var(--r-fg-3)", marginBottom: 4 }}>
-                          ₹{Math.round(item.total).toLocaleString("en-IN")}
-                        </div>
-                        <div style={{
-                          width: "100%", height: `${Math.max(heightPercent, 4)}%`,
-                          background: "var(--r-warning)", borderRadius: 5,
-                        }} />
-                        <div style={{ fontSize: 10.5, color: "var(--r-fg-4)", marginTop: 6, textAlign: "center", lineHeight: 1.4 }}>
-                          {item.month.split("-")[1]}/{item.month.split("-")[0].slice(2)}
-                          <br />({item.count})
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : (
-              <div style={{ marginTop: 14, fontSize: 12, color: "var(--r-fg-4)" }}>
-                No interest charged in the last 6 months.
-              </div>
-            )}
-          </div>
-          {/* Payment Mode Distribution — donut, not a stacked bar list:
-              4 fixed-order categories, each small enough to direct-label,
-              so a legend box would be pure repetition (dataviz skill,
-              "assign categorical hues in fixed order" + "<=4 series get
-              direct labels, no separate legend needed"). */}
-          <div style={{ borderLeft: "1px solid var(--r-hairline)", paddingLeft: 24 }}>
-            <CardHead title="Payment mix" />
-            {(() => {
-              const modes = [
-                { mode: "Cash", amount: paymentAnalytics.cashPayments, color: "var(--r-success)", icon: "banknote" },
-                { mode: "Online", amount: paymentAnalytics.onlinePayments, color: "var(--r-brand)", icon: "globe" },
-                { mode: "UPI", amount: paymentAnalytics.upiPayments, color: "#9333ea", icon: "smartphone" },
-                { mode: "Cheque", amount: paymentAnalytics.chequePayments, color: "var(--r-warning)", icon: "file-text" },
-              ];
-              const total = paymentAnalytics.totalPayments;
-              return (
-                <div style={{ display: "flex", alignItems: "center", gap: 18, marginTop: 4 }}>
-                  <Donut
-                    segments={modes.map((m) => ({ label: m.mode, value: m.amount, color: m.color }))}
-                    size={104}
-                    thickness={15}
-                    centerLabel={total > 0 ? `₹${Math.round(total / 1000)}k` : "₹0"}
-                    centerSub="total"
-                  />
-                  <div style={{ display: "grid", gap: 8, flex: 1, minWidth: 0 }}>
-                    {modes.map((m) => {
-                      const pct = total > 0 ? (m.amount / total) * 100 : 0;
-                      return (
-                        <div key={m.mode} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12 }}>
-                          <span style={{ width: 8, height: 8, borderRadius: 999, background: m.color, flexShrink: 0 }} />
-                          <span style={{ color: "var(--r-fg-2)", fontWeight: 500 }}>{m.mode}</span>
-                          <span style={{ marginLeft: "auto", color: "var(--r-fg-4)" }}>{pct.toFixed(0)}%</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-        </div>
-      </Card>
-      {/* ========== TOP INTEREST PAYERS ========== */}
-      {interestAnalytics.topInterestPayers.length > 0 && (
-        <Card padded={false} style={{ marginBottom: 18 }}>
-          <div style={{ padding: "16px 18px 4px" }}>
-            <CardHead title="Top interest payers" sub="Click a row to filter the ledger to that member" />
-          </div>
-          <div>
-            {interestAnalytics.topInterestPayers.map((item, idx) => (
-              <div
-                key={item.member?._id || idx}
-                onClick={() => handleFilterChange("memberId", item.member?._id)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 14,
-                  padding: "12px 18px", cursor: "pointer",
-                  borderTop: "1px solid var(--r-hairline)",
-                  transition: "background 0.12s",
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "var(--r-surface-2)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-              >
-                <div style={{
-                  width: 26, height: 26, borderRadius: 999, flexShrink: 0,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 11.5, fontWeight: 700,
-                  background: idx === 0 ? "var(--r-danger-soft)" : "var(--r-surface-3)",
-                  color: idx === 0 ? "var(--r-danger)" : "var(--r-fg-3)",
-                }}>{idx + 1}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--r-fg-1)" }}>
-                    {item.member?.wing}-{item.member?.flatNo}
-                    <span style={{ fontWeight: 400, color: "var(--r-fg-4)" }}> · {item.member?.ownerName}</span>
-                  </div>
-                  <div style={{ fontSize: 11.5, color: "var(--r-fg-4)", marginTop: 2 }}>
-                    {item.count} charges · avg ₹{Math.round(item.totalInterest / item.count).toLocaleString("en-IN")}
-                  </div>
-                </div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "var(--r-danger)", flexShrink: 0 }}>
-                  ₹{item.totalInterest.toLocaleString("en-IN")}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-        </>
-      )}
-      {/* ========== SAVED VIEWS ========== */}
-      {savedViews.length > 0 && (
-        <Card style={{ marginBottom: 18 }}>
-          <SectionLabel icon="bookmark">Saved views</SectionLabel>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {savedViews.map((view, idx) => (
-              <span key={idx} style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                padding: "5px 6px 5px 12px", borderRadius: 999,
-                background: "var(--r-surface-2)", border: "1px solid var(--r-hairline)",
-                fontSize: 12.5, fontWeight: 500, color: "var(--r-fg-2)",
-              }}>
-                <span onClick={() => loadSavedView(view)} style={{ cursor: "pointer" }}>{view.name}</span>
-                <button
-                  onClick={() => deleteSavedView(idx)}
-                  aria-label={`Delete saved view ${view.name}`}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    width: 18, height: 18, borderRadius: 999, border: "none",
-                    background: "transparent", color: "var(--r-fg-4)", cursor: "pointer",
-                  }}
-                >
-                  <Icon name="x" size={11} />
-                </button>
-              </span>
-            ))}
-          </div>
-        </Card>
-      )}
-      {/* ========== FILTERS — one dense toolbar row ==========
-          Used to be: a 6-field label-over-input grid, a separate "Show
-          Advanced Filters" block that pushed the whole page down when
-          opened, a Reset/Save button row, and a THIRD row below that for
-          search/group/sort — four stacked blocks, 300px+ before a single
-          transaction was visible. Collapsed into one row: the filters
-          people actually reach for stay inline as compact controls; the six
-          rarely-touched ones (payment mode, wing, date range, amount range,
-          group-by) move into a slide-over Drawer instead of permanently
-          reserving page height for them. */}
-      <div style={{
-        display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8,
-        padding: "10px 12px", marginBottom: 14, borderRadius: 10,
-        background: "var(--r-surface)", border: "1px solid var(--r-border)",
-      }}>
-        <div style={{ position: "relative", flex: "1 1 200px", minWidth: 180 }}>
-          <Icon name="search" size={14} color="var(--r-fg-4)" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)" }} />
-          <input
-            type="text"
-            placeholder="Search transactions…"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{
-              width: "100%", padding: "7px 10px 7px 30px", borderRadius: 7, fontSize: 12.5,
-              border: "1px solid var(--r-border)", background: "var(--r-surface-2)", color: "var(--r-fg-1)",
-            }}
-          />
-        </div>
-        <div style={{ width: 190 }}>
+        <div style={{ width: 240 }}>
           <Select
+            inputId="ledger-member"
+            aria-label="Flat"
             options={memberOptions}
             value={memberOptions.find((opt) => opt.value === filters.memberId)}
             onChange={(option) => handleFilterChange("memberId", option?.value || "all")}
-            placeholder="Member"
+            placeholder="All flats"
             isClearable
             isSearchable
-            styles={{
-              control: (base) => ({ ...base, minHeight: 32, fontSize: 12.5 }),
-              valueContainer: (base) => ({ ...base, padding: "0 8px" }),
-              indicatorsContainer: (base) => ({ ...base, height: 32 }),
-              menu: (base) => ({ ...base, zIndex: 9999, fontSize: 12.5 }),
-            }}
+            styles={selectTheme}
           />
         </div>
+        <RSelectNative value={filters.type} onChange={(v) => handleFilterChange("type", v)} options={[["all", "Debits and credits"], ["Debit", "Debits only"], ["Credit", "Credits only"]]} label="Entry type" />
+        <RSelectNative value={filters.balanceStatus} onChange={(v) => handleFilterChange("balanceStatus", v)} options={[["all", "Any balance"], ["arrears", "Owes (Dr)"], ["credit", "In advance (Cr)"], ["zero", "Settled"]]} label="Balance" />
+        <Btn size="sm" variant="secondary" icon="sliders-horizontal" onClick={() => setShowAdvancedFilters(true)}>
+          More filters{advancedFilterCount ? ` (${advancedFilterCount})` : ""}
+        </Btn>
+        {anyFilter && <Btn size="sm" variant="ghost" onClick={resetFilters}>Clear filters</Btn>}
+        <Btn
+          size="sm"
+          variant="ghost"
+          icon="bookmark-plus"
+          onClick={async () => {
+            const name = await notify.prompt("Name this view", "", { title: "Save view" });
+            if (name) saveCurrentView(name);
+          }}
+        >
+          Save view
+        </Btn>
+      </div>
+
+      {savedViews.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+          <span style={{ fontSize: 13, color: "var(--r-fg-4)", marginRight: 4 }}>Saved views</span>
+          {savedViews.map((view, idx) => (
+            <span key={`${view.name}-${idx}`} style={{ display: "inline-flex", alignItems: "center", border: "1px solid var(--r-border)", borderRadius: "8px", background: "var(--r-surface)", overflow: "hidden" }}>
+              <button type="button" onClick={() => loadSavedView(view)} style={{ border: "none", background: "none", padding: "5px 10px", fontSize: 13, color: "var(--r-fg-1)", cursor: "pointer", fontFamily: "inherit" }}>{view.name}</button>
+              <button type="button" onClick={() => deleteSavedView(idx)} aria-label={`Delete saved view ${view.name}`} style={{ border: "none", borderLeft: "1px solid var(--r-border)", background: "none", padding: "5px 7px", color: "var(--r-fg-4)", cursor: "pointer", display: "flex" }}>
+                <Icon name="x" size={12} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
         {[
-          { value: filters.category, onChange: (v) => handleFilterChange("category", v), options: [["all", "All Categories"], ["Maintenance", "Maintenance"], ["Payment", "Payment"], ["Interest", "Interest"], ["Adjustment", "Adjustment"], ["Opening Balance", "Opening Balance"], ["Refund", "Refund"], ["Fine", "Fine"]] },
-          { value: filters.type, onChange: (v) => handleFilterChange("type", v), options: [["all", "All Types"], ["Debit", "Debit"], ["Credit", "Credit"]] },
-          { value: filters.balanceStatus, onChange: (v) => handleFilterChange("balanceStatus", v), options: [["all", "Any Balance"], ["arrears", "Arrears (DR)"], ["credit", "Credit (CR)"], ["zero", "Zero Balance"]] },
-        ].map((f, i) => (
-          <select
-            key={i}
-            value={f.value}
-            onChange={(e) => f.onChange(e.target.value)}
+          { value: "all", label: "All entries", count: filters.category === "all" ? (ledgerData?.transactions?.length || 0) : undefined },
+          ...["Maintenance", "Payment", "Interest", "Adjustment", "Opening Balance", "Refund", "Fine"]
+            .filter((c) => filters.category === c || categoryCounts[c])
+            .map((c) => ({ value: c, label: c === "Opening Balance" ? "Opening balance" : c, count: filters.category === "all" ? categoryCounts[c] || 0 : undefined })),
+        ].map((c) => (
+          <button
+            key={c.value}
+            type="button"
+            onClick={() => handleFilterChange("category", c.value)}
             style={{
-              padding: "7px 8px", borderRadius: 7, fontSize: 12.5,
-              border: "1px solid var(--r-border)", background: "var(--r-surface-2)", color: "var(--r-fg-1)",
+              padding: "5px 10px", borderRadius: 999, fontSize: 12.5, cursor: "pointer",
+              border: filters.category === c.value ? "1px solid var(--r-brand)" : "1px solid var(--r-border)",
+              background: filters.category === c.value ? "var(--r-brand-soft, var(--r-surface-3))" : "var(--r-surface)",
+              color: "var(--r-fg-1)",
             }}
           >
-            {f.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
+            {c.label}{c.count != null ? ` (${c.count})` : ""}
+          </button>
         ))}
-        <div style={{ display: "flex", gap: 4, marginLeft: "auto" }}>
-          <Btn size="sm" icon="filter" onClick={() => setShowAdvancedFilters(true)}>
-            More filters{advancedFilterCount ? ` (${advancedFilterCount})` : ""}
-          </Btn>
-          <Btn size="sm" icon="rotate-ccw" title="Reset all filters" onClick={resetFilters} />
-          <Btn
-            size="sm"
-            icon="bookmark-plus"
-            title="Save current view"
-            onClick={async () => {
-              const name = await notify.prompt("Enter a name for this view:");
-              if (name) { setNewViewName(name); saveCurrentView(); }
-            }}
-          />
-        </div>
       </div>
+
+      {!isLoading && (
+        <div style={{ fontSize: 13, color: "var(--r-fg-4)" }}>
+          {searchTerm || anyFilter || selectedMember
+            ? <>Showing <strong>{shown.length}</strong> of {plural(totalEntries, "entry", "entries")}{searchTerm ? <> matching "{searchTerm}"</> : null}</>
+            : <><strong>{plural(totalEntries, "entry", "entries")}</strong>{totalPages > 1 ? `, ${shown.length} on this page` : ""}</>}
+          {shown.length > 0 && <> · <strong>{fullMoney(shownDebit)}</strong> debited · <strong>{fullMoney(shownCredit)}</strong> credited</>}
+        </div>
+      )}
+
+      {isLoading ? (
+        <RevampSkeleton h={420} />
+      ) : shown.length === 0 ? (
+        <div style={{ padding: "36px 24px", textAlign: "center", border: "1px solid var(--r-border)", borderRadius: 12 }}>
+          <p style={{ fontSize: 13.5, color: "var(--r-fg-4)" }}>
+            {anyFilter || searchTerm
+              ? <>No entries match {searchTerm ? <>"{searchTerm}"</> : "these filters"}.</>
+              : selectedMember ? "This flat has no entries yet." : "No ledger entries yet. They appear as bills are generated and payments recorded."}
+          </p>
+          {anyFilter || selectedMember ? <Btn variant="secondary" onClick={resetFilters} style={{ marginTop: 10 }}>Clear filters</Btn> : null}
+        </div>
+      ) : (
+        <>
+          <DataTable cols={cols} rows={shown} rowKey="_id" tableId="ledger" hotkeys onRowClick={(t) => fetchTransactionDetails(t._id)} />
+          {totalPages > 1 && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end" }}>
+              <Btn size="sm" variant="secondary" icon="chevron-left" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Previous</Btn>
+              <span style={{ fontSize: 13, color: "var(--r-fg-4)" }}>Page {page} of {totalPages}</span>
+              <Btn size="sm" variant="secondary" iconR="chevron-right" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Next</Btn>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Analysis — only what has data */}
+      {!isLoading && (interestAnalytics.totalInterest > 0 || paymentAnalytics.totalPayments > 0) && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 20 }}>
+          {interestAnalytics.totalInterest > 0 && (
+            <div style={{ border: "1px solid var(--r-border)", borderRadius: 12, padding: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--r-fg-1)" }}>Interest entries</div>
+              <div style={{ fontSize: 12.5, color: "var(--r-fg-4)", marginBottom: 12 }}>
+                {fullMoney(interestAnalytics.totalInterest)} across {plural(interestAnalytics.interestCount, "entry", "entries")} in this view
+              </div>
+              <div style={{ display: "grid", gap: 6 }}>
+                {interestRows.map((r) => (
+                  <div key={r.label} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                    <span style={{ color: "var(--r-fg-3)" }}>{r.label}</span>
+                    <span className="revamp-num">{fullMoney(r.value)}</span>
+                  </div>
+                ))}
+              </div>
+              {interestAnalytics.topInterestPayers.length > 1 && (
+                <div style={{ marginTop: 20 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--r-fg-4)", marginBottom: 10 }}>Most interest, by flat</div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {interestAnalytics.topInterestPayers.slice(0, 5).map((it) => (
+                      <div key={it.member?._id || Math.random()} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                        <span style={{ color: "var(--r-fg-3)" }}>{`${flatLabel(it.member?.wing, it.member?.flatNo)} ${properName(it.member?.ownerName || "")}`.trim()}</span>
+                        <span className="revamp-num">{fullMoney(it.totalInterest)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {paymentAnalytics.totalPayments > 0 && (
+            <div style={{ border: "1px solid var(--r-border)", borderRadius: 12, padding: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--r-fg-1)" }}>How members paid</div>
+              <div style={{ fontSize: 12.5, color: "var(--r-fg-4)", marginBottom: 12 }}>
+                {fullMoney(paymentAnalytics.totalPayments)} of payments in this view
+              </div>
+              <div style={{ display: "grid", gap: 6 }}>
+                {modeSegments.filter((s) => s.value > 0).map((s) => (
+                  <div key={s.label} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                    <span style={{ color: "var(--r-fg-3)" }}>{s.label}</span>
+                    <span className="revamp-num">{fullMoney(s.value)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <Drawer
         open={showAdvancedFilters}
         onClose={() => setShowAdvancedFilters(false)}
         title="More filters"
-        sub="Payment mode, wing, date range, amount range, sorting"
+        sub="Payment mode, wing, dates, amounts and sorting"
         width={380}
       >
         <div style={{ display: "grid", gap: 16 }}>
-          <div>
-            <SectionLabel icon="credit-card">Payment mode</SectionLabel>
-            <select value={filters.paymentMode} onChange={(e) => handleFilterChange("paymentMode", e.target.value)} className="input" style={{ width: "100%" }}>
-              <option value="all">All Modes</option>
-              <option value="Cash">Cash</option>
-              <option value="Cheque">Cheque</option>
-              <option value="Online">Online</option>
-              <option value="UPI">UPI</option>
-              <option value="NEFT">NEFT</option>
-              <option value="RTGS">RTGS</option>
-              <option value="System">System</option>
+          <FilterField label="Payment mode">
+            <select value={filters.paymentMode} onChange={(e) => handleFilterChange("paymentMode", e.target.value)} className="input">
+              <option value="all">All modes</option>
+              {["Cash", "Cheque", "Online", "UPI", "NEFT", "RTGS", "System"].map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
-          </div>
-          <div>
-            <SectionLabel icon="building-2">Wing</SectionLabel>
-            <select value={filters.wing} onChange={(e) => handleFilterChange("wing", e.target.value)} className="input" style={{ width: "100%" }}>
-              <option value="all">All Wings</option>
-              <option value="A">A</option>
-              <option value="B">B</option>
-              <option value="C">C</option>
+          </FilterField>
+          <FilterField label="Wing">
+            <select value={filters.wing} onChange={(e) => handleFilterChange("wing", e.target.value)} className="input">
+              <option value="all">All wings</option>
+              {wings.map((w) => <option key={w} value={w}>{w}</option>)}
             </select>
-          </div>
-          <div>
-            <SectionLabel icon="calendar">Month / year</SectionLabel>
+          </FilterField>
+          <FilterField label="Bill month">
             <div style={{ display: "flex", gap: 8 }}>
               <select value={filters.month} onChange={(e) => handleFilterChange("month", e.target.value)} className="input" style={{ flex: 1 }}>
-                <option value="">All Months</option>
-                {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((m, idx) => (
-                  <option key={idx} value={idx + 1}>{m}</option>
-                ))}
+                <option value="">Any month</option>
+                {MONTHS.map((m, idx) => <option key={m} value={idx + 1}>{m}</option>)}
               </select>
               <select value={filters.year} onChange={(e) => handleFilterChange("year", e.target.value)} className="input" style={{ flex: 1 }}>
-                <option value="">All Years</option>
-                {[2025, 2024, 2023, 2022, 2021].map((year) => <option key={year} value={year}>{year}</option>)}
+                <option value="">Any year</option>
+                {yearsBack.map((year) => <option key={year} value={year}>{year}</option>)}
               </select>
             </div>
-          </div>
-          <div>
-            <SectionLabel icon="calendar-range">Date range</SectionLabel>
+          </FilterField>
+          <FilterField label="Date range">
             <div style={{ display: "flex", gap: 8 }}>
-              <input type="date" value={filters.startDate} onChange={(e) => handleFilterChange("startDate", e.target.value)} className="input" style={{ flex: 1 }} />
-              <input type="date" value={filters.endDate} onChange={(e) => handleFilterChange("endDate", e.target.value)} className="input" style={{ flex: 1 }} />
+              <input type="date" aria-label="From" value={filters.startDate} onChange={(e) => handleFilterChange("startDate", e.target.value)} className="input" style={{ flex: 1 }} />
+              <input type="date" aria-label="To" value={filters.endDate} onChange={(e) => handleFilterChange("endDate", e.target.value)} className="input" style={{ flex: 1 }} />
             </div>
-          </div>
-          <div>
-            <SectionLabel icon="indian-rupee">Amount range</SectionLabel>
+          </FilterField>
+          <FilterField label="Amount range">
             <div style={{ display: "flex", gap: 8 }}>
-              <input type="number" value={filters.minAmount} onChange={(e) => handleFilterChange("minAmount", e.target.value)} placeholder="Min" className="input" style={{ flex: 1 }} />
-              <input type="number" value={filters.maxAmount} onChange={(e) => handleFilterChange("maxAmount", e.target.value)} placeholder="Max" className="input" style={{ flex: 1 }} />
+              <input type="number" value={filters.minAmount} onChange={(e) => handleFilterChange("minAmount", e.target.value)} placeholder="Minimum" className="input" style={{ flex: 1 }} />
+              <input type="number" value={filters.maxAmount} onChange={(e) => handleFilterChange("maxAmount", e.target.value)} placeholder="Maximum" className="input" style={{ flex: 1 }} />
             </div>
-          </div>
-          <div>
-            <SectionLabel icon="layers">Group by</SectionLabel>
-            <select value={groupBy} onChange={(e) => setGroupBy(e.target.value)} className="input" style={{ width: "100%" }}>
-              <option value="">None</option>
-              <option value="member">Member</option>
-              <option value="category">Category</option>
-              <option value="date">Month</option>
-            </select>
-          </div>
-          <div>
-            <SectionLabel icon="arrow-up-down">Sort by</SectionLabel>
+          </FilterField>
+          <FilterField label="Sort by">
             <div style={{ display: "flex", gap: 8 }}>
               <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="input" style={{ flex: 1 }}>
                 <option value="date">Date</option>
                 <option value="amount">Amount</option>
-                <option value="member">Member</option>
+                <option value="member">Flat</option>
               </select>
-              <Btn
-                icon={sortOrder === "asc" ? "arrow-up" : "arrow-down"}
-                onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-              />
+              <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="input" style={{ flex: 1 }}>
+                <option value="desc">Newest / largest first</option>
+                <option value="asc">Oldest / smallest first</option>
+              </select>
             </div>
-          </div>
-          <Btn variant="primary" onClick={() => setShowAdvancedFilters(false)}>Apply</Btn>
+          </FilterField>
+          <Btn variant="primary" onClick={() => setShowAdvancedFilters(false)}>Show entries</Btn>
         </div>
       </Drawer>
-      {/* ========== LEDGER TRANSACTIONS — card grid ==========
-          A 12-column table used to be the only view: fine for precision,
-          brutal for 80+ rows of vertical scroll. Cards match the
-          view-members/view-bills pattern elsewhere in the app — each one
-          still opens the same full transaction-detail modal on click, so
-          nothing that lived in the table's extra columns (recorded by,
-          bill period, FY, audit trail) is gone, just one tap deeper. */}
-      <div className={styles.contentCard}>
-        {isLoading ? (
-          // Skeleton cards in the exact grid the real cards render in — a
-          // small spinner centered in an otherwise blank 4rem-padded box
-          // read as "there's nothing here," not "this is loading," for the
-          // 1-2s a fetch takes. Shape-matched skeletons don't have that gap.
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 12 }}>
-            {Array.from({ length: 12 }).map((_, i) => <RevampSkeleton key={i} h={132} />)}
-          </div>
-        ) : !filteredTransactions || filteredTransactions.length === 0 ? (
-          <div className={ledgerStyles.noData} style={{ padding: "4rem" }}>
-            <Icon name="inbox" size={40} color="var(--r-fg-5)" style={{ display: "block", margin: "0 auto 1rem" }} />
-            <p
-              style={{
-                fontSize: "1.25rem",
-                fontWeight: "600",
-                color: "var(--fg-3)",
-                marginBottom: "0.5rem",
-              }}
-            >
-              No transactions found
-            </p>
-            <p style={{ fontSize: "0.875rem", color: "var(--fg-4)" }}>
-              Try adjusting your filters or search term
-            </p>
-          </div>
-        ) : (
-          <>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))",
-                gap: 12,
-              }}
-            >
-              {filteredTransactions.map((txn) => {
-                const catColor =
-                  txn.category === "Interest" ? "var(--r-danger)"
-                  : txn.category === "Payment" ? "var(--r-success)"
-                  : txn.category === "Maintenance" ? "var(--r-brand)"
-                  : "var(--r-fg-5)";
-                const flatLabel = txn.memberId
-                  ? [txn.memberId.wing, txn.memberId.flatNo].filter(Boolean).join("-") || "Flat —"
-                  : null;
-                return (
-                  <div
-                    key={txn._id}
-                    onClick={() => fetchTransactionDetails(txn._id)}
-                    title={txn.category}
-                    style={{
-                      display: "flex", flexDirection: "column", gap: 8,
-                      padding: "12px 14px", borderRadius: 10, cursor: "pointer",
-                      background: "var(--r-surface)", border: "1px solid var(--r-border)",
-                      // Category reads as a slim color strip on the card, not
-                      // a repeated icon or word — with 84 cards mostly the
-                      // same category, drawing "Maintenance" (or an icon
-                      // standing in for it) on every single one was noise;
-                      // a color still tells them apart at a glance, and the
-                      // full word is one click away in the detail modal.
-                      borderTop: `3px solid ${catColor}`,
-                      transition: "border-color 0.15s, transform 0.15s, box-shadow 0.15s",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = "translateY(-1px)";
-                      e.currentTarget.style.boxShadow = "var(--r-shadow-pop)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = "translateY(0)";
-                      e.currentTarget.style.boxShadow = "none";
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                      {txn.memberId ? (
-                        <>
-                          <Avatar name={txn.memberId.ownerName} size={30} />
-                          <div style={{ minWidth: 0, flex: 1 }}>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--r-fg-1)" }}>{flatLabel}</div>
-                            <div style={{
-                              fontSize: 11.5, color: "var(--r-fg-4)",
-                              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                            }}>{txn.memberId.ownerName}</div>
-                          </div>
-                        </>
-                      ) : (
-                        <div style={{ display: "flex", alignItems: "center", gap: 9, flex: 1 }}>
-                          <div style={{
-                            width: 30, height: 30, borderRadius: 999, flexShrink: 0,
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            background: "var(--r-surface-3)", color: "var(--r-fg-4)",
-                          }}>
-                            <Icon name="building-2" size={14} />
-                          </div>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--r-fg-2)" }}>Society-level</div>
-                        </div>
-                      )}
-                      <span style={{ fontSize: 11, color: "var(--r-fg-4)", whiteSpace: "nowrap", flexShrink: 0 }}>
-                        {new Date(txn.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
-                      </span>
-                    </div>
-                    <div style={{
-                      fontSize: 11.5, color: "var(--r-fg-3)", lineHeight: 1.4,
-                      display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
-                    }}>
-                      {txn.description || "—"}
-                    </div>
-                    <div style={{
-                      display: "flex", justifyContent: "flex-end", alignItems: "baseline", gap: 6,
-                      marginTop: 2, paddingTop: 8, borderTop: "1px solid var(--r-hairline)",
-                    }}>
-                      <div style={{
-                        fontSize: 14, fontWeight: 700,
-                        color: txn.type === "Debit" ? "var(--r-danger)" : "var(--r-success)",
-                      }}>
-                        {txn.type === "Debit" ? "−" : "+"}₹{txn.amount.toLocaleString("en-IN")}
-                      </div>
-                      <div style={{ fontSize: 10, color: "var(--r-fg-4)" }}>
-                        · bal ₹{Math.abs(txn.balanceAfterTransaction).toLocaleString("en-IN")}{" "}
-                        {txn.balanceAfterTransaction < 0 ? "DR" : "CR"}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {/* Pagination */}
-            <div className={ledgerStyles.pagination}>
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-              >
-                ← Previous
-              </button>
-              <span>
-                Page {page} of {ledgerData?.summary?.totalPages || 1} (
-                {filteredTransactions.length} transactions)
-              </span>
-              <button
-                onClick={() => setPage((p) => p + 1)}
-                disabled={page >= (ledgerData?.summary?.totalPages || 1)}
-              >
-                Next →
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-      {/* ========== TRANSACTION DETAIL MODAL ========== */}
+
+      {/* ========== ENTRY DETAIL ========== */}
       {(() => {
         const t = selectedTransaction?.transaction;
         if (!t) return null;
         const isDebit = t.type === "Debit";
-        const amountColor = isDebit ? "var(--r-danger)" : "var(--r-success)";
-        const catTone =
-          t.category === "Interest" ? { bg: "var(--danger-bg)", fg: "var(--danger-fg)" }
-          : t.category === "Payment" ? { bg: "var(--success-bg)", fg: "var(--success-fg)" }
-          : { bg: "var(--info-bg)", fg: "var(--info)" };
         const field = (label, value) => value ? (
           <div>
-            <div style={{ fontSize: 10.5, fontWeight: 600, color: "var(--r-fg-4)", textTransform: "uppercase", letterSpacing: 0.4 }}>{label}</div>
-            <div style={{ fontSize: 13, color: "var(--r-fg-1)", marginTop: 3 }}>{value}</div>
+            <div style={{ fontSize: 13, color: "var(--r-fg-4)" }}>{label}</div>
+            <div style={{ fontSize: 14, color: "var(--r-fg-1)", marginTop: 2 }}>{value}</div>
           </div>
         ) : null;
         return (
-          <Modal open={showDetailModal} onClose={() => setShowDetailModal(false)} title="Transaction Details" width={560}>
-            {/* Receipt-style header: the number that matters, first and biggest */}
-            <div style={{ textAlign: "center", paddingBottom: 18, borderBottom: "1px solid var(--r-hairline)" }}>
-              <span style={{
-                display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700,
-                padding: "3px 10px", borderRadius: 999, background: catTone.bg, color: catTone.fg, marginBottom: 10,
-              }}>
-                <Icon name={CATEGORY_ICON[t.category] || "circle"} size={11} /> {t.category}
-              </span>
-              <div className="revamp-num" style={{ fontSize: 34, fontWeight: 700, color: amountColor, letterSpacing: "-0.02em" }}>
-                {isDebit ? "−" : "+"}₹{t.amount.toLocaleString("en-IN")}
+          <Modal open={showDetailModal} onClose={() => setShowDetailModal(false)} title={`${t.category} · ${t.transactionId || ""}`} width={560}>
+            <div style={{ paddingBottom: 18, borderBottom: "1px solid var(--r-border)" }}>
+              <div style={{ fontSize: 13, color: "var(--r-fg-4)" }}>{isDebit ? "Charged to the flat (debit)" : "Paid by the member (credit)"}</div>
+              <div className="revamp-num" style={{ fontSize: 32, fontWeight: 600, color: "var(--r-fg-1)", letterSpacing: "-0.02em", marginTop: 2 }}>
+                {fullMoney(t.amount)} <span style={{ fontSize: 16, color: "var(--r-fg-4)", fontWeight: 500 }}>{isDebit ? "Dr" : "Cr"}</span>
               </div>
-              <div style={{ fontSize: 12.5, color: "var(--r-fg-4)", marginTop: 4 }}>
-                Balance after: ₹{Math.abs(t.balanceAfterTransaction).toLocaleString("en-IN")}{" "}
-                {t.balanceAfterTransaction < 0 ? "DR" : "CR"}
+              <div style={{ fontSize: 13.5, color: "var(--r-fg-3)", marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                Flat balance after this entry: {balanceCell(t.balanceAfterTransaction)}
               </div>
             </div>
 
             {t.memberId ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "16px 0", borderBottom: "1px solid var(--r-hairline)" }}>
-                <Avatar name={t.memberId.ownerName} size={36} />
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--r-fg-1)" }}>{t.memberId.wing}-{t.memberId.flatNo}</div>
-                  <div style={{ fontSize: 12, color: "var(--r-fg-4)" }}>
-                    {(() => {
-                      const area = t.memberId.carpetAreaSqft ?? t.memberId.builtUpAreaSqft;
-                      return <>{t.memberId.ownerName}{area ? ` · ${area} sq.ft` : ""}{t.memberId.contactNumber ? ` · ${t.memberId.contactNumber}` : ""}</>;
-                    })()}
-                  </div>
+              <div style={{ padding: "14px 0", borderBottom: "1px solid var(--r-border)" }}>
+                <div style={{ fontSize: 14.5, fontWeight: 600, color: "var(--r-fg-1)" }}>{flatLabel(t.memberId.wing, t.memberId.flatNo)}</div>
+                <div style={{ fontSize: 13, color: "var(--r-fg-4)" }}>
+                  {properName(t.memberId.ownerName)}
+                  {(t.memberId.carpetAreaSqft ?? t.memberId.builtUpAreaSqft) ? `, ${t.memberId.carpetAreaSqft ?? t.memberId.builtUpAreaSqft} sq ft` : ""}
+                  {t.memberId.contactNumber ? `, ${t.memberId.contactNumber}` : ""}
                 </div>
               </div>
             ) : null}
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, padding: "16px 0", borderBottom: "1px solid var(--r-hairline)" }}>
-              {field("Transaction ID", <span style={{ fontFamily: "ui-monospace, monospace" }}>{t.transactionId}</span>)}
-              {field("Date & time", new Date(t.date).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }))}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, padding: "16px 0", borderBottom: "1px solid var(--r-border)" }}>
+              {field("Date", formatDateTime(t.date))}
               {field("Payment mode", t.paymentMode)}
               {field("Bill period", t.billPeriodId)}
               {field("Financial year", t.financialYear)}
-              {field("Recorded by", t.createdBy ? `${t.createdBy.name} (${t.createdBy.role})` : null)}
+              {field("Recorded by", t.createdBy ? `${t.createdBy.name}${t.createdBy.role ? `, ${t.createdBy.role}` : ""}` : null)}
             </div>
 
             {t.description ? (
-              <div style={{ padding: "14px 0", borderBottom: "1px solid var(--r-hairline)", fontSize: 13, color: "var(--r-fg-2)", lineHeight: 1.6 }}>
-                {t.description}
-              </div>
+              <p style={{ padding: "14px 0", borderBottom: "1px solid var(--r-border)", fontSize: 14, color: "var(--r-fg-3)", lineHeight: 1.6, margin: 0 }}>{t.description}</p>
             ) : null}
 
-            {/* Billing Breakdown */}
             {selectedTransaction.breakdown?.length > 0 && (
               <div style={{ paddingTop: 16 }}>
-                <SectionLabel icon="receipt">Billing breakdown</SectionLabel>
-                <div style={{ display: "grid", gap: 1, borderRadius: 10, overflow: "hidden", border: "1px solid var(--r-hairline)" }}>
-                  {selectedTransaction.breakdown.map((item, idx) => (
-                    <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 12px", background: "var(--r-surface-2)" }}>
-                      <div>
-                        <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--r-fg-1)" }}>{item.headName}</div>
-                        <div style={{ fontSize: 11, color: "var(--r-fg-4)" }}>{item.calculationType}</div>
-                      </div>
-                      <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--r-fg-2)" }}>₹{item.amount.toLocaleString("en-IN")}</div>
-                    </div>
-                  ))}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", background: "var(--r-surface)" }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--r-fg-1)" }}>Total</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "var(--r-fg-1)" }}>
-                      ₹{selectedTransaction.breakdown.reduce((sum, item) => sum + item.amount, 0).toLocaleString("en-IN")}
-                    </div>
-                  </div>
-                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--r-fg-1)", marginBottom: 8 }}>Charges on this bill</div>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+                  <tbody>
+                    {selectedTransaction.breakdown.map((item, idx) => (
+                      <tr key={idx} style={{ borderBottom: "1px solid var(--r-border)" }}>
+                        <td style={{ padding: "8px 0" }}>
+                          <div style={{ color: "var(--r-fg-1)" }}>{item.headName}</div>
+                          {item.calculationType && <div style={{ fontSize: 12.5, color: "var(--r-fg-4)" }}>{item.calculationType}</div>}
+                        </td>
+                        <td style={{ padding: "8px 0", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fullMoney(item.amount)}</td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td style={{ padding: "10px 0", fontWeight: 600 }}>Total</td>
+                      <td style={{ padding: "10px 0", textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                        {fullMoney(selectedTransaction.breakdown.reduce((sum, item) => sum + item.amount, 0))}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             )}
 
-            {/* Audit Trail */}
             {selectedTransaction.auditTrail?.length > 0 && (
               <div style={{ paddingTop: 16 }}>
-                <SectionLabel icon="history">Audit trail</SectionLabel>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--r-fg-1)", marginBottom: 8 }}>History</div>
                 <div style={{ display: "grid", gap: 10 }}>
                   {selectedTransaction.auditTrail.map((log, idx) => (
-                    <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                    <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, fontSize: 13.5 }}>
                       <div>
-                        <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--r-fg-2)" }}>{log.action}</div>
-                        <div style={{ fontSize: 11.5, color: "var(--r-fg-4)", marginTop: 1 }}>by {log.user?.name} ({log.user?.role})</div>
+                        <div style={{ color: "var(--r-fg-1)" }}>{log.action}</div>
+                        <div style={{ fontSize: 12.5, color: "var(--r-fg-4)" }}>by {log.user?.name}{log.user?.role ? `, ${log.user.role}` : ""}</div>
                       </div>
-                      <div style={{ fontSize: 11, color: "var(--r-fg-5)", whiteSpace: "nowrap" }}>{new Date(log.timestamp).toLocaleString("en-IN")}</div>
+                      <div style={{ fontSize: 12.5, color: "var(--r-fg-4)", whiteSpace: "nowrap" }}>{formatDateTime(log.timestamp)}</div>
                     </div>
                   ))}
                 </div>
@@ -997,5 +784,30 @@ export default function UltraAdvancedLedgerPage() {
         );
       })()}
     </div>
+  );
+}
+
+function FilterField({ label, children }) {
+  return (
+    <div>
+      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--r-fg-3)", marginBottom: 6 }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function RSelectNative({ value, onChange, options, label }) {
+  return (
+    <select
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{
+        height: 32, padding: "0 10px", borderRadius: 8, fontSize: 13, fontFamily: "inherit",
+        border: "1px solid var(--r-border-strong)", background: "var(--r-surface-3)", color: "var(--r-fg-1)",
+      }}
+    >
+      {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+    </select>
   );
 }

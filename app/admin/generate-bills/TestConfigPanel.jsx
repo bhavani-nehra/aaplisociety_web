@@ -76,10 +76,10 @@ export default function TestConfigPanel({ members, periodLabel, onSaved }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Save failed");
       const recalcNote = data.billRecalculated ? ` · Bill ${periodLabel} updated` : "";
-      setMsg(`✅ Saved: ${data.member.wing}-${data.member.flatNo}${recalcNote}`);
+      setMsg(`Saved: ${data.member.wing}-${data.member.flatNo}${recalcNote}`);
       onSaved?.();
     } catch (e) {
-      setMsg(`❌ ${e.message}`);
+      setMsg(`${e.message}`);
     } finally {
       setSaving(false);
     }
@@ -111,7 +111,7 @@ export default function TestConfigPanel({ members, periodLabel, onSaved }) {
         }}
       >
         <span>{open ? "▼" : "▶"}</span>
-        🧪 Test Config Panel — edit member parking &amp; carpet area instantly
+        Test Config Panel — edit member parking &amp; carpet area instantly
       </button>
       {open && (
         <div
@@ -278,7 +278,7 @@ export default function TestConfigPanel({ members, periodLabel, onSaved }) {
                     onClick={() => removeSlot(i)}
                     style={{
                       background: "var(--danger)",
-                      color: "#fff",
+                      color: "var(--on-solid)",
                       border: "none",
                       borderRadius: 4,
                       padding: "2px 8px",
@@ -302,7 +302,7 @@ export default function TestConfigPanel({ members, periodLabel, onSaved }) {
                   onClick={addSlot}
                   style={{
                     background: "var(--warning)",
-                    color: "#fff",
+                    color: "var(--on-solid)",
                     border: "none",
                     borderRadius: 6,
                     padding: "6px 14px",
@@ -329,7 +329,7 @@ export default function TestConfigPanel({ members, periodLabel, onSaved }) {
                     disabled={saving}
                     style={{
                       background: "var(--success)",
-                      color: "#fff",
+                      color: "var(--on-solid)",
                       border: "none",
                       borderRadius: 6,
                       padding: "6px 18px",
@@ -338,14 +338,14 @@ export default function TestConfigPanel({ members, periodLabel, onSaved }) {
                       fontWeight: 600,
                     }}
                   >
-                    {saving ? "Saving…" : "💾 Save"}
+                    {saving ? "Saving…" : "Save"}
                   </button>
                 </div>
                 {msg && (
                   <span
                     style={{
                       fontSize: "0.85rem",
-                      color: msg.startsWith("✅") ? "var(--success-fg)" : "var(--danger-fg)",
+                      color: msg.startsWith("") ? "var(--success-fg)" : "var(--danger-fg)",
                     }}
                   >
                     {msg}

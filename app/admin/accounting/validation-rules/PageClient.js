@@ -51,7 +51,7 @@ import {
 const TARGETS = {
   "/accounting/chart-of-accounts": "/admin/accounting/chart-of-accounts",
   "/accounting/fiscal-config": "/admin/accounting/setup",
-  "/accounting/trial-balance": "/admin/other-statements",
+  "/accounting/trial-balance": "/admin/accounting/statements?tab=trial-balance",
 };
 
 /** Severity, in the order someone should read them. */
@@ -205,10 +205,12 @@ export default function ValidationRulesPage() {
         </Card>
       ) : (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 18 }}>
-            <SmallStat icon="shield-check" label="Checks active" value={activeCount} />
-            <SmallStat icon="alert-triangle" label="Can stop a statement" value={blockingCount} />
-            <SmallStat icon="list-ordered" label="Checks in total" value={rules.length} />
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+              <SmallStat icon="shield-check" label="Checks active" value={activeCount} />
+              <SmallStat icon="alert-triangle" label="Can stop a statement" value={blockingCount} />
+              <SmallStat icon="list-ordered" label="Checks in total" value={rules.length} />
+            </div>
           </div>
 
           {runResults ? (
@@ -265,8 +267,8 @@ export default function ValidationRulesPage() {
                         {r.isActive === false ? <Pill tone="expired">switched off</Pill> : null}
                         {outcome ? (
                           outcome.passed
-                            ? <Pill tone="paid">✅ passed</Pill>
-                            : <Pill tone="overdue">🔴 failed{outcome.count ? ` — ${outcome.count}` : ""}</Pill>
+                            ? <Pill tone="paid">passed</Pill>
+                            : <Pill tone="overdue">failed{outcome.count ? ` — ${outcome.count}` : ""}</Pill>
                         ) : null}
                       </div>
                       {r.helpText ? (

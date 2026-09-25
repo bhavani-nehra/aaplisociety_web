@@ -31,7 +31,7 @@ import { useRouter } from "next/navigation";
 import notify from "@/lib/notify";
 import {
   PageHeader, SectionLabel, Card, Pill, Btn, Icon,
-  EmptyState, RevampSkeleton, SmallStat, ToggleSwitch,
+  EmptyState, RevampSkeleton, ToggleSwitch, SmallStat,
 } from "@/components/revamp";
 
 /** Same five groups, same glosses, as the account-heads page. */
@@ -250,9 +250,9 @@ export default function SchedulesPage() {
         </Card>
       ) : (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 18 }}>
-            <SmallStat icon="table" label="Headings" value={schedules.length} />
-            <SmallStat icon="book-open" label="Heads placed" value={activeAccounts.length - unassigned.length} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 20 }}>
+            <SmallStat icon="layers" label="Headings" value={schedules.length} />
+            <SmallStat icon="check-circle" label="Heads placed" value={activeAccounts.length - unassigned.length} />
             <SmallStat icon="alert-triangle" label="Heads with no heading" value={unassigned.length} />
           </div>
 
@@ -422,7 +422,7 @@ function FormatSide({ heading, categories, byCategory, headsByCode, setVisible, 
     <div style={{ border: "1px solid var(--r-hairline)", borderRadius: 12, overflow: "hidden" }}>
       <div style={{
         padding: "10px 14px", background: "var(--r-surface-2)", borderBottom: "1px solid var(--r-hairline)",
-        fontSize: 12.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.4px", color: "var(--r-fg-2)",
+        fontSize: 12.5, fontWeight: 700, color: "var(--r-fg-2)",
       }}>
         {heading}
       </div>

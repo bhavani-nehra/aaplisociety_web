@@ -1,0 +1,165 @@
+/* Money screens — shared look for the Overview board and the band above each
+   Money list. Colours follow the app theme (navy #1e3a8a, accent #6b8eef;
+   dark: canvas #0b0b0f, surface #131318, brand #7c9cf7). No pure white or
+   pure black anywhere. Dark mode follows the app's [data-theme] switch. */
+
+.mn {
+  --mn-canvas: #eef2fb;
+  --mn-card: #fbfcff;
+  --mn-card-2: #f3f6fd;
+  --mn-ink: #0f1d44;
+  --mn-sub: #5b6788;
+  --mn-faint: #8d97b3;
+  --mn-line: #e3e9f7;
+  --mn-navy: #1e3a8a;
+  --mn-navy-2: #16307a;
+  --mn-navy-deep: #0f2263;
+  --mn-accent: #6b8eef;
+  --mn-accent-2: #93b0f5;
+  --mn-accent-3: #c7d4fa;
+  --mn-tint: #e6ecfd;
+  --mn-on-navy: #f5f8ff;
+  --mn-on-navy-sub: #b9c8f3;
+  --mn-on-navy-line: rgba(245, 248, 255, 0.14);
+  --mn-ok: #0f9d6e;
+  --mn-ok-bg: #e3f6ee;
+  --mn-bad: #d64545;
+  --mn-bad-bg: #fdecec;
+  --mn-warn: #c9800a;
+  --mn-warn-bg: #fdf3e0;
+  --mn-shadow: 0 1px 2px rgba(30, 58, 138, 0.05), 0 6px 18px -10px rgba(30, 58, 138, 0.22);
+  --mn-radius: 22px;
+  color: var(--mn-ink);
+  font-variant-numeric: tabular-nums;
+}
+:root[data-theme="dark"] .mn {
+  --mn-canvas: #0b0b0f;
+  --mn-card: #131318;
+  --mn-card-2: #1a1a21;
+  --mn-ink: #eceef6;
+  --mn-sub: #a2aac2;
+  --mn-faint: #6f7791;
+  --mn-line: #24242c;
+  --mn-navy: #1c2b62;
+  --mn-navy-2: #18265a;
+  --mn-navy-deep: #111a3f;
+  --mn-accent: #7c9cf7;
+  --mn-accent-2: #5f7fd8;
+  --mn-accent-3: #33447a;
+  --mn-tint: rgba(124, 156, 247, 0.14);
+  --mn-on-navy: #eef2ff;
+  --mn-on-navy-sub: #a9b8e6;
+  --mn-on-navy-line: rgba(238, 242, 255, 0.12);
+  --mn-ok: #34c38f;
+  --mn-ok-bg: rgba(52, 195, 143, 0.13);
+  --mn-bad: #f07171;
+  --mn-bad-bg: rgba(240, 113, 113, 0.13);
+  --mn-warn: #f0b04a;
+  --mn-warn-bg: rgba(240, 176, 74, 0.13);
+  --mn-shadow: 0 1px 2px rgba(3, 5, 12, 0.5), 0 8px 22px -12px rgba(3, 5, 12, 0.8);
+}
+
+/* layout */
+.mn-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; }
+.mn-band { margin-bottom: 18px; }
+.mn-s3 { grid-column: span 3; } .mn-s4 { grid-column: span 4; } .mn-s5 { grid-column: span 5; }
+.mn-s6 { grid-column: span 6; } .mn-s7 { grid-column: span 7; } .mn-s8 { grid-column: span 8; }
+.mn-s9 { grid-column: span 9; } .mn-s12 { grid-column: span 12; }
+@media (max-width: 1100px) {
+  .mn-s3 { grid-column: span 6; } .mn-s4, .mn-s5, .mn-s7, .mn-s8, .mn-s9 { grid-column: span 12; } .mn-s6 { grid-column: span 12; }
+}
+@media (max-width: 640px) { .mn-s3 { grid-column: span 12; } .mn-grid { gap: 10px; } }
+
+/* cards */
+.mn-card {
+  background: var(--mn-card); border: 1px solid var(--mn-line); border-radius: var(--mn-radius);
+  padding: 18px; box-shadow: var(--mn-shadow); position: relative; overflow: hidden; min-width: 0;
+}
+.mn-card.tight { padding: 14px 16px; }
+.mn-dk {
+  background: linear-gradient(155deg, var(--mn-navy) 0%, var(--mn-navy-deep) 100%);
+  color: var(--mn-on-navy); border: 1px solid var(--mn-on-navy-line); border-radius: var(--mn-radius);
+  padding: 18px; position: relative; overflow: hidden; min-width: 0;
+  box-shadow: 0 10px 26px -18px rgba(15, 34, 99, 0.7);
+}
+.mn-dk .mn-lbl, .mn-dk .mn-sub { color: var(--mn-on-navy-sub); }
+.mn-dk .mn-num { color: var(--mn-on-navy); }
+.mn-orb { position: absolute; border-radius: 50%; pointer-events: none; background: radial-gradient(circle, rgba(147, 176, 245, 0.28), rgba(147, 176, 245, 0) 70%); }
+
+/* type */
+.mn-lbl { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mn-sub); font-weight: 650; }
+.mn-num { font-weight: 300; letter-spacing: -0.025em; color: var(--mn-navy); line-height: 1.05; }
+:root[data-theme="dark"] .mn .mn-card .mn-num { color: var(--mn-ink); }
+.mn-sub { font-size: 11.5px; color: var(--mn-sub); }
+.mn-faint { color: var(--mn-faint); }
+.mn-h { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.mn-row { display: flex; align-items: center; gap: 10px; }
+
+/* chips + buttons */
+.mn-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 650; padding: 2px 9px; border-radius: 99px; background: var(--mn-ok-bg); color: var(--mn-ok); white-space: nowrap; }
+.mn-chip.bad { background: var(--mn-bad-bg); color: var(--mn-bad); }
+.mn-chip.warn { background: var(--mn-warn-bg); color: var(--mn-warn); }
+.mn-chip.mute { background: var(--mn-tint); color: var(--mn-navy); }
+:root[data-theme="dark"] .mn .mn-chip.mute { color: var(--mn-accent); }
+.mn-dk .mn-chip.mute { background: rgba(245, 248, 255, 0.12); color: var(--mn-on-navy); }
+.mn-btn { border: 0; border-radius: 99px; padding: 7px 14px; font-size: 12px; font-weight: 650; cursor: pointer; background: var(--mn-tint); color: var(--mn-navy); display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+:root[data-theme="dark"] .mn .mn-btn { color: var(--mn-accent); }
+.mn-btn.solid { background: var(--mn-navy); color: var(--mn-on-navy); }
+:root[data-theme="dark"] .mn .mn-btn.solid { background: var(--mn-accent); color: #0e1633; }
+.mn-dk .mn-btn { background: rgba(245, 248, 255, 0.12); color: var(--mn-on-navy); }
+.mn-dk .mn-btn.solid { background: var(--mn-on-navy); color: var(--mn-navy); }
+.mn-btn:focus-visible, .mn-tab:focus-visible, .mn-pick:focus-visible { outline: 2px solid var(--mn-accent); outline-offset: 2px; }
+.mn-link { background: none; border: 0; padding: 0; color: var(--mn-accent); font-size: 12px; font-weight: 650; cursor: pointer; text-decoration: none; }
+
+/* segmented tabs inside a card */
+.mn-tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 99px; background: var(--mn-card-2); border: 1px solid var(--mn-line); }
+.mn-tab { border: 0; background: transparent; color: var(--mn-sub); font-size: 12px; font-weight: 650; padding: 6px 12px; border-radius: 99px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.mn-tab.on { background: var(--mn-navy); color: var(--mn-on-navy); }
+:root[data-theme="dark"] .mn .mn-tab.on { background: var(--mn-accent); color: #0e1633; }
+.mn-tab .n { font-size: 10.5px; padding: 0 6px; border-radius: 99px; background: var(--mn-tint); color: var(--mn-navy); }
+.mn-tab.on .n { background: rgba(245, 248, 255, 0.2); color: inherit; }
+
+/* list with a detail panel (overview only) */
+.mn-list { display: grid; gap: 6px; align-content: start; grid-auto-rows: min-content; }
+.mn-pick { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 10px; border-radius: 14px; border: 1px solid transparent; background: transparent; text-align: left; cursor: pointer; color: inherit; width: 100%; font: inherit; }
+.mn-pick:hover { background: var(--mn-card-2); }
+.mn-pick.on { background: var(--mn-tint); border-color: var(--mn-accent-3); }
+.mn-av { width: 34px; height: 34px; border-radius: 12px; display: grid; place-items: center; font-size: 11.5px; font-weight: 750; background: var(--mn-tint); color: var(--mn-navy); flex-shrink: 0; }
+:root[data-theme="dark"] .mn .mn-av { color: var(--mn-accent); }
+.mn-dk .mn-av { background: rgba(245, 248, 255, 0.14); color: var(--mn-on-navy); }
+.mn-ell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* stat line inside a dark panel */
+.mn-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 10px; }
+.mn-kv > div { background: rgba(245, 248, 255, 0.08); border: 1px solid var(--mn-on-navy-line); border-radius: 14px; padding: 10px 12px; }
+
+/* charts */
+.mn-svg { display: block; width: 100%; overflow: visible; }
+.mn-tip { position: absolute; pointer-events: none; transform: translate(-50%, -110%); background: var(--mn-ink); color: var(--mn-card); font-size: 11px; font-weight: 600; padding: 5px 8px; border-radius: 8px; white-space: nowrap; z-index: 3; }
+.mn-dk .mn-tip { background: var(--mn-on-navy); color: var(--mn-navy); }
+.mn-bar-h { height: 8px; border-radius: 99px; background: var(--mn-card-2); overflow: hidden; }
+.mn-bar-h > i { display: block; height: 100%; border-radius: 99px; background: var(--mn-accent); }
+.mn-dk .mn-bar-h { background: rgba(245, 248, 255, 0.1); }
+.mn-dk .mn-bar-h > i { background: var(--mn-on-navy-sub); }
+.mn-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--mn-sub); }
+.mn-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 3px; margin-right: 5px; vertical-align: 0; }
+.mn-empty { display: grid; place-items: center; text-align: center; color: var(--mn-faint); font-size: 12px; padding: 18px 8px; border: 1px dashed var(--mn-line); border-radius: 14px; }
+.mn-dk .mn-empty { color: var(--mn-on-navy-sub); border-color: var(--mn-on-navy-line); }
+.mn-skel { border-radius: var(--mn-radius); background: linear-gradient(90deg, var(--mn-card-2), var(--mn-tint), var(--mn-card-2)); background-size: 200% 100%; animation: mn-sh 1.3s linear infinite; }
+@keyframes mn-sh { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .mn-skel { animation: none; } }
+
+/* receipt slips (receipts band) */
+.mn-slip { position: relative; background: var(--mn-card); border: 1px solid var(--mn-line); border-radius: 16px; padding: 14px 16px 12px; min-width: 0; }
+.mn-slip::before, .mn-slip::after { content: ""; position: absolute; top: 58%; width: 16px; height: 16px; border-radius: 50%; background: var(--mn-canvas); border: 1px solid var(--mn-line); }
+.mn-slip::before { left: -9px; } .mn-slip::after { right: -9px; }
+.mn-slip .cut { border-top: 1.5px dashed var(--mn-line); margin: 10px -16px 10px; }
+
+/* passbook month tiles */
+.mn-tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 760px) { .mn-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.mn-tile { border-radius: 14px; padding: 9px 10px; border: 1px solid var(--mn-on-navy-line); background: rgba(245, 248, 255, 0.07); min-width: 0; }
+.mn-tile.paid { background: rgba(52, 195, 143, 0.16); border-color: rgba(52, 195, 143, 0.35); }
+.mn-tile.part { background: rgba(240, 176, 74, 0.16); border-color: rgba(240, 176, 74, 0.35); }
+.mn-tile.owe { background: rgba(240, 113, 113, 0.16); border-color: rgba(240, 113, 113, 0.38); }
+.mn-tile.none { opacity: 0.55; }

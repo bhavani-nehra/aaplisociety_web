@@ -63,7 +63,7 @@ const BTN = {
   padding: "10px 20px",
   borderRadius: 8,
   background: "var(--accent)",
-  color: "#fff",
+  color: "var(--on-solid)",
   fontSize: 13.5,
   fontWeight: 600,
   textDecoration: "none",
@@ -148,7 +148,7 @@ function Strip({ next, except, dismissed, onDismiss }) {
   if (dismissed || !next || (except && next.key === except)) return null;
   return (
     <div style={STRIP}>
-      <span aria-hidden="true">⚠</span>
+      <span aria-hidden="true"></span>
       <span style={{ flex: 1 }}>
         <strong>Still to do: {next.label}.</strong>{" "}
         {next.detail}{" "}

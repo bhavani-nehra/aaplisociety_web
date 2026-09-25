@@ -17,11 +17,12 @@
 import { Suspense, useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader, Tabs, Icon, RevampSkeleton } from "@/components/revamp";
-import GenerateStatementsScreen from "../../generate-statements/PageClient";
-import IncomeExpenditureScreen from "../../income-expenditure/PageClient";
-import AssetsLiabilitiesScreen from "../../assets-liabilities/PageClient";
-import OtherStatementsScreen from "../../other-statements/PageClient";
+import GenerateStatementsScreen from "./FullPackScreen";
+import IncomeExpenditureScreen from "./IncomeExpenditureScreen";
+import AssetsLiabilitiesScreen from "./BalanceSheetScreen";
+import OtherStatementsScreen from "./TrialBalanceScreen";
 import YearEndClose from "./YearEndClose";
+import YearEndSheets from "@/components/accounting/YearEndSheets";
 
 // Labels were wrong before this fix: "generate" is the flagship live-build
 // page — Income, Expenditure, Assets, Liabilities AND Validation typed out
@@ -30,6 +31,7 @@ import YearEndClose from "./YearEndClose";
 // is the "assets-liabilities" tab. Both were labeled backwards, which sent
 // anyone clicking "Balance Sheet" to the wrong screen.
 const TABS = [
+  { key: "print", label: "Print & Save", icon: "printer" },
   { key: "generate", label: "Full Statement Pack", icon: "file-text" },
   { key: "income-expenditure", label: "Income & Expenditure", icon: "trending-up" },
   { key: "assets-liabilities", label: "Balance Sheet", icon: "scale" },
@@ -41,7 +43,7 @@ export function StatementsWorkspace({ initialTab, showHeader = true, basePath = 
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromUrl = searchParams.get("tab");
-  const [tab, setTab] = useState(TABS.some((t) => t.key === (initialTab || fromUrl)) ? (initialTab || fromUrl) : "generate");
+  const [tab, setTab] = useState(TABS.some((t) => t.key === (initialTab || fromUrl)) ? (initialTab || fromUrl) : "print");
 
   const changeTab = useCallback((key) => {
     setTab(key);
@@ -52,12 +54,13 @@ export function StatementsWorkspace({ initialTab, showHeader = true, basePath = 
     <div style={{ maxWidth: 1280, margin: showHeader ? "0 auto" : 0 }}>
       {showHeader ? (
         <PageHeader
-          eyebrow={<><Icon name="file-text" size={11} /> Was four separate pages</>}
-          title="Statements"
-          sub="The statutory statements your auditor's report is built from."
+          eyebrow={<><Icon name="file-text" size={11} /> Year-end sheets</>}
+          title="Balance Sheet & I&E"
+          sub="Both sheets as they print, the full statement pack, the Books check and the year-end close."
         />
       ) : null}
       <Tabs value={tab} onChange={changeTab} tabs={TABS} />
+      {tab === "print" ? <YearEndSheets /> : null}
       {tab === "generate" ? <GenerateStatementsScreen /> : null}
       {tab === "income-expenditure" ? <IncomeExpenditureScreen /> : null}
       {tab === "assets-liabilities" ? <AssetsLiabilitiesScreen /> : null}

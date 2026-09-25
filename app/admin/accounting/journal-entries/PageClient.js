@@ -226,11 +226,13 @@ function JournalEntriesBody() {
         </Card>
       ) : (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 18 }}>
-            <SmallStat icon="book-open" label="Counted in the books" value={totals.counted} />
-            <SmallStat icon="arrow-down" label="Debit total" value={money(totals.debit)} />
-            <SmallStat icon="arrow-up" label="Credit total" value={money(totals.credit)} />
-            <SmallStat icon="rotate-ccw" label="Reversed" value={totals.reversed} />
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+              <SmallStat icon="book-open" label="Counted in the books" value={totals.counted} />
+              <SmallStat icon="arrow-down" label="Debit total" value={money(totals.debit)} />
+              <SmallStat icon="arrow-up" label="Credit total" value={money(totals.credit)} />
+              <SmallStat icon="rotate-ccw" label="Reversed" value={totals.reversed} />
+            </div>
           </div>
 
           {/* ── the one number that means something ─────────────────── */}

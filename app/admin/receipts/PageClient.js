@@ -1,6 +1,8 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import ReceiptsBand from "@/components/money/ReceiptsBand";
 // ── helpers ────────────────────────────────────────────────────────────────
 const fmt = (n) =>
   "₹" +
@@ -421,6 +423,7 @@ function MissingReceiptsBar() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["receipt-gaps"] });
       queryClient.invalidateQueries({ queryKey: ["bill-receipts"] });
+      queryClient.invalidateQueries({ queryKey: ["money-insights"] });
     },
   });
   if (isLoading || !data?.count) return null;
@@ -460,7 +463,7 @@ function MissingReceiptsBar() {
           borderRadius: 6,
           border: "none",
           background: "var(--danger)",
-          color: "#fff",
+          color: "var(--on-solid)",
           fontWeight: 700,
           fontSize: "0.82rem",
           cursor: fixMutation.isPending ? "default" : "pointer",
@@ -473,6 +476,13 @@ function MissingReceiptsBar() {
   );
 }
 export default function ReceiptsPage() {
+  // The print modal below is position:fixed; DashboardLayout.js's
+  // .contentFrame sets backdrop-filter, which becomes the containing block
+  // for fixed descendants — so without a portal the modal was fixed to that
+  // scrolled content box, not the real viewport. `mounted` keeps the portal
+  // call out of the SSR pass.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const [tab, setTab] = useState("bills"); // "bills" | "transactional"
   const [selectedFY, setSelectedFY] = useState(currentFY());
   // For bill receipts: member filter
@@ -617,7 +627,7 @@ export default function ReceiptsPage() {
     fontSize: "11px",
     color: "var(--fg-4)",
     fontWeight: 700,
-    textTransform: "uppercase",
+    
     letterSpacing: "0.04em",
     background: "var(--bg-canvas)",
     borderBottom: "1px solid var(--border)",
@@ -663,6 +673,7 @@ export default function ReceiptsPage() {
           </p>
         </div>
       </div>
+      <ReceiptsBand fy={selectedFY} />
       <MissingReceiptsBar />
       {/* Tabs */}
       <div
@@ -992,8 +1003,8 @@ export default function ReceiptsPage() {
                 }}
               >
                 No entries for FY {selectedFY}–{selectedFY + 1}.{" "}
-                <a href="/admin/balance-sheet" style={{ color: "var(--accent)" }}>
-                  Add entries in Balance Sheet →
+                <a href="/admin/accounting/statements?tab=print" style={{ color: "var(--accent)" }}>
+                  Open the year-end sheets →
                 </a>
               </div>
             ) : (
@@ -1084,7 +1095,7 @@ export default function ReceiptsPage() {
         </div>
       )}
       {/* ── PRINT MODAL ── */}
-      {printing && (
+      {printing && mounted && createPortal(
         <div
           style={{
             position: "fixed",
@@ -1229,7 +1240,8 @@ export default function ReceiptsPage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

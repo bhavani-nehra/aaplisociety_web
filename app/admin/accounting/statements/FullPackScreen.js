@@ -6,10 +6,10 @@
 // Assets → Liabilities → Trial Balance/Validation), never a spinner-then-dump.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Icon from "../../../components/accounting/generate/Icon";
-import { PageHeader, FySelect, Btn, EmptyState } from "../../../components/accounting/generate/PageHeader";
+import Icon from "@/components/accounting/generate/Icon";
+import { PageHeader, FySelect, Btn, EmptyState } from "@/components/accounting/generate/PageHeader";
 import { NoFinancialYear, SetupAdvisory } from "@/components/accounting/SetupGate";
-import { useFinancialYears } from "../../../components/accounting/generate/useFinancialYears";
+import { useFinancialYears } from "@/components/accounting/generate/useFinancialYears";
 import {
   fmtINR,
   MoneyRow,
@@ -18,10 +18,10 @@ import {
   SectionCard,
   Banner,
   HealthGauge,
-} from "../../../components/accounting/generate/Primitives";
-import { PrintArea } from "../../../components/accounting/generate/PrintArea";
-import { useSocietyName } from "../../../components/accounting/generate/useSocietyName";
-import StatutoryStatements from "../../../components/accounting/StatutoryStatements";
+} from "@/components/accounting/generate/Primitives";
+import { PrintArea } from "@/components/accounting/generate/PrintArea";
+import { useSocietyName } from "@/components/accounting/generate/useSocietyName";
+import StatutoryStatements from "@/components/accounting/StatutoryStatements";
 import notify from "@/lib/notify";
 
 const STEPS = [
@@ -245,7 +245,7 @@ export default function GenerateStatementsScreen() {
           </SectionCard>
           {bannerUnit && (
             <div style={{ background: "var(--bg-surface)", borderRadius: 12, border: "1px solid var(--border)", boxShadow: "0 2px 4px rgba(0,0,0,0.05)", padding: 24, textAlign: "center", animation: "acctFadeUp 0.4s ease" }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--fg-4)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 14 }}>Accounting Health Score</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--fg-4)", marginBottom: 14 }}>Accounting Health Score</div>
               <HealthGauge score={data.health.healthScore} />
             </div>
           )}

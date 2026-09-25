@@ -7,12 +7,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Icon from "../../../components/accounting/generate/Icon";
-import { PageHeader, FySelect, Btn, EmptyState } from "../../../components/accounting/generate/PageHeader";
+import Icon from "@/components/accounting/generate/Icon";
+import { PageHeader, FySelect, Btn, EmptyState } from "@/components/accounting/generate/PageHeader";
 import { NoFinancialYear, SetupAdvisory } from "@/components/accounting/SetupGate";
-import { useFinancialYears } from "../../../components/accounting/generate/useFinancialYears";
-import { Banner, HealthGauge } from "../../../components/accounting/generate/Primitives";
-import { AccordionItem } from "../../../components/accounting/generate/Accordion";
+import { useFinancialYears } from "@/components/accounting/generate/useFinancialYears";
+import { Banner, HealthGauge } from "@/components/accounting/generate/Primitives";
+import { AccordionItem } from "@/components/accounting/generate/Accordion";
 
 async function fetchJSON(url) {
   const res = await fetch(url, { credentials: "include" });
@@ -51,7 +51,7 @@ export default function OtherStatementsScreen() {
         right={
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <FySelect years={years} value={financialYearId} onChange={setFinancialYearId} />
-            <Btn variant="secondary" onClick={() => router.push("/admin/generate-statements")}>
+            <Btn variant="secondary" onClick={() => router.push("/admin/accounting/statements?tab=generate")}>
               <Icon name="zap" size={14} /> Watch it generate live
             </Btn>
           </div>
@@ -110,7 +110,7 @@ export default function OtherStatementsScreen() {
                                     onClick={() => router.push(fc.navigationTarget)}
                                     style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 6, background: "var(--primary)", border: "none", borderRadius: 7, padding: "5px 12px", fontSize: 12, fontWeight: 600, color: "#fff", cursor: "pointer", fontFamily: "inherit" }}
                                   >
-                                    Go fix it <Icon name="arrow-right" size={12} />
+                                    Go fix it
                                   </button>
                                 )}
                               </div>
@@ -134,7 +134,7 @@ export default function OtherStatementsScreen() {
             {passedComponents.length > 0 && (
               <div style={{ padding: failedComponents.length > 0 ? "10px 18px 12px" : "4px 18px 12px" }}>
                 {failedComponents.length > 0 && (
-                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.4px", color: "var(--fg-5)", margin: "8px 0 6px" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--fg-5)", margin: "8px 0 6px" }}>
                     Passed ({passedComponents.length})
                   </div>
                 )}
@@ -151,7 +151,7 @@ export default function OtherStatementsScreen() {
           </div>
 
           <div style={{ background: "var(--bg-surface)", borderRadius: 12, border: "1px solid var(--border)", boxShadow: "0 2px 4px rgba(0,0,0,0.05)", padding: 24, textAlign: "center" }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--fg-4)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 14 }}>Accounting Health Score</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--fg-4)", marginBottom: 14 }}>Accounting Health Score</div>
             <HealthGauge score={dashboard.healthScore} />
             <div style={{ fontSize: 12, color: "var(--fg-5)", marginTop: 12 }}>Weighted across Trial Balance, validation checks, reconciliation and closing readiness.</div>
           </div>

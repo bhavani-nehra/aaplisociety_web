@@ -87,14 +87,12 @@ export async function GET(request) {
       });
     }
     // ✅ Sum from bill components (set at generation + updated at payment)
-    const totalPrincipalOutstanding = unpaidBills.reduce(
-      (s, b) => s + (b.principalBalance || 0),
-      0,
-    );
-    const totalInterestOutstanding = unpaidBills.reduce(
-      (s, b) => s + (b.interestBalance || 0),
-      0,
-    );
+    // Every bill opens on the previous bill's closing, so the NEWEST open bill
+    // already holds everything owed. Summing all of them showed a member three
+    // months behind roughly three times what they really owe.
+    const newestOpen = unpaidBills[unpaidBills.length - 1];
+    const totalPrincipalOutstanding = newestOpen.principalBalance || 0;
+    const totalInterestOutstanding = newestOpen.interestBalance || 0;
     const totalOutstanding = parseFloat(
       (totalPrincipalOutstanding + totalInterestOutstanding).toFixed(2),
     );

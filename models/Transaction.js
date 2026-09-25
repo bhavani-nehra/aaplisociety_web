@@ -98,10 +98,30 @@ const TransactionSchema = new mongoose.Schema(
       principalCleared: { type: Number, default: 0 },
       advanceCredit: { type: Number, default: 0 },
     },
+    // How this payment was spread over the member's bills, kept so it can be
+    // reversed exactly (lib/services/PaymentReversalService.js). Absent on
+    // payments recorded before this existed.
+    allocations: {
+      type: [
+        new mongoose.Schema(
+          {
+            billId: { type: mongoose.Schema.Types.ObjectId },
+            interestCleared: { type: Number, default: 0 },
+            principalCleared: { type: Number, default: 0 },
+            attributed: { type: Number, default: 0 },
+          },
+          { _id: false },
+        ),
+      ],
+      default: undefined,
+    },
     paymentMode: {
       type: String,
       enum: ["Cash", "Cheque", "Online", "UPI", "NEFT", "RTGS", "System"],
     },
+    // Collection-sheet commit key: one sheet submission = one token, so a
+    // double-click or retry finds the first run's rows and does not post twice.
+    commitToken: { type: String },
     // Top-level payment fields (used by record route)
     chequeNo: { type: String },
     bankName: { type: String },
@@ -140,6 +160,7 @@ const TransactionSchema = new mongoose.Schema(
 TransactionSchema.index({ societyId: 1, memberId: 1, date: -1 });
 TransactionSchema.index({ societyId: 1, category: 1, date: -1 });
 TransactionSchema.index({ societyId: 1, financialYear: 1 });
+TransactionSchema.index({ societyId: 1, commitToken: 1 }, { sparse: true });
 TransactionSchema.statics.generateTransactionId = function () {
   const timestamp = Date.now().toString(36).toUpperCase();
   const random = Math.random().toString(36).substring(2, 8).toUpperCase();

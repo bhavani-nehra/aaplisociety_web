@@ -15,6 +15,7 @@ import AuditReport from "@/models/AuditReport";
 import mongoose from "mongoose";
 import { validateAdminRequest } from "@/lib/admin-middleware";
 import { validateBillInvariants } from "@/lib/billing/invariants";
+import { buildHistoricalBillFields } from "@/lib/billing/historicalBill";
 export async function POST(request) {
   const authResult = validateAdminRequest(request);
   if (!authResult?.valid) return authResult;
@@ -117,54 +118,28 @@ export async function POST(request) {
         balanceAmount: 0,
         charges: chargesObj,
       });
-      const bill = new Bill({
-        societyId: sid,
-        memberId: member._id,
-        billPeriodId: b.periodId,
-        billMonth,
-        billYear,
-        openingPrincipal,
-        openingInterest,
-        currentCharges,
-        currentInterest,
-        billPrincipalBalance: billPrincipal,
-        billInterestBalance: billInterest,
-        totalBillDue,
-        closingPrincipal,
-        closingInterest,
-        closingTotal: closingPrincipal + closingInterest,
-        previousBalance: openingPrincipal + openingInterest,
-        previousPrincipal: openingPrincipal,
-        previousInterest: openingInterest,
-        monthInterest: currentInterest,
-        interestAmount: currentInterest,
-        principalBalance: 0,
-        interestBalance: 0,
-        totalAmount: totalBillDue,
-        amountPaid: totalBillDue, // treat as fully settled — debt is in openingPrincipal
-        advanceApplied: advanceCredit,
-        balanceAmount: 0,
-        charges,
-        status,
-        dueDate,
-        importedFrom: "BulkImport",
-        // Not produced by GenerationService — a pre-validated paper-record
-        // import, so it's explicitly marked outside the Ledger V2 engine
-        // versioning (which only describes engine-computed bills).
-        calculationVersion: 0,
-        engineVersion: "Legacy Import",
-        isLocked: true,
-        isHistoricalArchive: true,
-        importedFinancialYear,
-        importBatchId: batchId,
-        importMetadata: {
-          fileName: "BillHistory",
-          uploadedAt: new Date(),
-          rowNumber: 0,
-          validationStatus: "Valid",
-        },
-        notes: b.Remarks || "",
-      });
+      const bill = new Bill(
+        buildHistoricalBillFields({
+          societyId: sid,
+          memberId: member._id,
+          periodId: b.periodId,
+          billMonth,
+          billYear,
+          importedFinancialYear,
+          dueDate,
+          charges,
+          openingPrincipal,
+          openingInterest,
+          currentCharges,
+          currentInterest,
+          billPrincipal,
+          billInterest,
+          totalBillDue,
+          advanceCredit,
+          batchId,
+          remarks: b.Remarks || "",
+        }),
+      );
       await bill.save();
       created.push({ periodId: b.periodId, wingFlat, billId: bill._id });
     } catch (err) {

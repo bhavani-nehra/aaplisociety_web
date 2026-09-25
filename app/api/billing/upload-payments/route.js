@@ -13,12 +13,11 @@ import { getFinancialYear } from "@/lib/date-utils";
 import { parseXlsxSafely, neutralizeCell, worksheetToJson } from "@/lib/excelParse";
 import crypto from "node:crypto";
 import cache from "@/lib/cache";
-import { applyPaymentToBill } from "@/lib/billing/allocationService";
+import { recordPayment, PaymentServiceError } from "@/lib/services/PaymentService";
 import { notifyPaymentReceived } from "@/lib/v1/notify";
 import { mapLimit } from "@/lib/concurrency";
 import { ndjsonResponse } from "@/lib/ndjson-stream";
 import { authorize } from "@/lib/rbac/authorize";
-import { postPaymentToLedger } from "@/lib/accounting/paymentLedgerPosting";
 
 // Confirm was previously one sequential `for` loop over every payment row —
 // for 84 rows at several Mongo round trips each (member/bill lookups,
@@ -393,101 +392,63 @@ export async function POST(request) {
 
         const balanceBefore = twoDp(bill.balanceAmount);
 
-        // ALL allocation math + audit + advance credit happen inside the
-        // engine, atomically and idempotently (keyed on billId + importId).
-        const result = await applyPaymentToBill({
-          billId: bill._id,
-          payment: twoDp(row.amountPaid),
-          paymentImportId: importRecord._id,
-          performedBy: dec.userId,
-        });
-
-        if (result.skipped) {
-          return {
-            kind: "skipped",
-            entry: {
-              memberId: row.memberId,
-              flat: row.flat,
-              memberName: row.memberName,
-              amountPaid: row.amountPaid,
-              status: "Skipped",
-              errorMessage: `Skipped (${result.skipped})`,
-            },
-          };
-        }
-
-        // The Excel confirmation is the finalization step: allocation just
-        // happened (status is now Paid/Partial), so clear any prior
-        // "Payment Done" acknowledgement marker on this bill.
-        await Bill.updateOne({ _id: bill._id }, { $set: { pendingPayment: null } });
-        const intClr = twoDp(result.interestPaid);
-        const prinClr = twoDp(result.principalPaid);
-        const advanceCredit = twoDp(result.advanceCredit);
-
-        // Ledger transaction — created ONLY when a payment was actually
-        // applied, so duplicates/retries never create duplicate transactions.
-        const lastTxn = await Transaction.findOne({
-          memberId: row.memberId,
-          societyId: dec.societyId,
-          isReversed: false,
-        })
-          .sort({ date: -1, createdAt: -1 })
-          .lean();
-        const prevBal = twoDp(
-          lastTxn?.balanceAfterTransaction ?? member.openingBalance ?? 0,
-        );
-        const newBal = twoDp(prevBal - row.amountPaid);
-        const txnId = Transaction.generateTransactionId();
-        const paymentTxn = await Transaction.create({
-          transactionId: txnId,
-          date: new Date(row.paymentDate),
-          memberId: row.memberId,
-          societyId: dec.societyId,
-          type: "Credit",
-          category: "Payment",
-          description: `Payment via Excel for ${row.billPeriodId}${row.remarks ? ` - ${row.remarks}` : ""}`,
-          amount: row.amountPaid,
-          interestCleared: intClr,
-          principalCleared: prinClr,
-          balanceAfterTransaction: newBal,
-          paymentMode: row.paymentMethod || "Cash",
-          chequeNo: row.chequeNo,
-          bankName: row.bankName,
-          upiId: row.upiId,
-          notes: row.remarks,
-          createdBy: dec.userId,
-          billPeriodId: row.billPeriodId,
-          financialYear: getFinancialYear(new Date(row.paymentDate)),
-          paymentImportId: importRecord._id,
-          paymentBreakdown: { interestCleared: intClr, principalCleared: prinClr, advanceCredit },
-        });
-
-        // This route never posted to the accounting ledger at all — same
-        // gap as collection-sheet/commit (fixed 2026-08-30). Every bulk
-        // Excel payment import (the main way an admin records a full
-        // month's collections at once) went straight to Bill/Transaction/
-        // Receipt and skipped Accounting entirely: no Cash/Bank debit, no
-        // Member Receivable credit, ever, for any society using this
-        // upload. Fail-soft — the payment itself already succeeded and
-        // must not be undone by a downstream ledger issue — but no longer
-        // silent: /admin/accounting/vouchers surfaces the gap via
-        // /api/admin/accounting/ledger-gaps the same way missing receipts
-        // do on /admin/receipts.
-        const amountApplied = twoDp(intClr + prinClr);
-        let ledgerFailed = false;
+        // Member-level allocator (lib/services/PaymentService.js#recordPayment):
+        // interest-first across every open bill, overpayment to advanceCredit,
+        // the ledger Transaction with its running balance and the Journal
+        // Entry, all in one Mongo transaction. This route used to allocate
+        // against this one bill only, write the Transaction itself and post
+        // the ledger afterwards outside any transaction. Re-uploading the same
+        // file is still blocked by the PaymentImport content hash above.
+        let recorded;
         try {
-          await postPaymentToLedger(dec.societyId, {
-            transaction: paymentTxn,
+          recorded = await recordPayment({
+            memberId: String(row.memberId),
+            societyId: String(dec.societyId),
+            amount: twoDp(row.amountPaid),
             paymentMode: row.paymentMethod || "Cash",
             paymentDate: row.paymentDate,
-            appliedToDues: amountApplied,
-            advance: advanceCredit,
+            chequeNo: row.chequeNo,
+            bankName: row.bankName,
+            upiId: row.upiId,
+            notes: `Excel upload for ${row.billPeriodId}${row.remarks ? ` - ${row.remarks}` : ""}`,
             actorUserId: dec.userId,
+            actorRole: dec.role,
           });
         } catch (err) {
-          ledgerFailed = true;
-          console.error(`upload-payments: postPaymentToLedger failed for txn ${txnId}:`, err.message);
+          if (err instanceof PaymentServiceError) {
+            return {
+              kind: "skipped",
+              entry: {
+                memberId: row.memberId,
+                flat: row.flat,
+                memberName: row.memberName,
+                amountPaid: row.amountPaid,
+                status: "Skipped",
+                errorMessage: err.message,
+              },
+            };
+          }
+          throw err;
         }
+
+        const txnId = recorded.transaction.transactionId;
+        await Transaction.updateOne(
+          { societyId: dec.societyId, transactionId: txnId },
+          { $set: { billPeriodId: row.billPeriodId, financialYear: getFinancialYear(new Date(row.paymentDate)) } },
+        );
+        const paymentTxn = await Transaction.findOne({ societyId: dec.societyId, transactionId: txnId }).select("_id paymentBreakdown").lean();
+
+        // The Excel confirmation is the finalization step: allocation just
+        // happened, so clear any prior "Payment Done" acknowledgement marker.
+        await Bill.updateOne({ _id: bill._id }, { $set: { pendingPayment: null } });
+        const bd = paymentTxn?.paymentBreakdown || {};
+        const intClr = twoDp(bd.interestCleared);
+        const prinClr = twoDp(bd.principalCleared);
+        const advanceCredit = twoDp(bd.advanceCredit);
+        const amountApplied = twoDp(twoDp(row.amountPaid) - advanceCredit);
+        const ledgerFailed = false;
+        const after = await Bill.findById(bill._id).select("balanceAmount").lean();
+        const result = { balanceAmount: twoDp(after?.balanceAmount) };
 
         // Receipt for the bill touched.
         const receiptNos = [];

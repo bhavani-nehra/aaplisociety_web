@@ -30,8 +30,8 @@ export async function GET(request) {
         .select("billYear billMonth")
         .lean(),
       Bill.findOne({ societyId: decoded.societyId })
-        .sort({ billYear: -1 })
-        .select("billYear")
+        .sort({ billYear: -1, billMonth: -1 })
+        .select("billYear billMonth")
         .lean(),
     ]);
     const now = new Date();
@@ -39,6 +39,7 @@ export async function GET(request) {
       minYear: minDoc?.billYear || now.getFullYear(),
       minMonth: minDoc ? minDoc.billMonth + 1 : 1, // billMonth is 0-indexed → convert to 1-12
       maxYear: maxDoc?.billYear || now.getFullYear(),
+      maxMonth: maxDoc ? maxDoc.billMonth + 1 : now.getMonth() + 1, // latest billed month, 1-12
     };
     await cache.set(cacheKey, responseData, 300);
     return NextResponse.json(responseData);

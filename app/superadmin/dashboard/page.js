@@ -14,6 +14,7 @@
 // blank one: somebody acts on it.
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import notify from "@/lib/notify";
@@ -577,8 +578,11 @@ function PaymentDialog({ society, suggested, busy, onClose, onSubmit }) {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState("");
   const [txnId, setTxnId] = useState("");
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
 
-  return (
+  return createPortal(
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 70, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "min(420px, 100%)", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 14, padding: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 16 }}>
@@ -618,7 +622,8 @@ function PaymentDialog({ society, suggested, busy, onClose, onSubmit }) {
           </Btn>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

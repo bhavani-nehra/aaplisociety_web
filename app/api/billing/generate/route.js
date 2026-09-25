@@ -9,6 +9,7 @@ import { verifyToken, getTokenFromRequest } from "@/lib/jwt";
 import cache from "@/lib/cache";
 import { generateBill } from "@/lib/billing/generationService";
 import { applyPaymentToBill } from "@/lib/billing/allocationService";
+import { postAdvanceAppliedToLedger } from "@/lib/accounting/advanceLedgerPosting";
 import renderBillHtml from "@/lib/bill-renderer";
 import { isCommercialUnit } from "@/lib/commercial/constants";
 import { authorize } from "@/lib/rbac/authorize";
@@ -153,8 +154,8 @@ export async function POST(request) {
           type: "Debit",
           category: "Maintenance",
           description: `Bill for ${billPeriod}`,
-          amount: bill.totalBillDue,
-          balanceAfterTransaction: parseFloat((prevBal + bill.totalBillDue).toFixed(2)),
+          amount: parseFloat(((bill.currentCharges || 0) + (bill.currentInterest || 0)).toFixed(2)),
+          balanceAfterTransaction: parseFloat((prevBal + (bill.currentCharges || 0) + (bill.currentInterest || 0)).toFixed(2)),
           paymentMode: "System",
           createdBy: decoded.userId,
           billPeriodId: billPeriod,
@@ -171,6 +172,7 @@ export async function POST(request) {
           if (applied > 0) {
             await applyPaymentToBill({ billId: bill._id, payment: applied, performedBy: decoded.userId });
             await Member.updateOne({ _id: memberId }, { $inc: { advanceCredit: -applied } });
+            await postAdvanceAppliedToLedger(String(societyId), { bill, amount: applied, actorUserId: decoded.userId });
           }
         }
 

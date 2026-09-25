@@ -57,8 +57,8 @@ export async function POST(request) {
       type: "Debit",
       category: "Maintenance",
       description: `Bill generated for ${bill.billPeriodId} (simulator real-mode)`,
-      amount: bill.totalBillDue,
-      balanceAfterTransaction: bill.totalBillDue,
+      amount: parseFloat(((bill.currentCharges || 0) + (bill.currentInterest || 0)).toFixed(2)),
+      balanceAfterTransaction: bill.totalBillDue, // opening dues + this bill's charge = what is owed after it
       paymentMode: "System",
       createdBy: decoded.userId,
       billPeriodId: bill.billPeriodId,

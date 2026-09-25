@@ -9,6 +9,7 @@
 // The amount of an existing payment is deliberately NOT editable - changing it
 // in place would desynchronise bill allocation, receipts and balances. Reverse
 // the payment and record a correct one instead.
+import { reversePayment, PaymentReversalError } from "@/lib/services/PaymentReversalService";
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import Transaction from "@/models/Transaction";
@@ -84,51 +85,24 @@ export async function POST(request, ctx) {
     if (body.action !== "reverse")
       return NextResponse.json({ error: "Unsupported action" }, { status: 400 });
 
-    const txn = await load(id, gate.context.societyId);
-    if (!txn) return NextResponse.json({ error: "Payment not found" }, { status: 404 });
-    if (txn.isReversed)
-      return NextResponse.json({ error: "Payment is already reversed" }, { status: 409 });
-
-    const reversalId = Transaction.generateTransactionId
-      ? Transaction.generateTransactionId()
-      : `TXN${Date.now().toString(36).toUpperCase()}`;
-
-    // Mirror row: a Debit that cancels the original Credit.
-    const mirror = await Transaction.create({
-      transactionId: reversalId,
-      date: new Date(),
-      memberId: txn.memberId,
-      societyId: txn.societyId,
-      type: txn.type === "Credit" ? "Debit" : "Credit",
-      category: "Adjustment",
-      description: `Reversal of ${txn.transactionId}${body.reason ? ` - ${body.reason}` : ""}`,
-      amount: txn.amount,
-      balanceAfterTransaction: (txn.balanceAfterTransaction || 0) + (txn.amount || 0),
-      billPeriodId: txn.billPeriodId,
-      paymentMode: "System",
-      notes: body.reason || "",
-      createdBy: gate.context.userId,
-      financialYear: txn.financialYear,
+    // Reverses the payment in the books, on the bills, on the member's advance
+    // and on the ledger together — see PaymentReversalService.
+    const result = await reversePayment({
+      societyId: gate.context.societyId,
+      transactionId: id,
+      reason: body.reason,
+      actorUserId: gate.context.userId,
+      actorRole: gate.context.hat,
     });
-
-    txn.isReversed = true;
-    txn.reversalTransactionId = reversalId;
-    await txn.save();
-
-    await cache.del(
-      `v1:ledger:${txn.societyId}:member:${txn.memberId}`,
-      `v1:bills:${txn.societyId}:member:${txn.memberId}`,
-    );
-
     return NextResponse.json({
       success: true,
-      reversalTransactionId: reversalId,
-      mirrorId: String(mirror._id),
-      // Member-level aggregates (outstanding / advanceCredit) are derived
-      // elsewhere - re-run the balance recompute if your totals look stale.
-      warning: "Reversal recorded. Verify the member balance after reversing.",
+      reversalTransactionId: result.reversalTransactionId,
+      booksReversed: result.booksReversed,
     });
   } catch (err) {
+    if (err instanceof PaymentReversalError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error("Payment reversal error", err);
     return NextResponse.json({ error: "Failed to reverse payment" }, { status: 500 });
   }

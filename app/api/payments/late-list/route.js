@@ -68,15 +68,13 @@ export async function GET(request) {
         billPayFinalDay,
       );
       if (!finalDate || today <= finalDate) continue; // not late
-      // Sum balances from all unpaid bills
-      const principalOutstanding = bills.reduce(
-        (s, b) => s + (b.principalBalance || 0),
-        0,
-      );
-      const interestOutstanding = bills.reduce(
-        (s, b) => s + (b.interestBalance || 0),
-        0,
-      );
+      // Every bill opens on the previous bill's closing, so the NEWEST open
+      // bill already carries the older months. Summing all open bills counted
+      // the same rupees once per open month and pre-filled "Record payment"
+      // with an inflated amount (same fault as /api/payments/outstanding).
+      const newest = bills[bills.length - 1];
+      const principalOutstanding = newest.principalBalance || 0;
+      const interestOutstanding = newest.interestBalance || 0;
       const totalOutstanding = parseFloat(
         (principalOutstanding + interestOutstanding).toFixed(2),
       );

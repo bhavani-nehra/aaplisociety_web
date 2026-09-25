@@ -9,7 +9,7 @@ import { getTokenFromRequest, verifyToken } from "@/lib/jwt";
 import renderBillHtml from "@/lib/bill-renderer";
 import cache from "@/lib/cache";
 import { generateBill } from "@/lib/billing/generationService";
-import { applyPaymentToBill } from "@/lib/billing/allocationService";
+import { recordBillDebit, applyStoredAdvance } from "@/lib/billing/postGeneration";
 import { notifyBillCreated } from "@/lib/v1/notify";
 import { mapLimit } from "@/lib/concurrency";
 import { ndjsonResponse } from "@/lib/ndjson-stream";
@@ -207,43 +207,13 @@ export async function POST(request) {
       });
       await Bill.updateOne({ _id: bill._id }, { $set: { billHtml: renderResult.billHtml || renderResult.html } });
 
-      const lastTxn = await Transaction.findOne({ societyId, isReversed: false, ...unitFilter })
-        .sort({ date: -1, createdAt: -1 })
-        .lean();
-      const prevBal = parseFloat((lastTxn?.balanceAfterTransaction ?? member?.openingBalance ?? 0).toFixed(2));
-      await Transaction.create({
-        transactionId: Transaction.generateTransactionId(),
-        date: bill.generatedAt || new Date(),
-        // Transaction.memberId is required — a shop with no linked owner has
-        // no member id to give it, so it falls back to the shop's own id
-        // (same convention Bill.memberId uses). shopId is the field every
-        // commercial lookup actually keys on.
-        memberId: billSeries === "COMMERCIAL" ? member?.ownerMemberId || memberId : memberId,
-        shopId: billSeries === "COMMERCIAL" ? memberId : null,
-        billSeries,
-        societyId,
-        type: "Debit",
-        category: "Maintenance",
-        description: `Bill generated for ${billPeriodId}`,
-        amount: bill.totalBillDue,
-        balanceAfterTransaction: parseFloat((prevBal + bill.totalBillDue).toFixed(2)),
-        paymentMode: "System",
-        referenceId: bill._id,
-        referenceModel: "Bill",
-        billPeriodId,
-        createdBy: decoded.userId,
+      await recordBillDebit({
+        societyId, bill, member, unitId: memberId, billSeries, billPeriodId, actorUserId: decoded.userId,
       });
 
       // Apply any stored advance credit THROUGH the AllocationEngine — no
       // independent advance math here. Skip Scheduled bills (not yet live).
-      if (bill.status !== "Scheduled" && (member?.advanceCredit || 0) > 0) {
-        const applied = Math.min(parseFloat(member.advanceCredit.toFixed(2)), bill.totalBillDue);
-        if (applied > 0) {
-          const ar = await applyPaymentToBill({ billId: bill._id, payment: applied, performedBy: decoded.userId });
-          await Bill.updateOne({ _id: bill._id }, { $inc: { advanceApplied: applied }, $set: { status: ar.balanceAmount > 0 ? "Unpaid" : "Paid" } });
-          await Member.updateOne({ _id: memberId }, { $inc: { advanceCredit: -applied } });
-        }
-      }
+      await applyStoredAdvance({ bill, member, unitId: memberId, actorUserId: decoded.userId });
 
       // Notify the owning member if the shop is linked to one — a shop id has
       // no device tokens / notification recipient of its own.

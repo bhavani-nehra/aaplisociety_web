@@ -3,12 +3,10 @@ import { getClaims, requireRoles, requireTenant } from "@/lib/v1/auth";
 import { paymentSchema } from "@/lib/v1/schemas";
 import { Bill, Member, Payment, Transaction, Receipt } from "@/lib/v1/models";
 import { BILLING_WRITE_ROLES } from "@/lib/v1/constants";
-import { applyPaymentToBill } from "@/lib/billing/allocationService";
-import { normalizeBill, newTransactionId } from "@/lib/v1/billUtils";
+import { recordPayment, PaymentServiceError } from "@/lib/services/PaymentService";
+import { normalizeBill } from "@/lib/v1/billUtils";
 import { issueReceiptNo } from "@/lib/billing/receiptIssuance";
-import { periodLabelFrom } from "@/lib/v1/periodLabel";
 import { notifyPaymentReceived } from "@/lib/v1/notify";
-import { postPaymentToLedger } from "@/lib/accounting/paymentLedgerPosting";
 import cache from "@/lib/cache";
 
 /** Same convention app/api/billing/upload-payments/route.js and
@@ -27,10 +25,10 @@ function receiptFilename(member, billPeriodId) {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// POST /v1/bills/:id/pay — admin/secretary records a payment against a bill.
-// Interest is cleared before principal; any overpayment becomes member
-// advanceCredit. Mirrors the mobile bill-pay controller (Payment + Transaction
-// + Receipt written together).
+// POST /v1/bills/:id/pay — admin/secretary records a payment against a bill
+// from the mobile app. Allocation, ledger row and Journal Entry go through the
+// member-level allocator (recordPayment); interest is cleared before
+// principal and any overpayment becomes member advanceCredit.
 export const POST = withRoute(async (req, ctx) => {
   const { id } = await ctx.params;
   const claims = getClaims(req);
@@ -64,67 +62,53 @@ export const POST = withRoute(async (req, ctx) => {
     );
   }
 
-  // Ledger V2: all allocation math, invariant checks, and the audit event
-  // live inside applyPaymentToBill() — nothing computed independently here.
-  let result;
+  // Member-level allocator (lib/services/PaymentService.js#recordPayment) —
+  // the same one the admin Record Payment drawer uses. It allocates across
+  // every open bill interest-first, moves any overpayment to advanceCredit,
+  // writes the ledger Transaction (category "Payment", with the running
+  // balance) and posts the Journal Entry, all in one Mongo transaction. This
+  // route used to do its own single-bill allocation, wrote the Transaction as
+  // category "Maintenance" with no running balance, and posted the ledger
+  // outside any transaction.
+  let recorded;
   try {
-    result = await applyPaymentToBill({
-      billId: bill._id,
-      payment: amount,
-      performedBy: claims.userId,
+    recorded = await recordPayment({
+      memberId: String(bill.memberId),
+      societyId: String(societyId),
+      amount,
+      paymentMode,
+      notes: `Bill ${bill.billPeriodId ?? bill.period}`,
+      actorUserId: claims.userId,
+      actorRole: claims.role,
     });
   } catch (err) {
-    if (err.code === "NEGATIVE_PAYMENT") throw new ApiError(400, err.message);
+    if (err instanceof PaymentServiceError) throw new ApiError(err.status, err.message);
     if (err.code && /^[BP]\d/.test(err.code)) throw new ApiError(422, `Invariant ${err.code}: ${err.message}`);
     throw err;
   }
-  if (result.skipped) throw new ApiError(409, `Payment not applied (${result.skipped})`);
 
-  const advanceCredit = result.advanceCredit;
-  const breakdown = { interestCleared: result.interestPaid, principalCleared: result.principalPaid };
-  // Re-fetch: applyPaymentToBill wrote through the canonical model, so this
-  // v1-shaped `bill` doc is stale on amountPaid/balanceAmount/status now.
+  const transactionId = recorded.transaction.transactionId;
+  const transaction = await Transaction.findOne({ societyId, transactionId }).select("_id paymentBreakdown").lean();
+  const saved = transaction?.paymentBreakdown || {};
+  const advanceCredit = saved.advanceCredit || 0;
+  const breakdown = { interestCleared: saved.interestCleared || 0, principalCleared: saved.principalCleared || 0 };
   const freshBill = await Bill.findById(bill._id);
 
   const receiptNo = await issueReceiptNo(bill);
-  const transactionId = newTransactionId();
-  const label = periodLabelFrom(bill);
-  // Required on the Receipt model (unique + required, no default) — this
-  // route's Receipt.create() omitted it entirely, so every payment recorded
-  // here threw on save with no receipt ever written.
+  // Required on the Receipt model (unique + required, no default).
   const payerMember = await Member.findById(bill.memberId).select("ownerName wing flatNo").lean();
   const filename = receiptFilename(payerMember, bill.billPeriodId ?? bill.period);
 
-  // Payment and Transaction are the two writes that MUST land — either one
-  // failing is a real error, thrown as before. Receipt is handled
-  // separately: it used to sit in the same Promise.all, so a Receipt-only
-  // failure (missing filename was the actual historical case) 500'd the
-  // whole request even though Payment/Transaction had already been written
-  // — the admin saw "failed" for a payment that had, in fact, gone through.
-  // A missing receipt is real but recoverable (see
-  // app/api/admin/receipts/gaps — it finds and backfills exactly this), so
-  // it no longer holds the payment result hostage.
-  const [payment, transaction] = await Promise.all([
-    Payment.create({ societyId, billId: bill._id, memberId: bill.memberId, amount, paymentMode }),
-    Transaction.create({
-      transactionId,
-      date: new Date(),
-      societyId,
-      memberId: bill.memberId,
-      createdBy: claims.userId,
-      type: "Credit",
-      category: "Maintenance",
-      description: `Payment received for ${label}`,
-      amount,
-      referenceId: bill._id,
-      referenceModel: "Bill",
-      billPeriodId: bill.billPeriodId ?? bill.period,
-      paymentMode,
-      interestCleared: Number(breakdown.interestCleared),
-      principalCleared: Number(breakdown.principalCleared),
-      paymentBreakdown: breakdown,
-    }),
-  ]);
+  // The payment itself is committed above. Payment (the v1 mirror) and the
+  // Receipt are secondary: a failure here is reported, not thrown, so the
+  // admin never sees "failed" for a payment that went through. A missing
+  // receipt is found and backfilled by app/api/admin/receipts/gaps.
+  let payment = null;
+  try {
+    payment = await Payment.create({ societyId, billId: bill._id, memberId: bill.memberId, amount, paymentMode });
+  } catch (err) {
+    console.error(`v1/bills/${bill._id}/pay: Payment mirror failed, payment already recorded:`, err.message);
+  }
 
   let receipt = null;
   let receiptFailed = false;
@@ -148,41 +132,7 @@ export const POST = withRoute(async (req, ctx) => {
     receiptFailed = true;
     console.error(`v1/bills/${bill._id}/pay: Receipt.create failed, payment already recorded:`, err.message);
   }
-
-  if (advanceCredit > 0) {
-    await Member.updateOne({ _id: bill.memberId }, { $inc: { advanceCredit } });
-  }
-
-  // Phase 2.6 producer-wiring (docs/accounting-system-ARD.md §8 build note):
-  // no caller-owned session here either (Payment/Transaction/Receipt above
-  // are already written outside a shared transaction) — same smaller
-  // atomicity window as billing-simulator/pay-real, not a regression.
-  //
-  // appliedToDues/advance MUST be passed — postPaymentToLedger defaults
-  // appliedToDues to the WHOLE payment amount when omitted, posting 100% of
-  // any overpayment to Member Receivable instead of splitting it against
-  // the Advance-From-Members liability (the "Member Receivable went
-  // negative" bug). `advanceCredit` was already computed above but never
-  // forwarded. Also: this used to re-throw as an ApiError on failure, which
-  // told the caller the WHOLE request failed even though Payment/Transaction/
-  // Receipt above had already committed — the member's payment succeeded
-  // but the admin saw a 500. Fail-soft instead, matching the other three
-  // payment-recording routes fixed this session.
-  let ledgerFailed = false;
-  try {
-    await postPaymentToLedger(societyId, {
-      transaction,
-      paymentMode,
-      actorUserId: claims.userId,
-      appliedToDues: amount - advanceCredit,
-      advance: advanceCredit,
-    });
-  } catch (err) {
-    ledgerFailed = true;
-    console.error(`v1/bills/${bill._id}/pay: postPaymentToLedger failed:`, err.message);
-  }
-
-  await notifyPaymentReceived({ transactionId: transaction._id, societyId, memberId: bill.memberId, amount });
+  await notifyPaymentReceived({ transactionId: transaction?._id, societyId, memberId: bill.memberId, amount });
 
   await cache.del(
     `v1:bills:${societyId}:member:${bill.memberId}`,
@@ -193,20 +143,10 @@ export const POST = withRoute(async (req, ctx) => {
   const member = await Member.findById(bill.memberId).lean();
   return json({
     bill: normalizeBill(freshBill, member),
-    payment: { _id: String(payment._id), amount, paymentMode },
+    payment: payment ? { _id: String(payment._id), amount, paymentMode } : null,
     receipt: receipt ? { _id: String(receipt._id), receiptNo } : null,
     advanceCredit,
     breakdown,
-    ...(receiptFailed || ledgerFailed
-      ? {
-          warning: [
-            receiptFailed ? "the receipt could not be generated (fix on the Receipts page)" : null,
-            ledgerFailed ? "it could not be posted to Accounting (fix on the Vouchers page)" : null,
-          ]
-            .filter(Boolean)
-            .map((s, i) => (i === 0 ? `Payment recorded, but ${s}.` : ` Also, ${s}.`))
-            .join(""),
-        }
-      : {}),
+    ...(receiptFailed ? { warning: "Payment recorded, but the receipt could not be generated (fix on the Receipts page)." } : {}),
   });
 });

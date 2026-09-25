@@ -5,6 +5,7 @@
 // Payments live in the Transaction collection as category "Payment" (type
 // Credit). Reversed rows are hidden unless includeReversed=1.
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import connectDB from "@/lib/mongodb";
 import Transaction from "@/models/Transaction";
 import Member from "@/models/Member";
@@ -72,8 +73,16 @@ export async function GET(request) {
         .populate("createdBy", "name username")
         .lean(),
       Transaction.countDocuments(query),
+      // aggregate() does not cast strings to ObjectIds the way find() does, so a
+      // string societyId matched nothing and every total read ₹0.00.
       Transaction.aggregate([
-        { $match: query },
+        {
+          $match: {
+            ...query,
+            societyId: new mongoose.Types.ObjectId(String(query.societyId)),
+            ...(query.memberId ? { memberId: new mongoose.Types.ObjectId(String(query.memberId)) } : {}),
+          },
+        },
         {
           $group: {
             _id: null,

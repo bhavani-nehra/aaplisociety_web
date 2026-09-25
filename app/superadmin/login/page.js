@@ -1,4 +1,5 @@
 "use client";
+import { playScatterIntro } from "@/components/brand/ScatterIntro";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import TurnstileWidget from "@/components/TurnstileWidget";
@@ -39,6 +40,7 @@ export default function AdminLogin() {
       }
       // 🔥 FIXED: redirect based on role
       if (data.user?.role === "SuperAdmin") {
+        playScatterIntro();
         router.push("/superadmin/dashboard");
       } else {
         router.push("/superadmin/login");
@@ -55,7 +57,7 @@ export default function AdminLogin() {
         justifyContent: "center",
         alignItems: "center",
         minHeight: "100vh",
-        background: "var(--bg-canvas)",
+        background: "transparent",
       }}
     >
       <div
@@ -165,7 +167,7 @@ export default function AdminLogin() {
               width: "100%",
               padding: "14px",
               background: loading ? "var(--border-strong)" : "var(--success)",
-              color: "#fff",
+              color: "var(--on-solid)",
               border: "none",
               borderRadius: "4px",
               fontSize: "16px",

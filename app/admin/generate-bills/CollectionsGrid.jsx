@@ -16,6 +16,7 @@
 //  - The sheet is fetched once and reused until the billing-config
 //    fingerprint changes.
 
+import PulseLoader from "@/components/brand/PulseLoader";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
@@ -24,7 +25,6 @@ import {
   Lock,
   CheckCircle2,
   AlertCircle,
-  Loader2,
   RefreshCw,
   Wallet,
   Smartphone,
@@ -490,7 +490,7 @@ export default function CollectionsGrid({
             disabled={isFetching}
             title="Refetch only if you changed billing heads or rates"
           >
-            {isFetching ? <Loader2 size={14} className={s.spin} /> : <RefreshCw size={14} />}
+            {isFetching ? <PulseLoader size={24} /> : <RefreshCw size={14} />}
             Refresh
           </button>
         </div>

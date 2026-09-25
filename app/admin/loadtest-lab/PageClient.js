@@ -1,4 +1,5 @@
 "use client";
+import PulseLoader from "@/components/brand/PulseLoader";
 import { useState, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -10,7 +11,6 @@ import {
   Download,
   ShieldAlert,
   RotateCcw,
-  Loader2,
   CheckCircle2,
   XCircle,
   Clock,
@@ -116,7 +116,7 @@ function FlowDiagram({ active, label }) {
 }
 
 function StatusIcon({ pending, success, fail, skipped }) {
-  if (pending) return <Loader2 size={14} className={styles.spin} />;
+  if (pending) return <PulseLoader size={24} />;
   if (skipped && success === 0 && fail === 0) return <Clock size={14} className={styles.iconIdle} />;
   if (fail > 0 && success === 0) return <XCircle size={14} className={styles.iconFail} />;
   if (success > 0) return <CheckCircle2 size={14} className={styles.iconPass} />;
@@ -684,7 +684,7 @@ export default function LoadTestLabPage() {
 
       <div className={styles.runControls}>
         <button className={styles.btnSecondary} disabled={provisioning || running} onClick={handleProvision}>
-          {provisioning ? <Loader2 size={14} className={styles.spin} /> : <Zap size={14} />}
+          {provisioning ? <PulseLoader size={24} /> : <Zap size={14} />}
           Provision {laneCount} lane{Number(laneCount) === 1 ? "" : "s"}
         </button>
         <button className={styles.btnSecondary} disabled={!canRunBaseline} onClick={handleRunBaseline}>
@@ -694,7 +694,7 @@ export default function LoadTestLabPage() {
           <Play size={14} /> Then run all 3 concurrently
         </button>
         <button className={styles.btnPrimary} disabled={!canRunBaseline} onClick={handleRunBoth}>
-          {running ? <Loader2 size={14} className={styles.spin} /> : <Play size={14} />}
+          {running ? <PulseLoader size={24} /> : <Play size={14} />}
           Run full round (individual \u2192 concurrent)
         </button>
         <button className={styles.btnSecondary} disabled={running} onClick={handleReset}>

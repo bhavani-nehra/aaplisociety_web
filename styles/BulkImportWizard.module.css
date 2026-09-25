@@ -576,9 +576,6 @@
   color: var(--danger);
 }
 
-.spin {
-  animation: spin 0.9s linear infinite;
-}
 
 @keyframes spin {
   to {
@@ -1093,9 +1090,5 @@
   .table tbody input,
   .table tbody select {
     transition: none;
-  }
-
-  .spin {
-    animation: none;
   }
 }

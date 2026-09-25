@@ -13,13 +13,13 @@
 //  - Passing rows are removed from the queue as they land, so a second run
 //    only ever carries the failures.
 
+import PulseLoader from "@/components/brand/PulseLoader";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiClient } from "@/lib/api-client";
 import { gsap } from "gsap";
 import {
   CheckCircle2,
   XCircle,
-  Loader2,
   ShieldCheck,
   X,
   RotateCcw,
@@ -271,7 +271,7 @@ export default function VerifyGenieOverlay({
             </span>
             {running && (
               <span className={s.countRunning}>
-                <Loader2 size={13} className={s.spin} /> checking…
+                <PulseLoader size={24} /> checking…
               </span>
             )}
           </div>

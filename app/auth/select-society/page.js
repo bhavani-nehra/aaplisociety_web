@@ -83,7 +83,7 @@ export default function SelectSocietyPage() {
   if (profiles === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-indigo-600" />
+        <span className="pulse-loader" style={{ width: 56, height: 56 }} />
       </div>
     );
   }
@@ -145,7 +145,7 @@ export default function SelectSocietyPage() {
                     {p.role}
                   </span>
                   {isSelecting && (
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-indigo-600" />
+                    <span className="pulse-loader" style={{ width: 24, height: 24 }} />
                   )}
                 </div>
               </button>

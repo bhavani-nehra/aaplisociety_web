@@ -1,4 +1,6 @@
 "use client";
+import PulseLoader from "@/components/brand/PulseLoader";
+import FullScreenLoader from "@/components/brand/FullScreenLoader";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -55,6 +57,7 @@ export default function SuperAdminLayout({ children }) {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [navigating, setNavigating] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const navTimeoutRef = useRef(null);
   useEffect(() => {
     if (pathname.includes("/auth/login")) return;
@@ -83,8 +86,14 @@ export default function SuperAdminLayout({ children }) {
     router.push(path);
   }, [pathname, router]);
   const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/auth/login");
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      router.push("/auth/login");
+    } catch {
+      setLoggingOut(false);
+    }
   };
   if (!user) {
     return (
@@ -101,17 +110,14 @@ export default function SuperAdminLayout({ children }) {
           <span className={styles.fullPageLoaderTitle}>AapliSocietyy</span>
           <span className={styles.fullPageLoaderSub}>Super Admin</span>
         </div>
-        <div className={styles.fullPageLoaderDots}>
-          <div className={styles.fullPageLoaderDot} />
-          <div className={styles.fullPageLoaderDot} />
-          <div className={styles.fullPageLoaderDot} />
-        </div>
+        <PulseLoader size={96} />
       </div>
     );
   }
   return (
     <QueryClientProvider client={queryClient}>
       <div className={styles.container}>
+        {loggingOut && <FullScreenLoader label="Signing out" />}
         <RouteLoadingBar />
         {navigating && (
           <div className={styles.navOverlay}>
@@ -174,7 +180,7 @@ export default function SuperAdminLayout({ children }) {
                 <div className={styles.userName}>{user.name}</div>
                 <div className={styles.userRole}>Platform Owner</div>
               </div>
-              <button className={styles.logoutBtn} onClick={handleLogout} title="Logout">
+              <button className={styles.logoutBtn} onClick={handleLogout} title="Logout" disabled={loggingOut}>
                 <LogOut size={15} strokeWidth={1.75} />
               </button>
             </div>

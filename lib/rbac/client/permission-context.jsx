@@ -43,6 +43,10 @@ function normalize(data) {
     // "where can I go" answer. See app/api/rbac/my-access/route.js.
     pages: data?.pages || [],
     bootstrapped: data?.bootstrapped !== false,
+    // SEC-25: whether the SOCIETY has any roles seeded, as opposed to whether
+    // THIS USER holds one. Defaults to true so a missing/failed response never
+    // renders the "no roles set up" repair prompt on a healthy society.
+    societyHasRoles: data?.societyHasRoles !== false,
   };
 }
 

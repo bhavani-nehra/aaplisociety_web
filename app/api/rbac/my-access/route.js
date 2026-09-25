@@ -67,6 +67,14 @@ export async function GET(request) {
           }).lean()
         : [];
     const roleIds = assignments.map((a) => a.roleId);
+    // SEC-25: whether THIS SOCIETY has any roles at all — distinct from
+    // whether THIS USER holds one. /my-access used only the latter, so a
+    // healthy society told a not-yet-assigned admin "Role management isn't
+    // turned on for this society yet", which was simply untrue and invited
+    // them to "enable" something already enabled.
+    const societyRoleCount = societyId
+      ? await Role.countDocuments({ societyId })
+      : 0;
     const roles = roleIds.length
       ? await Role.find({ _id: { $in: roleIds } })
           .select("name key color")
@@ -82,6 +90,9 @@ export async function GET(request) {
       // this flag only controls whether the sidebar shows the full menu
       // (pre-RBAC behavior) or the filtered one.
       bootstrapped: hat !== HAT.STAFF || assignments.length > 0,
+      // SEC-25: true only when the society genuinely has no seeded roles —
+      // the one case where a repair action is the right thing to offer.
+      societyHasRoles: societyRoleCount > 0,
       roles: roles.map((r) => ({
         id: String(r._id),
         name: r.name,
@@ -105,6 +116,10 @@ export async function GET(request) {
       context: { societyId, hat },
       error: true, // DB/resolution failure — fail CLOSED, not the bootstrap fallback
       bootstrapped: true,
+      // SEC-25: fail closed here too. On a resolution failure we cannot prove
+      // the society has no roles, and claiming it does not would offer a
+      // "repair" that reseeds a society which may be perfectly healthy.
+      societyHasRoles: true,
       roles: [],
       permissions: [],
       grouped: {},

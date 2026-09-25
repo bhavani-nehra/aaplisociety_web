@@ -60,7 +60,7 @@ export async function POST(request) {
         { error: err.message, code, escalating: err.escalating },
         { status: 403 },
       );
-    const map = { ROLE_NOT_FOUND: 404, USER_NOT_FOUND: 404, MEMBER_NOT_FOUND: 404 };
+    const map = { ROLE_NOT_FOUND: 404, USER_NOT_FOUND: 404, MEMBER_NOT_FOUND: 404, ROLE_ALREADY_HELD: 409 };
     const status = map[code] || 500;
     if (status === 500)
       console.error("[rbac] assignments POST failed:", err?.message);

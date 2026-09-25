@@ -232,7 +232,7 @@ export function PermissionPicker({ value, onChange, disabled = false }) {
                                   ) : null}
                                   {a.dangerous ? (
                                     <span className="rounded bg-red-100 px-1.5 text-[10px] text-red-700">
-                                      ⚠ careful
+                                      careful
                                     </span>
                                   ) : null}
                                 </label>
@@ -293,7 +293,7 @@ export function PermissionPicker({ value, onChange, disabled = false }) {
                                       className={cls}
                                       title={a.label}
                                     >
-                                      {a.dangerous ? "⚠ " : ""}
+                                      {a.dangerous ? "" : ""}
                                       {a.label}
                                     </button>
                                     {advanced ? (

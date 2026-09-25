@@ -89,7 +89,7 @@ export function PageAccessPicker({ value = [], onChange }) {
                       className="ml-2 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700"
                       title={`Manage on this page also allows: ${p.dangerous.join(", ")}`}
                     >
-                      ⚠ includes {p.dangerous.join(", ").toLowerCase()}
+                      includes {p.dangerous.join(", ").toLowerCase()}
                     </span>
                   ) : null}
                 </span>

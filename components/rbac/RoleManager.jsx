@@ -1,20 +1,26 @@
 "use client";
 
 /**
- * <RoleManager> — role management UI (Phase 3, revised).
+ * <RoleManager> — role management UI (Phase 3, revised; Plan 06 Config-group
+ * rewrite onto components/revamp, Calm/minimal register).
  * ----------------------------------------------------------------------------
  * Lists roles and lets an authorized admin create / clone / edit / delete them,
  * restore system-role defaults, and — via the “Assign” action — open the
  * <AssignmentManager> to create login users or assign existing ones.
  *
- * The create/edit editor is now a BIG CENTERED DIALOG over the page (not a side
- * drawer). The permission chooser is the spoon-fed <PageAccessPicker>
+ * The create/edit editor is a centered <Modal> (components/revamp) over the
+ * page. The permission chooser is the spoon-fed <PageAccessPicker>
  * (NONE/VIEW/MANAGE per page — no raw permission ids shown to the admin).
  * Every mutating control is a <PermissionButton> (visible-but-disabled with a
  * tooltip when the caller lacks the permission); the server still enforces
- * authorization on every request.
+ * authorization on every request. This is a security-sensitive, infrequent,
+ * high-consequence screen — Calm/minimal register (06-skills-and-execution-
+ * tooling.md §13): maximum legibility, zero decoration, no colour used except
+ * to carry meaning (system/custom, view/manage, destructive).
  *
- * Backend contract (frozen Phase 2 + Phase 3 additive users route):
+ * Backend contract (frozen Phase 2 + Phase 3 additive users route) — UNCHANGED
+ * by this rewrite, every request body / permission key / role id below is
+ * byte-identical to the previous version:
  *   GET    /api/rbac/roles                    -> { roles }
  *   POST   /api/rbac/roles                     -> { role, warnings }   (create/clone)
  *   PATCH  /api/rbac/roles/[id]                -> { role, warnings }   (edit)
@@ -29,6 +35,7 @@ import { PermissionButton } from "@/components/rbac/PermissionButton";
 import { PageAccessPicker } from "@/components/rbac/PageAccessPicker";
 import { AssignmentManager } from "@/components/rbac/AssignmentManager";
 import { reduceToPageAccess } from "@/lib/rbac/page-access-map";
+import { Btn, Card, CardHead, DataTable, Modal, Pill } from "@/components/revamp";
 
 const EMPTY_DRAFT = {
   name: "",
@@ -50,6 +57,21 @@ export const SEED_TEMPLATES = [
   { key: "security", name: "Security", description: "Gate operations: visitor entry/exit, passes and SOS.", color: "var(--warning)" },
   { key: "clubhouseManager", name: "Clubhouse Manager", description: "Runs the clubhouse from the mobile app: scan residents in, attendance, open/close, timings, maintenance, incidents.", color: "#14b8a6" },
 ];
+
+// Small labeled-field wrapper, matches the .label/.input token classes the
+// rest of the revamped admin already uses (app/admin/payments/PageClient.js
+// etc.) rather than inventing a second convention here.
+function Field({ label, hint, children }) {
+  return (
+    <label style={{ display: "block", fontSize: 13 }}>
+      <span className="label" style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        {label}
+        {hint ? <span style={{ fontWeight: 400, color: "var(--r-fg-4)" }}>{hint}</span> : null}
+      </span>
+      {children}
+    </label>
+  );
+}
 
 export function RoleManager() {
   const [roles, setRoles] = useState([]);
@@ -333,336 +355,317 @@ export function RoleManager() {
   }
 
   if (loading)
-    return <div className="p-6 text-sm text-gray-500">Loading roles…</div>;
+    return (
+      <div style={{ padding: 24, fontSize: 13, color: "var(--r-fg-4)" }}>Loading roles…</div>
+    );
   if (error)
     return (
-      <div className="p-6 text-sm text-red-600">
+      <div style={{ padding: 24, fontSize: 13, color: "var(--r-danger)" }}>
         Failed to load roles: {error.message}
       </div>
     );
 
+  const rows = roles.map((r) => ({ ...r, _dtKey: roleId(r) }));
+
+  const cols = [
+    {
+      key: "role",
+      label: "Role",
+      render: (r) => (
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+          <span
+            style={{
+              marginTop: 5, width: 8, height: 8, borderRadius: 999, flexShrink: 0,
+              background: r.color || "var(--r-fg-5)",
+            }}
+          />
+          <div>
+            <div style={{ fontWeight: 600, color: "var(--r-fg-1)" }}>{r.name}</div>
+            {r.description ? (
+              <div style={{ fontSize: 12, color: "var(--r-fg-4)", marginTop: 1 }}>{r.description}</div>
+            ) : null}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "type",
+      label: "Type",
+      width: 96,
+      render: (r) =>
+        isSystem(r) ? (
+          <Pill tone="warning" dot={false}>System</Pill>
+        ) : (
+          <Pill tone="neutral" dot={false}>Custom</Pill>
+        ),
+    },
+    {
+      key: "permissions",
+      label: "Permissions",
+      render: (r) => (
+        <span style={{ color: "var(--r-fg-4)" }}>
+          {(r.permissions || []).length} allowed
+          {(r.denies || []).length ? ` · ${(r.denies || []).length} blocked` : ""}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      label: "",
+      align: "right",
+      render: (r) => (
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+          <PermissionButton
+            permission="rbac.assignment.view"
+            onClick={() => setAssigning(r)}
+            as={Btn}
+            size="sm"
+            variant="secondary"
+          >
+            Assign
+          </PermissionButton>
+          <PermissionButton
+            permission="rbac.role.create"
+            onClick={() => openClone(r)}
+            as={Btn}
+            size="sm"
+            variant="secondary"
+          >
+            Clone
+          </PermissionButton>
+          <PermissionButton
+            permission="rbac.role.update"
+            onClick={() => openEdit(r)}
+            as={Btn}
+            size="sm"
+            variant="secondary"
+          >
+            Edit
+          </PermissionButton>
+          {isSystem(r) ? (
+            <PermissionButton
+              permission="rbac.role.restoreDefaults"
+              onClick={() => restoreDefaults(r)}
+              as={Btn}
+              size="sm"
+              variant="secondary"
+              style={{ color: "var(--r-warning)", borderColor: "var(--r-warning)" }}
+            >
+              Restore defaults
+            </PermissionButton>
+          ) : (
+            <PermissionButton
+              permission="rbac.role.delete"
+              onClick={() => openImpact(r)}
+              as={Btn}
+              size="sm"
+              variant="danger"
+            >
+              Delete
+            </PermissionButton>
+          )}
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-sm text-gray-500">
+      <div style={{ marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <p style={{ fontSize: 13, color: "var(--r-fg-4)", margin: 0 }}>
           Create a role, choose what it can do, then use <strong>Assign</strong>{" "}
           to create logins or add people to it.
         </p>
-        <PermissionButton
-          permission="rbac.role.create"
-          onClick={openCreate}
-          className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white"
-        >
-          + New role
+        <PermissionButton permission="rbac.role.create" onClick={openCreate} as={Btn} variant="primary" icon="plus">
+          New role
         </PermissionButton>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-gray-200">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
-            <tr>
-              <th className="px-3 py-2">Role</th>
-              <th className="px-3 py-2">Type</th>
-              <th className="px-3 py-2">Permissions</th>
-              <th className="px-3 py-2 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {roles.map((r) => (
-              <tr key={roleId(r)}>
-                <td className="px-3 py-2">
-                  <span className="flex items-center gap-2">
-                    <span
-                      className="inline-block h-3 w-3 rounded-full"
-                      style={{ backgroundColor: r.color || "var(--fg-5)" }}
-                    />
-                    <span className="font-medium">{r.name}</span>
-                  </span>
-                  {r.description ? (
-                    <div className="text-xs text-gray-400">{r.description}</div>
-                  ) : null}
-                </td>
-                <td className="px-3 py-2">
-                  {isSystem(r) ? (
-                    <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
-                      System
-                    </span>
-                  ) : (
-                    <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-                      Custom
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-gray-500">
-                  {(r.permissions || []).length} allowed
-                  {(r.denies || []).length
-                    ? ` · ${(r.denies || []).length} blocked`
-                    : ""}
-                </td>
-                <td className="px-3 py-2">
-                  <div className="flex justify-end gap-1">
-                    <PermissionButton
-                      permission="rbac.assignment.view"
-                      onClick={() => setAssigning(r)}
-                      className="rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
-                    >
-                      Assign
-                    </PermissionButton>
-                    <PermissionButton
-                      permission="rbac.role.create"
-                      onClick={() => openClone(r)}
-                      className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs"
-                    >
-                      Clone
-                    </PermissionButton>
-                    <PermissionButton
-                      permission="rbac.role.update"
-                      onClick={() => openEdit(r)}
-                      className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs"
-                    >
-                      Edit
-                    </PermissionButton>
-                    {isSystem(r) ? (
-                      <PermissionButton
-                        permission="rbac.role.restoreDefaults"
-                        onClick={() => restoreDefaults(r)}
-                        className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs text-amber-700"
-                      >
-                        Restore defaults
-                      </PermissionButton>
-                    ) : (
-                      <PermissionButton
-                        permission="rbac.role.delete"
-                        onClick={() => openImpact(r)}
-                        className="rounded-lg border border-red-300 px-2.5 py-1 text-xs text-red-600"
-                      >
-                        Delete
-                      </PermissionButton>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {roles.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-gray-400">
-                  No roles yet.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        cols={cols}
+        rows={rows}
+        rowKey="_dtKey"
+        emptyIcon="shield"
+        emptyTitle="No roles yet"
+      />
 
       {missingTemplates.length > 0 ? (
-        <div className="mt-4 rounded-lg border border-gray-200 p-4">
-          <h3 className="mb-1 text-sm font-semibold text-gray-700">
-            {roles.length === 0 ? "Seed starter roles" : "Add more starter roles"}
-          </h3>
-          <p className="mb-3 text-xs text-gray-500">
-            {roles.length === 0
-              ? "Pick the roles you actually need — you don't have to seed all of them at once. Each one is still fully editable afterward."
-              : "These standard roles haven't been added to this society yet. Pick any you need — each one is still fully editable afterward."}
-          </p>
-          <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <Card style={{ marginTop: 16 }}>
+          <CardHead
+            title={roles.length === 0 ? "Seed starter roles" : "Add more starter roles"}
+            sub={
+              roles.length === 0
+                ? "Pick the roles you actually need — you don't have to seed all of them at once. Each one is still fully editable afterward."
+                : "These standard roles haven't been added to this society yet. Pick any you need — each one is still fully editable afterward."
+            }
+          />
+          <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", marginBottom: 14 }}>
             {missingTemplates.map((t) => (
               <label
                 key={t.key}
-                className="flex items-start gap-2 rounded-lg border border-gray-200 p-2 text-sm hover:bg-gray-50"
+                style={{
+                  display: "flex", alignItems: "flex-start", gap: 8, borderRadius: 8,
+                  border: "1px solid var(--r-hairline)", padding: 8, fontSize: 13, cursor: "pointer",
+                }}
               >
                 <input
                   type="checkbox"
-                  className="mt-0.5"
+                  style={{ marginTop: 3 }}
                   checked={seedPicked.has(t.key)}
                   onChange={() => toggleSeedPick(t.key)}
                 />
                 <span>
-                  <span className="flex items-center gap-1.5 font-medium text-gray-800">
-                    <span
-                      className="inline-block h-2.5 w-2.5 rounded-full"
-                      style={{ backgroundColor: t.color }}
-                    />
+                  <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, color: "var(--r-fg-1)" }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 999, background: t.color, flexShrink: 0 }} />
                     {t.name}
                   </span>
-                  <span className="text-xs text-gray-400">{t.description}</span>
+                  <span style={{ fontSize: 12, color: "var(--r-fg-4)" }}>{t.description}</span>
                 </span>
               </label>
             ))}
           </div>
           {seedErr ? (
-            <div className="mb-2 text-xs text-red-600">{seedErr}</div>
+            <div style={{ marginBottom: 10, fontSize: 12, color: "var(--r-danger)" }}>{seedErr}</div>
           ) : null}
-          <div className="flex gap-2">
-            <button
-              type="button"
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn
+              variant="primary"
               disabled={seeding || seedPicked.size === 0}
               onClick={() => seedTemplates([...seedPicked])}
-              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
             >
               {seeding ? "Seeding…" : `Seed selected (${seedPicked.size})`}
-            </button>
-            <button
-              type="button"
+            </Btn>
+            <Btn
+              variant="secondary"
               disabled={seeding}
               onClick={() => seedTemplates(missingTemplates.map((t) => t.key))}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 disabled:opacity-50"
             >
               Seed all
-            </button>
+            </Btn>
           </div>
-        </div>
+        </Card>
       ) : null}
 
       {/* ── Admin role: explainer instead of a picker that would lie ───────── */}
-      {editor?.mode === "admin-locked" ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
-            <h3 className="mb-2 text-sm font-semibold text-gray-900">
-              Admin always has full access
-            </h3>
-            <p className="mb-3 text-sm text-gray-600">
-              Admin is a superuser — it can do everything in the society, and that never
-              depends on a per-page list. There is nothing to turn off here, which is why
-              this role has no page-access picker like the others do.
-            </p>
-            <p className="mb-4 text-sm text-gray-600">
-              To control who <em>has</em> the Admin role, use <strong>Assign</strong> on the
-              roles list — grant it to someone there, or remove it from someone who
-              shouldn't have it. That's the only lever for this role.
-            </p>
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => setEditor(null)}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white"
-              >
-                Got it
-              </button>
-            </div>
-          </div>
+      <Modal
+        open={editor?.mode === "admin-locked"}
+        onClose={() => setEditor(null)}
+        title="Admin always has full access"
+        width={440}
+      >
+        <p style={{ fontSize: 13.5, color: "var(--r-fg-2)", lineHeight: 1.6, margin: 0 }}>
+          Admin is a superuser — it can do everything in the society, and that never
+          depends on a per-page list. There is nothing to turn off here, which is why
+          this role has no page-access picker like the others do.
+        </p>
+        <p style={{ fontSize: 13.5, color: "var(--r-fg-2)", lineHeight: 1.6, marginTop: 10 }}>
+          To control who <em>has</em> the Admin role, use <strong>Assign</strong> on the
+          roles list — grant it to someone there, or remove it from someone who
+          shouldn't have it. That's the only lever for this role.
+        </p>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18 }}>
+          <Btn variant="primary" onClick={() => setEditor(null)}>Got it</Btn>
         </div>
-      ) : null}
+      </Modal>
 
-      {/* ── Create / edit / clone: BIG CENTERED DIALOG ─────────────────────── */}
-      {editor && editor.mode !== "admin-locked" ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
-          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b px-6 py-4">
-              <h2 className="text-lg font-semibold">
-                {editor.mode === "edit"
-                  ? "Edit role"
-                  : editor.mode === "clone"
-                    ? "Clone role"
-                    : "New role"}
-              </h2>
-              <button
-                type="button"
-                onClick={() => setEditor(null)}
-                className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="flex-1 space-y-4 overflow-auto px-6 py-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
-                <label className="block text-sm">
-                  <span className="mb-1 block font-medium text-gray-700">
-                    Role name
-                  </span>
-                  <input
-                    value={editor.draft.name}
-                    onChange={(e) =>
-                      setEditor((s) => ({
-                        ...s,
-                        draft: { ...s.draft, name: e.target.value },
-                      }))
-                    }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                    placeholder="e.g. Front-desk staff"
-                  />
-                </label>
-                <label className="flex items-end gap-2 text-sm">
-                  <span className="font-medium text-gray-700">Colour</span>
-                  <input
-                    type="color"
-                    value={editor.draft.color}
-                    onChange={(e) =>
-                      setEditor((s) => ({
-                        ...s,
-                        draft: { ...s.draft, color: e.target.value },
-                      }))
-                    }
-                    className="h-9 w-12 rounded border border-gray-300"
-                  />
-                </label>
-              </div>
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium text-gray-700">
-                  Description{" "}
-                  <span className="font-normal text-gray-400">(optional)</span>
-                </span>
-                <textarea
-                  value={editor.draft.description}
+      {/* ── Create / edit / clone ───────────────────────────────────────────── */}
+      <Modal
+        open={!!editor && editor.mode !== "admin-locked"}
+        onClose={() => setEditor(null)}
+        title={
+          editor?.mode === "edit" ? "Edit role" : editor?.mode === "clone" ? "Clone role" : "New role"
+        }
+        width={760}
+      >
+        {editor && editor.mode !== "admin-locked" ? (
+          <div style={{ display: "grid", gap: 16 }}>
+            <div style={{ display: "grid", gap: 14, gridTemplateColumns: "1fr auto" }}>
+              <Field label="Role name">
+                <input
+                  className="input"
+                  value={editor.draft.name}
                   onChange={(e) =>
-                    setEditor((s) => ({
-                      ...s,
-                      draft: { ...s.draft, description: e.target.value },
-                    }))
+                    setEditor((s) => ({ ...s, draft: { ...s.draft, name: e.target.value } }))
                   }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                  rows={2}
-                  placeholder="What is this role for?"
+                  placeholder="e.g. Front-desk staff"
                 />
-              </label>
-
-              <div>
-                <span className="mb-1 block text-sm font-medium text-gray-700">
-                  Which pages can this role open?
-                </span>
-                <PageAccessPicker
-                  value={editor.draft.pageAccess}
-                  onChange={(next) =>
-                    setEditor((s) => ({
-                      ...s,
-                      draft: { ...s.draft, pageAccess: next },
-                    }))
+              </Field>
+              <Field label="Colour">
+                <input
+                  type="color"
+                  value={editor.draft.color}
+                  onChange={(e) =>
+                    setEditor((s) => ({ ...s, draft: { ...s.draft, color: e.target.value } }))
                   }
+                  style={{ height: 38, width: 52, borderRadius: 8, border: "1px solid var(--r-border)", background: "none", cursor: "pointer" }}
                 />
-              </div>
-
-              {editor.warnings?.length ? (
-                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">
-                  <strong>Some permissions were trimmed:</strong>
-                  <ul className="ml-4 list-disc">
-                    {editor.warnings.map((w, i) => (
-                      <li key={i}>
-                        {typeof w === "string"
-                          ? w
-                          : w.message ||
-                            (w.refused ? w.refused.join(", ") : "trimmed")}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              {editor.err ? (
-                <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-xs text-red-700">
-                  {editor.err}
-                </div>
-              ) : null}
+              </Field>
             </div>
+
+            <Field label="Description" hint="(optional)">
+              <textarea
+                className="input"
+                value={editor.draft.description}
+                onChange={(e) =>
+                  setEditor((s) => ({ ...s, draft: { ...s.draft, description: e.target.value } }))
+                }
+                rows={2}
+                placeholder="What is this role for?"
+              />
+            </Field>
+
+            <div>
+              <span className="label">Which pages can this role open?</span>
+              <PageAccessPicker
+                value={editor.draft.pageAccess}
+                onChange={(next) =>
+                  setEditor((s) => ({ ...s, draft: { ...s.draft, pageAccess: next } }))
+                }
+              />
+            </div>
+
+            {editor.warnings?.length ? (
+              <div
+                style={{
+                  borderRadius: 8, border: "1px solid var(--r-warning)", background: "var(--r-warning-soft)",
+                  padding: 12, fontSize: 12.5, color: "var(--r-fg-1)",
+                }}
+              >
+                <strong>Some permissions were trimmed:</strong>
+                <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+                  {editor.warnings.map((w, i) => (
+                    <li key={i}>
+                      {typeof w === "string" ? w : w.message || (w.refused ? w.refused.join(", ") : "trimmed")}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {editor.err ? (
+              <div
+                style={{
+                  borderRadius: 8, border: "1px solid var(--r-danger)", background: "var(--r-danger-soft)",
+                  padding: 12, fontSize: 12.5, color: "var(--r-danger)",
+                }}
+              >
+                {editor.err}
+              </div>
+            ) : null}
 
             {editor.review ? (
-              <div className="border-t bg-gray-50 px-6 py-4 text-sm">
-                <p className="mb-3 font-semibold text-gray-800">
+              <div style={{ borderTop: "1px solid var(--r-hairline)", paddingTop: 14 }}>
+                <p style={{ marginBottom: 10, fontWeight: 600, color: "var(--r-fg-1)", fontSize: 13.5 }}>
                   Before you save
                 </p>
 
                 {editor.review.lost.length ? (
-                  <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
-                    <p className="mb-1 text-xs font-semibold text-amber-800">
+                  <div
+                    style={{
+                      marginBottom: 12, borderRadius: 8, border: "1px solid var(--r-warning)",
+                      background: "var(--r-warning-soft)", padding: 12,
+                    }}
+                  >
+                    <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 600, color: "var(--r-fg-1)" }}>
                       {editor.review.holders === null
                         ? "Anyone holding this role"
                         : editor.review.holders === 1
@@ -670,7 +673,7 @@ export function RoleManager() {
                           : `${editor.review.holders} people hold this role and`}{" "}
                       will be signed out and lose:
                     </p>
-                    <ul className="ml-4 list-disc text-xs text-amber-900">
+                    <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "var(--r-fg-1)" }}>
                       {editor.review.lost.map((l) => (
                         <li key={l.label}>
                           {l.label} — {l.detail}
@@ -681,11 +684,16 @@ export function RoleManager() {
                 ) : null}
 
                 {editor.review.dangerous.length ? (
-                  <div className="mb-3 rounded-lg border border-red-300 bg-red-50 p-3">
-                    <p className="mb-1 text-xs font-semibold text-red-800">
+                  <div
+                    style={{
+                      marginBottom: 4, borderRadius: 8, border: "1px solid var(--r-danger)",
+                      background: "var(--r-danger-soft)", padding: 12,
+                    }}
+                  >
+                    <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 600, color: "var(--r-danger)" }}>
                       This role will be able to do things that cannot be undone:
                     </p>
-                    <ul className="ml-4 list-disc text-xs text-red-900">
+                    <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "var(--r-fg-1)" }}>
                       {editor.review.dangerous.map((d) => (
                         <li key={d.label}>
                           <strong>{d.label}</strong> — {d.actions.join(", ").toLowerCase()}
@@ -695,103 +703,70 @@ export function RoleManager() {
                   </div>
                 ) : null}
 
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditor((s) => ({ ...s, review: null }))}
-                    className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm"
-                  >
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
+                  <Btn variant="secondary" onClick={() => setEditor((s) => ({ ...s, review: null }))}>
                     Go back
-                  </button>
-                  <button
-                    type="button"
-                    disabled={editor.busy}
-                    onClick={commitSave}
-                    className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-                  >
+                  </Btn>
+                  <Btn variant="primary" disabled={editor.busy} onClick={commitSave}>
                     {editor.busy ? "Saving…" : "Save anyway"}
-                  </button>
+                  </Btn>
                 </div>
               </div>
             ) : (
-              <div className="flex justify-end gap-2 border-t px-6 py-4">
-                <button
-                  type="button"
-                  onClick={() => setEditor(null)}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, borderTop: "1px solid var(--r-hairline)", paddingTop: 14 }}>
+                <Btn variant="secondary" onClick={() => setEditor(null)}>Cancel</Btn>
+                <Btn
+                  variant="primary"
                   disabled={editor.busy || !editor.draft.name.trim()}
                   onClick={saveEditor}
-                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
                 >
                   {editor.busy ? "Saving…" : "Save role"}
-                </button>
+                </Btn>
               </div>
             )}
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </Modal>
 
       {/* ── Delete impact preview ──────────────────────────────────────────── */}
-      {impact ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
-            <h3 className="mb-2 text-sm font-semibold text-red-600">
-              Delete role “{impact.role.name}”?
-            </h3>
+      <Modal
+        open={!!impact}
+        onClose={() => setImpact(null)}
+        title={impact ? `Delete role "${impact.role.name}"?` : ""}
+        width={440}
+      >
+        {impact ? (
+          <>
             {impact.busy && !impact.data ? (
-              <p className="text-sm text-gray-500">Loading impact…</p>
+              <p style={{ fontSize: 13, color: "var(--r-fg-4)" }}>Loading impact…</p>
             ) : impact.err ? (
-              <p className="text-sm text-red-600">{impact.err}</p>
+              <p style={{ fontSize: 13, color: "var(--r-danger)" }}>{impact.err}</p>
             ) : (
-              <div className="mb-3 space-y-1 text-sm text-gray-600">
-                <p>This will remove the role from everyone who has it.</p>
-                <ul className="ml-4 list-disc">
+              <div style={{ marginBottom: 14, fontSize: 13, color: "var(--r-fg-2)", lineHeight: 1.6 }}>
+                <p style={{ margin: 0 }}>This will remove the role from everyone who has it.</p>
+                <ul style={{ margin: "6px 0", paddingLeft: 18 }}>
                   <li>
                     Affected assignments:{" "}
-                    <strong>
-                      {impact.data?.assignments ??
-                        impact.data?.assignmentCount ??
-                        0}
-                    </strong>
+                    <strong>{impact.data?.assignments ?? impact.data?.assignmentCount ?? 0}</strong>
                   </li>
                   <li>
-                    Affected users:{" "}
-                    <strong>
-                      {impact.data?.users ?? impact.data?.userCount ?? 0}
-                    </strong>
+                    Affected users: <strong>{impact.data?.users ?? impact.data?.userCount ?? 0}</strong>
                   </li>
                 </ul>
-                <p className="text-xs text-amber-700">
-                  People losing access will be signed out and asked to log in
-                  again.
+                <p style={{ margin: 0, fontSize: 12, color: "var(--r-warning)" }}>
+                  People losing access will be signed out and asked to log in again.
                 </p>
               </div>
             )}
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setImpact(null)}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={impact.busy}
-                onClick={confirmDelete}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white disabled:opacity-50"
-              >
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <Btn variant="secondary" onClick={() => setImpact(null)}>Cancel</Btn>
+              <Btn variant="dangerSolid" disabled={impact.busy} onClick={confirmDelete}>
                 {impact.busy ? "Deleting…" : "Delete role"}
-              </button>
+              </Btn>
             </div>
-          </div>
-        </div>
-      ) : null}
+          </>
+        ) : null}
+      </Modal>
 
       {/* ── Manage access (create login / assign) ──────────────────────────── */}
       {assigning ? (

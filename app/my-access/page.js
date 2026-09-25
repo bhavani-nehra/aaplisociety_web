@@ -25,8 +25,16 @@ import { useVisibleAdminNavigation } from "@/components/adminNavigation";
 function MyAccessInner() {
   const sp = useSearchParams();
   const denied = sp.get("denied");
-  const { grouped, roles, context, pages, loading, error, refresh } =
-    usePermissions();
+  const {
+    grouped,
+    roles,
+    context,
+    pages,
+    societyHasRoles,
+    loading,
+    error,
+    refresh,
+  } = usePermissions();
   const [open, setOpen] = useState({});
   const [bootstrapping, setBootstrapping] = useState(false);
   const [bootstrapError, setBootstrapError] = useState(null);
@@ -48,21 +56,34 @@ function MyAccessInner() {
     }
   }
 
+  // Minimalist register (final_audit_fix_plan/06-skills-and-execution-tooling.md
+  // §13): "config and chrome — infrequent, high-consequence screens, maximum
+  // legibility, zero decoration." Previously hardcoded Tailwind gray-*/amber-*
+  // utilities, which bypass this app's token layer entirely — no dark-mode
+  // support (this app's dark mode is opt-in via data-theme, not Tailwind's
+  // media-query default, so a raw `text-gray-400` never repaints) and the
+  // same contrast bug the design-system audit found in the token layer
+  // itself (gray-400 = 2.54:1 on white, fails AA). Rewritten onto
+  // var(--fg-*)/var(--bg-*)/var(--warning-*) via Tailwind arbitrary values
+  // so this page now follows theme toggles and the token fixes automatically.
   return (
     <main className="mx-auto max-w-3xl p-6">
-      <h1 className="mb-1 text-2xl font-semibold">My Access</h1>
-      <p className="mb-4 text-sm text-gray-500">
+      <h1 className="mb-1 text-2xl font-semibold" style={{ color: "var(--fg-1)" }}>My Access</h1>
+      <p className="mb-4 text-sm" style={{ color: "var(--fg-4)" }}>
         Your roles and effective permissions in this society.
       </p>
 
       {denied ? (
-        <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4">
-          <div className="font-medium text-amber-800">
+        <div
+          className="mb-4 rounded-lg border p-4"
+          style={{ borderColor: "var(--warning)", background: "var(--warning-bg)" }}
+        >
+          <div className="font-medium" style={{ color: "var(--warning-fg)" }}>
             You don’t have access to that feature.
           </div>
-          <div className="mt-1 text-sm text-amber-700">
+          <div className="mt-1 text-sm" style={{ color: "var(--warning-fg)" }}>
             It requires the permission{" "}
-            <code className="rounded bg-amber-100 px-1">{denied}</code> (
+            <code className="rounded px-1" style={{ background: "var(--bg-surface)" }}>{denied}</code> (
             {prettyPermissionId(denied)}). If you need it, contact your society
             admin to have it added to one of your roles.
           </div>
@@ -75,13 +96,13 @@ function MyAccessInner() {
           caller can actually open is a real link here. */}
       {!loading && !error && context?.hat === "staff" ? (
         <section className="mb-6">
-          <h2 className="mb-2 text-sm font-semibold text-gray-700">
+          <h2 className="mb-2 text-sm font-semibold" style={{ color: "var(--fg-3)" }}>
             Where you can go
           </h2>
           {(pages || []).filter((p) => p.level !== "none").length === 0 ? (
-            <div className="rounded-lg bg-gray-50 px-3 py-4 text-sm text-gray-400">
-              No pages granted yet. Contact your society admin, or if you're
-              the admin, use "Enable Role Management" below.
+            <div className="rounded-lg px-3 py-4 text-sm" style={{ background: "var(--bg-sunken)", color: "var(--fg-5)" }}>
+              No pages granted yet. Contact your society admin to be assigned
+              a role.
             </div>
           ) : (
             <div className="space-y-3">
@@ -94,7 +115,7 @@ function MyAccessInner() {
                   }, {}),
               ).map(([group, groupPages]) => (
                 <div key={group}>
-                  <div className="mb-1 text-xs font-semibold uppercase text-gray-400">
+                  <div className="mb-1 text-xs font-semibold uppercase" style={{ color: "var(--fg-5)" }}>
                     {group}
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -102,10 +123,13 @@ function MyAccessInner() {
                       <Link
                         key={p.key}
                         href={p.path}
-                        className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:border-indigo-400 hover:text-indigo-700"
+                        className="rounded-lg border px-3 py-1.5 text-sm transition-colors"
+                        style={{ borderColor: "var(--border-strong)", background: "var(--bg-surface)", color: "var(--fg-3)" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--primary)"; e.currentTarget.style.color = "var(--primary)"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border-strong)"; e.currentTarget.style.color = "var(--fg-3)"; }}
                       >
                         {p.label}
-                        <span className="ml-1.5 text-xs text-gray-400">
+                        <span className="ml-1.5 text-xs" style={{ color: "var(--fg-5)" }}>
                           {p.level === "manage" ? "Manage" : "View"}
                         </span>
                       </Link>
@@ -119,9 +143,9 @@ function MyAccessInner() {
       ) : null}
 
       {loading ? (
-        <div className="text-sm text-gray-500">Loading your access…</div>
+        <div className="text-sm" style={{ color: "var(--fg-4)" }}>Loading your access…</div>
       ) : error ? (
-        <div className="text-sm text-red-600">
+        <div className="text-sm" style={{ color: "var(--danger)" }}>
           Couldn’t load your access: {error.message}
           <button onClick={refresh} className="ml-2 underline">
             Retry
@@ -130,11 +154,11 @@ function MyAccessInner() {
       ) : (
         <>
           <section className="mb-5">
-            <h2 className="mb-2 text-sm font-semibold text-gray-700">
+            <h2 className="mb-2 text-sm font-semibold" style={{ color: "var(--fg-3)" }}>
               Active context
             </h2>
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="rounded bg-gray-100 px-2 py-0.5">
+              <span className="rounded px-2 py-0.5" style={{ background: "var(--bg-muted)", color: "var(--fg-2)" }}>
                 {context?.hat === "member" ? "Member" : "Staff"} hat
               </span>
               {roles.length ? (
@@ -142,7 +166,7 @@ function MyAccessInner() {
                   <span
                     key={r.id}
                     className="flex items-center gap-1 rounded-full border px-2 py-0.5"
-                    style={{ borderColor: r.color || "var(--border)" }}
+                    style={{ borderColor: r.color || "var(--border)", color: "var(--fg-2)" }}
                   >
                     <span
                       className="inline-block h-2 w-2 rounded-full"
@@ -152,31 +176,43 @@ function MyAccessInner() {
                   </span>
                 ))
               ) : (
-                <span className="text-gray-400">
+                <span style={{ color: "var(--fg-5)" }}>
                   No staff roles (fixed member capabilities)
                 </span>
               )}
             </div>
-            {context?.hat === "staff" && roles.length === 0 ? (
-              <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
-                <div className="text-sm text-blue-800">
-                  Role management isn’t turned on for this society yet.
+            {/* SEC-25: gated on the SOCIETY having no roles, not on this user
+                holding none. The old condition (`roles.length === 0`) fired for
+                any staff account not yet assigned a role and told them role
+                management was "not turned on" — on societies where it was
+                seeded at import and working fine. RBAC is on by default; this
+                is a recovery action for the one case where seeding genuinely
+                did not happen, not a feature to switch on. */}
+            {context?.hat === "staff" && societyHasRoles === false ? (
+              <div
+                className="mt-3 rounded-lg border p-3"
+                style={{ borderColor: "var(--warning)", background: "var(--warning-bg)" }}
+              >
+                <div className="text-sm" style={{ color: "var(--warning-fg)" }}>
+                  Troubleshooting — this society has no roles set up.
                 </div>
-                <div className="mt-1 text-xs text-blue-700">
-                  If you’re the society Admin, enable it to seed the default
-                  roles (Admin, Secretary, Accountant, Security) and assign
-                  your role.
+                <div className="mt-1 text-xs" style={{ color: "var(--warning-fg)" }}>
+                  Roles are normally created automatically when a society is
+                  imported. If you’re the society Admin, this repairs the
+                  default set (Admin, Secretary, Accountant, Security) and
+                  assigns you the Admin role.
                 </div>
                 <button
                   type="button"
                   onClick={handleEnableRoleManagement}
                   disabled={bootstrapping}
-                  className="mt-2 rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  className="btn btn-sm mt-2"
+                  style={{ background: "var(--warning)", color: "var(--on-solid)" }}
                 >
-                  {bootstrapping ? "Enabling…" : "Enable Role Management"}
+                  {bootstrapping ? "Repairing…" : "Repair role setup"}
                 </button>
                 {bootstrapError ? (
-                  <div className="mt-2 text-xs text-red-600">
+                  <div className="mt-2 text-xs" style={{ color: "var(--danger)" }}>
                     {bootstrapError}
                   </div>
                 ) : null}
@@ -185,35 +221,36 @@ function MyAccessInner() {
           </section>
 
           <section>
-            <h2 className="mb-2 text-sm font-semibold text-gray-700">
+            <h2 className="mb-2 text-sm font-semibold" style={{ color: "var(--fg-3)" }}>
               Permissions by area
             </h2>
             {Object.keys(grouped).length === 0 ? (
-              <div className="text-sm text-gray-400">
+              <div className="text-sm" style={{ color: "var(--fg-5)" }}>
                 You have no permissions in this context.
               </div>
             ) : (
-              <div className="divide-y divide-gray-100 rounded-lg border border-gray-200">
+              <div className="rounded-lg border" style={{ borderColor: "var(--border)" }}>
                 {Object.entries(grouped)
                   .sort()
-                  .map(([mod, ids]) => {
+                  .map(([mod, ids], i, arr) => {
                     const isOpen = open[mod];
                     return (
-                      <div key={mod}>
+                      <div key={mod} style={{ borderTop: i > 0 ? "1px solid var(--border)" : "none" }}>
                         <button
                           type="button"
                           onClick={() =>
                             setOpen((s) => ({ ...s, [mod]: !s[mod] }))
                           }
-                          className="flex w-full items-center justify-between px-3 py-2 text-left text-sm font-medium capitalize hover:bg-gray-50"
+                          className="flex w-full items-center justify-between px-3 py-2 text-left text-sm font-medium capitalize"
+                          style={{ color: "var(--fg-1)" }}
                         >
                           <span>
-                            <span className="mr-1 inline-block w-3 text-gray-400">
+                            <span className="mr-1 inline-block w-3" style={{ color: "var(--fg-5)" }}>
                               {isOpen ? "▾" : "▸"}
                             </span>
                             {mod}
                           </span>
-                          <span className="rounded-full bg-gray-100 px-2 text-xs text-gray-600">
+                          <span className="rounded-full px-2 text-xs" style={{ background: "var(--bg-muted)", color: "var(--fg-3)" }}>
                             {ids.length}
                           </span>
                         </button>
@@ -223,9 +260,10 @@ function MyAccessInner() {
                               <li
                                 key={id}
                                 className="flex items-center justify-between text-sm"
+                                style={{ color: "var(--fg-2)" }}
                               >
                                 <span>{prettyPermissionId(id)}</span>
-                                <code className="text-[10px] text-gray-400">
+                                <code className="text-[10px]" style={{ color: "var(--fg-5)" }}>
                                   {id}
                                 </code>
                               </li>
@@ -251,7 +289,7 @@ export default function MyAccessPage() {
       <PermissionProvider>
         <Suspense
           fallback={
-            <div className="p-8 text-sm text-gray-500">Loading your access…</div>
+            <div className="p-8 text-sm" style={{ color: "var(--fg-4)" }}>Loading your access…</div>
           }
         >
           <MyAccessInner />

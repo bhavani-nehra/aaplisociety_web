@@ -10,6 +10,7 @@ import Member from "@/models/Member";
 import mongoose from "mongoose";
 import { requireRoles, SOCIETY_ADMIN_ROLES } from "@/lib/authz";
 import { authorize } from "@/lib/rbac/authorize";
+import cache from "@/lib/cache";
 export async function GET(request) {
   const gate = await authorize(request, "dashboard.stats.view");
   if (!gate.ok) return gate.response;
@@ -44,6 +45,11 @@ export async function GET(request) {
     } else if (year) {
       monthBillFilter.billYear = year;
     }
+    // Cached in Upstash per society + filters. Fresh for 30s, then served
+    // stale-while-revalidate for up to 10 min. Any bill/payment/member change
+    // clears it (see invalidateDashboardFor in lib/cache.js).
+    const cacheKey = `dash:stats:${societyIdStr}:${month}:${year}:${fyYear}`;
+    const compute = async () => {
     // ── Parallel aggregations ────────────────────────────────────────────────
     const [
       totalMembers,
@@ -72,15 +78,30 @@ export async function GET(request) {
             societyId,
             status: { $in: ["Unpaid", "Partial", "Overdue", "Scheduled"] },
             isDeleted: { $ne: true },
+            isHistoricalArchive: { $ne: true },
+          },
+        },
+        // Every bill opens on the previous bill's closing, so an older open bill's
+        // balance is already inside the newest one. What a unit owes is its
+        // NEWEST open bill's balance — summing all of them counted the same
+        // rupees once per open month.
+        { $sort: { billYear: -1, billMonth: -1 } },
+        {
+          $group: {
+            _id: { $ifNull: ["$shopId", "$memberId"] },
+            principal: { $first: "$principalBalance" },
+            interest: { $first: "$interestBalance" },
+            balance: { $first: "$balanceAmount" },
+            openBills: { $sum: 1 },
           },
         },
         {
           $group: {
             _id: null,
-            totalPrincipal: { $sum: "$principalBalance" },
-            totalInterest: { $sum: "$interestBalance" },
-            totalBalance: { $sum: "$balanceAmount" },
-            count: { $sum: 1 },
+            totalPrincipal: { $sum: "$principal" },
+            totalInterest: { $sum: "$interest" },
+            totalBalance: { $sum: "$balance" },
+            count: { $sum: "$openBills" },
           },
         },
       ]),
@@ -164,7 +185,7 @@ export async function GET(request) {
         {
           $group: {
             _id: null,
-            totalBilled: { $sum: "$totalAmount" },
+            totalBilled: { $sum: { $add: [{ $ifNull: ["$currentCharges", 0] }, { $ifNull: ["$currentInterest", 0] }] } },
             totalCollected: { $sum: "$amountPaid" },
             totalBalance: { $sum: "$balanceAmount" },
           },
@@ -205,7 +226,7 @@ export async function GET(request) {
         {
           $group: {
             _id: { billYear: "$billYear", billMonth: "$billMonth" },
-            totalBilled: { $sum: "$totalAmount" },
+            totalBilled: { $sum: { $add: [{ $ifNull: ["$currentCharges", 0] }, { $ifNull: ["$currentInterest", 0] }] } },
             totalCollected: { $sum: "$amountPaid" },
             totalBalance: { $sum: "$balanceAmount" },
             count: { $sum: 1 },
@@ -297,7 +318,7 @@ export async function GET(request) {
       totalBalance: t.totalBalance,
       count: t.count,
     }));
-    return NextResponse.json({
+    return {
       success: true,
       totalMembers,
       outstanding: {
@@ -323,7 +344,8 @@ export async function GET(request) {
         label: `FY ${fyYear}-${String(fyYear + 1).slice(-2)}`,
         totalBilled: parseFloat(fyBilled.totalBilled?.toFixed(2) || 0),
         totalCollected: parseFloat(fyBilled.totalCollected?.toFixed(2) || 0),
-        totalBalance: parseFloat(fyBilled.totalBalance?.toFixed(2) || 0),
+        // what is owed now (newest open bill per unit), not a sum of every month's cumulative balance
+        totalBalance: parseFloat(outstanding.totalBalance?.toFixed(2) || 0),
         collectionRate: fyCollectionRate,
         collectionsFromTx: parseFloat(fyCollections.total?.toFixed(2) || 0),
       },
@@ -350,7 +372,13 @@ export async function GET(request) {
         total: m.total,
         count: m.count,
       })),
+    };
+    };
+    const payload = await cache.getOrSetSWR(cacheKey, compute, {
+      softTtlSeconds: 30,
+      hardTtlSeconds: 600,
     });
+    return NextResponse.json(payload);
   } catch (err) {
     console.error("Dashboard stats error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

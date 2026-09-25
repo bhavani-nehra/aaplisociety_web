@@ -89,8 +89,6 @@
     "@babel/preset-typescript": "^7.29.7",
     "@jest/globals": "^30.4.1",
     "@playwright/test": "^1.60.0",
-    "@reticlehq/next": "^3.1.0",
-    "@reticlehq/react": "^3.1.0",
     "allure-playwright": "^3.10.0",
     "autoprefixer": "^10.5.0",
     "babel-jest": "^30.4.1",

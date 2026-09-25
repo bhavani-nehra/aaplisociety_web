@@ -1,4 +1,3 @@
-import { ReticleDev } from './reticle-dev';
 //app/layout.js
 import { headers } from "next/headers";
 import QueryProvider from "./providers/QueryProvider";
@@ -32,7 +31,7 @@ export default async function RootLayout({ children }) {
       <head>
         <script suppressHydrationWarning nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
       </head>
-      <body className={inter.className}>{process.env.NODE_ENV === 'development' ? <ReticleDev /> : null}
+      <body className={inter.className}>
         {/* Global Aurora background — one mount for every route (was
             admin-dashboard-only; see styles/globals.css for the 4-layer
             stack and public/bg.svg + public/bg-dark.svg for the art).

@@ -1,4 +1,3 @@
-const { withReticle } = require('@reticlehq/next');
 const nextConfig = {
   reactStrictMode: true,
   experimental: {
@@ -101,8 +100,7 @@ const nextConfig = {
 // capture (instrumentation.js / instrumentation-client.js) is unaffected —
 // those only key off NEXT_PUBLIC_SENTRY_DSN, not this.
 const { withSentryConfig } = require("@sentry/nextjs");
-const withReticleMaybe = process.env.RETICLE === "1" ? withReticle : (c) => c;
-module.exports = withReticleMaybe(process.env.VERCEL
+module.exports = process.env.VERCEL
   ? withSentryConfig(nextConfig, {
       silent: true,
       org: process.env.SENTRY_ORG,
@@ -120,4 +118,4 @@ module.exports = withReticleMaybe(process.env.VERCEL
       autoInstrumentAppDirectory: false,
       autoInstrumentMiddleware: false,
     })
-  : nextConfig);
+  : nextConfig;

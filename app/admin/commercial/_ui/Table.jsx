@@ -18,7 +18,7 @@ export default function Table({ cols, rows, onRowClick, emptyText = "Nothing her
           {cols.map((c, i) => (
             <th key={i} style={{
               textAlign: c.align || "left", padding: "8px 12px", fontSize: 10, fontWeight: 600,
-              color: "var(--cx-fg-4)", textTransform: "uppercase", letterSpacing: "0.6px",
+              color: "var(--cx-fg-4)", 
               borderBottom: "1px solid var(--cx-border)", background: "var(--cx-surface-2)",
             }}>{c.label}</th>
           ))}

@@ -735,7 +735,7 @@ export default function CommercialRateCardPage() {
             fontSize: 10,
             fontWeight: 700,
             color: "var(--cx-fg-4)",
-            textTransform: "uppercase",
+            
             letterSpacing: "0.8px",
             marginBottom: 8,
           }}
@@ -757,7 +757,7 @@ export default function CommercialRateCardPage() {
           <Btn href="/admin/commercial/shops" variant="secondary" icon="building">
             Step 2 · Check shop areas
           </Btn>
-          <Btn href="/admin/generate-bills" variant="primary" iconR="arrow-right">
+          <Btn href="/admin/generate-bills" variant="primary">
             Step 3 · Generate commercial bills
           </Btn>
         </div>

@@ -321,7 +321,7 @@ export default function SettingsPanel() {
             {g.mode === "AboveThreshold" && (
               <Row>
                 <div>
-                  <L hint="Per unit, per month. The common figure used by societies is Rs 7,500.">
+                  <L hint="Per unit, per month. The common figure used by societies is ₹7,500.">
                     Limit before GST applies
                   </L>
                   <Num
@@ -648,7 +648,7 @@ export default function SettingsPanel() {
               Of {cov.total} flats: {cov.withCarpet} have a carpet area, {cov.withBuiltUp} have a
               built-up area.
               {basis === "carpet" && cov.missingIfCarpet > 0 && (
-                <b> {cov.missingIfCarpet} have no carpet area and would bill Rs 0 on per-sq-ft charges.</b>
+                <b> {cov.missingIfCarpet} have no carpet area and would bill ₹0 on per-sq-ft charges.</b>
               )}
               {basis === "builtup" && cov.missingIfBuiltUp > 0 && (
                 <b> {cov.missingIfBuiltUp} have no built-up area and fall back to carpet area.</b>

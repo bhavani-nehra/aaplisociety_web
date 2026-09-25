@@ -72,7 +72,7 @@ const bentoCardTitle = {
   fontSize: 11,
   fontWeight: 700,
   letterSpacing: "0.4px",
-  textTransform: "uppercase",
+  
   color: "var(--cx-fg-4)",
   marginBottom: 10,
 };

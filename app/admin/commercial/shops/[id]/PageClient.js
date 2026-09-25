@@ -73,7 +73,7 @@ function SectionTitle({ children, note }) {
         style={{
           fontSize: 11,
           fontWeight: 700,
-          textTransform: "uppercase",
+          
           letterSpacing: "0.6px",
           color: "var(--cx-fg-4)",
         }}
@@ -176,7 +176,7 @@ export default function ShopDetailPage() {
     if (!form) return [];
     const out = [];
     if (!(Number(form.areaSqft) > 0))
-      out.push("No area recorded, so every per-sq-ft charge would come to Rs 0.");
+      out.push("No area recorded, so every per-sq-ft charge would come to ₹0.");
     if (!form.ownerName) out.push("No owner name, so the bill cannot be addressed.");
     if (form.occupancyType === "Rented out" && !form.tenantName)
       out.push("Marked rented out but no tenant name is recorded.");

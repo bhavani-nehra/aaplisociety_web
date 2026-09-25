@@ -23,7 +23,7 @@ export const S = {
     borderRadius: 8,
     border: "1px solid var(--accent)",
     background: "var(--accent)",
-    color: "#fff",
+    color: "var(--on-solid)",
     fontSize: "0.82rem",
     fontWeight: 600,
     cursor: "pointer",
@@ -45,7 +45,7 @@ export const S = {
     borderBottom: "2px solid var(--border)",
     color: "var(--fg-3)",
     fontSize: "0.72rem",
-    textTransform: "uppercase",
+    
     letterSpacing: "0.04em",
   },
   td: { padding: "0.55rem 0.5rem", borderBottom: "1px solid var(--bg-muted)" },

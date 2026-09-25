@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { Card, Pill, Btn, Icon } from "../_ui";
 
@@ -12,6 +13,12 @@ export default function AdminCommercialCategoriesPage() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
+  // The toast below is position:fixed; DashboardLayout.js's .contentFrame
+  // sets backdrop-filter, which makes it the containing block for fixed
+  // descendants — so without a portal the toast was fixed to that scrolled
+  // box, not the real viewport. `mounted` keeps document access client-only.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const notify = (message, tone) => {
     setToast({ message, tone });
@@ -101,7 +108,7 @@ export default function AdminCommercialCategoriesPage() {
   return (
     <div className="commercial-scope cx-fade" style={{ padding: "1.75rem 2rem" }}>
       <div style={{ marginBottom: 22 }}>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 10, fontWeight: 700, color: "var(--cx-fg-4)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 8 }}>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 10, fontWeight: 700, color: "var(--cx-fg-4)", marginBottom: 8 }}>
           <Icon name="tag" size={11} /> Shops &amp; offices
         </div>
         <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, color: "var(--cx-fg-1)", letterSpacing: "-0.018em" }}>Categories</h1>
@@ -163,7 +170,7 @@ export default function AdminCommercialCategoriesPage() {
         </div>
       )}
 
-      {toast && (
+      {toast && mounted && createPortal(
         <div
           style={{
             position: "fixed",
@@ -177,7 +184,8 @@ export default function AdminCommercialCategoriesPage() {
           }}
         >
           {toast.message}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

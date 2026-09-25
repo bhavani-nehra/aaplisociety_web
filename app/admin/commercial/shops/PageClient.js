@@ -26,7 +26,8 @@ import notify from "@/lib/notify";
 // plus a tabbed drawer for editing, so "is this shop listed", "does the owner
 // have app access" and "what are its hours" are answered at a glance.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -72,7 +73,7 @@ const sectionTitle = {
   fontSize: 11,
   fontWeight: 700,
   letterSpacing: "0.6px",
-  textTransform: "uppercase",
+  
   color: "var(--cx-fg-4)",
   margin: "18px 0 10px",
 };
@@ -241,6 +242,13 @@ export default function CommercialShopsPage() {
   const [drawerTab, setDrawerTab] = useState("unit");
   const [form, setForm] = useState(EMPTY_FORM);
   const [banner, setBanner] = useState(null); // { tone, title, detail }
+  // The card->dialog below is position:fixed, rendered directly in the page.
+  // DashboardLayout.js wraps every page in .contentFrame, which sets
+  // backdrop-filter — a CSS containing block for fixed descendants — so
+  // without a portal this dialog was fixed to that scrolled content box, not
+  // the real viewport. `mounted` keeps the portal call out of the SSR pass.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const shopsQuery = useQuery({
     queryKey: ["commercial-shops", search],
@@ -285,7 +293,7 @@ export default function CommercialShopsPage() {
   const problemsFor = (s) => {
     const out = [];
     if (!(Number(s.areaSqft) > 0))
-      out.push("No area recorded, so every per-sq-ft charge would be Rs 0.");
+      out.push("No area recorded, so every per-sq-ft charge would be ₹0.");
     if (tradeRequired && !s.hasTradeDetails)
       out.push("Business name and category are required by this society before billing.");
     if (s.occupancyType === "Rented out" && !s.tenantName)
@@ -431,7 +439,7 @@ export default function CommercialShopsPage() {
       issues.push({
         field: "areaSqft",
         message:
-          "Area is required. Per-sq-ft charges multiply by this number, so a blank area silently produces a Rs 0 bill.",
+          "Area is required. Per-sq-ft charges multiply by this number, so a blank area silently produces a ₹0 bill.",
       });
     if (!form.ownerMemberId && !String(form.ownerName).trim())
       issues.push({
@@ -622,6 +630,7 @@ export default function CommercialShopsPage() {
         , and apply to every shop and office.
       </div>
 
+      {mounted && createPortal(
       <AnimatePresence>
         {openId && (
           <>
@@ -1189,7 +1198,9 @@ export default function CommercialShopsPage() {
             </motion.div>
           </>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+      )}
 
     </div>
   );

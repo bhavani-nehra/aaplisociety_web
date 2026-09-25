@@ -1,12 +1,20 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Icon from "./Icon";
 
 // Right-side slide-over. The list stays mounted and visible behind a dimmed
 // backdrop instead of navigating away or replacing the page with a form —
 // closing the drawer (Escape, backdrop click, or the X) always returns to
 // exactly the scroll position and filter state the list was in.
+//
+// Portaled to document.body: DashboardLayout.js wraps every page in
+// .contentFrame, which sets backdrop-filter — a CSS containing block for
+// position:fixed descendants — so rendered inline this drawer was fixed to
+// that scrolled content box, not the real viewport.
 export default function Drawer({ open, onClose, title, sub, right, children, footer, width = 560 }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => e.key === "Escape" && onClose?.();
@@ -19,9 +27,9 @@ export default function Drawer({ open, onClose, title, sub, right, children, foo
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  return createPortal(
     <div style={{ position: "fixed", inset: 0, zIndex: 60 }}>
       <div
         onClick={onClose}
@@ -116,6 +124,7 @@ export default function Drawer({ open, onClose, title, sub, right, children, foo
           }
         }
       `}</style>
-    </div>
+    </div>,
+    document.body
   );
 }

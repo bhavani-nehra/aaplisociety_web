@@ -23,7 +23,7 @@ export default function CommercialOverviewPage() {
   return (
     <div className="commercial-scope cx-fade" style={{ padding: "1.75rem 2rem" }}>
       <div style={{ marginBottom: 22 }}>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 10, fontWeight: 700, color: "var(--cx-fg-4)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 8 }}>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 10, fontWeight: 700, color: "var(--cx-fg-4)", marginBottom: 8 }}>
           <Icon name="store" size={11} /> Shops &amp; offices
         </div>
         <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, color: "var(--cx-fg-1)", letterSpacing: "-0.018em" }}>Commercial</h1>

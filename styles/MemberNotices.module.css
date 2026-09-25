@@ -52,8 +52,6 @@
   font-size: 0.85rem;
   font-weight: 700;
   color: var(--fg-3);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
   margin-bottom: 0.85rem;
 }
 .sectionDot {
@@ -110,7 +108,6 @@
   font-weight: 700;
   padding: 0.2rem 0.6rem;
   border-radius: 20px;
-  text-transform: uppercase;
 }
 .time {
   color: var(--fg-5);

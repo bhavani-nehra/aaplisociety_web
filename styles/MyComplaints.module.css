@@ -54,7 +54,6 @@
   border-radius: 20px;
   font-weight: 700;
   font-size: 0.78rem;
-  text-transform: uppercase;
 }
 .green {
   background: var(--success-bg);

@@ -19,8 +19,6 @@
   color: var(--fg-4);
   margin: 0 0 0.5rem 0;
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 .summaryValue {
   font-size: 1.75rem;
@@ -303,8 +301,6 @@
   font-size: 0.875rem;
   font-weight: 700;
   color: var(--fg-3);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 .ledgerTable tbody tr {
   border-bottom: 1px solid var(--bg-muted);
@@ -335,7 +331,6 @@
   border-radius: 12px;
   font-size: 0.75rem;
   font-weight: 600;
-  text-transform: uppercase;
 }
 .paymentCash {
   display: inline-block;
@@ -536,8 +531,6 @@
   font-size: 1rem;
   color: var(--accent);
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 .detailSection table {
   width: 100%;

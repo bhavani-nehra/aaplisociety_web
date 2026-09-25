@@ -129,8 +129,6 @@
   font-size: 1.1rem;
   color: var(--primary);
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 /* Form Controls */
 .control {

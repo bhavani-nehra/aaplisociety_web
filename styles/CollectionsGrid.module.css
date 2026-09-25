@@ -68,8 +68,6 @@
   gap: 0.3rem;
   font-size: 0.68rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   color: var(--accent);
   background: rgba(79, 70, 229, 0.08);
   border: 1px solid rgba(79, 70, 229, 0.18);
@@ -114,8 +112,6 @@
   text-align: left;
   font-size: 0.68rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   color: var(--fg-4);
   white-space: nowrap;
 }
@@ -329,8 +325,6 @@
 .footLabel {
   font-size: 0.66rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   color: var(--fg-5);
 }
 .footValue {
@@ -675,8 +669,6 @@
 .ppStatLabel {
   font-size: 0.7rem;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   color: var(--fg-5);
 }
 
@@ -808,7 +800,6 @@
   line-height: 1.5;
 }
 
-.spin { animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── Responsive ────────────────────────────────────────── */
@@ -823,7 +814,6 @@
 /* Anyone who asked for less motion gets none of it. */
 @media (prefers-reduced-motion: reduce) {
   .skeletonRow { animation: none; }
-  .spin { animation: none; }
   .btnPrimary,
   .btnSecondary,
   .btnGhost,

@@ -51,8 +51,6 @@
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--fg-4);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 /* ── Form Card ───────────────────────────────────────── */
 .formCard {
@@ -84,8 +82,6 @@
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--fg-3);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 .input,
 .select {

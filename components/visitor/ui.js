@@ -4,7 +4,8 @@
 // NOTE: we deliberately use single-brace style references (style={obj}) with
 // named style objects instead of inline style=... to keep JSX clean.
 import { useEffect, useRef, useState } from "react";
-import { STATUS_COLOR, PURPOSE_ICON } from "@/lib/visitor-config";
+import { Icon } from "@/components/revamp";
+import { STATUS_COLOR } from "@/lib/visitor-config";
 export const tokens = {
   radius: 14,
   radiusSm: 10,
@@ -160,10 +161,8 @@ export function Badge({ children, color = "var(--fg-4)" }) {
 }
 export function PurposeTag({ purpose }) {
   const s = { fontSize: 13, color: tokens.text };
-  const ic = { marginRight: 6 };
   return (
     <span style={s}>
-      <span style={ic}>{PURPOSE_ICON[purpose] || ""}</span>
       {purpose}
     </span>
   );
@@ -275,33 +274,27 @@ export function Avatar({ src, name, size = 44 }) {
   };
   return <div style={s}>{(name || "?").charAt(0).toUpperCase()}</div>;
 }
-export function EmptyState({ icon = "📭", title, subtitle }) {
+export function EmptyState({ icon = "", title, subtitle }) {
   const wrap = { textAlign: "center", padding: "48px 20px", color: tokens.sub };
   const ic = { fontSize: 40, marginBottom: 10 };
   const t = { fontWeight: 600, color: tokens.text, marginBottom: 4 };
   const sub = { fontSize: 14 };
   return (
     <div style={wrap}>
-      <div style={ic}>{icon}</div>
+      {icon ? <div style={{ ...ic, display: "flex", justifyContent: "center" }}><Icon name={icon} size={30} color="var(--r-fg-5)" /></div> : null}
       <div style={t}>{title}</div>
       {subtitle && <div style={sub}>{subtitle}</div>}
     </div>
   );
 }
 export function Spinner({ size = 22 }) {
-  const s = {
-    display: "inline-block",
-    width: size,
-    height: size,
-    border: "3px solid var(--border)",
-    borderTopColor: tokens.primary,
-    borderRadius: "50%",
-    animation: "vspin 0.7s linear infinite",
-  };
   return (
-    <span style={s}>
-      <style>{"@keyframes vspin{to{transform:rotate(360deg)}}"}</style>
-    </span>
+    <span
+      role="status"
+      aria-label="Loading"
+      className="pulse-loader"
+      style={{ width: size, height: size }}
+    />
   );
 }
 export function Toast({ message, type = "info", onClose, duration = 5000 }) {

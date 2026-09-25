@@ -10,7 +10,25 @@
  * without any per-component theme branching.
  */
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import * as Lucide from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+
+// Modal / Drawer / Toast all render `position: fixed`, which the CSS spec
+// resolves against the nearest ancestor that sets a transform/filter/
+// backdrop-filter — and DashboardLayout.js wraps every page's children in
+// .contentFrame, which has backdrop-filter for the glass effect. Without a
+// portal, "fixed" secretly means "fixed to .contentFrame's own box", which
+// on a page taller than one screen (scrolled) plants the dialog wherever
+// that box happens to be instead of the actual viewport — the exact "dialog
+// appears in the wrong place / gets cut off" bug. Portaling to document.body
+// escapes that box entirely, so `inset:0`/`bottom:24;right:24` mean what
+// they say. `mounted` avoids touching `document` during SSR.
+export function useMounted() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return mounted;
+}
 
 /* ------------------------------------------------------------------ *
  * Icon — thin wrapper so call sites can pass kebab-case kit icon names
@@ -106,12 +124,13 @@ export function Pill({ tone = "neutral", children, dot = true, style }) {
 /* ------------------------------------------------------------------ *
  * Card / CardHead
  * ------------------------------------------------------------------ */
-export function Card({ children, padded = true, style, hover = false, onClick, className }) {
+export function Card({ children, padded = true, style, hover = false, onClick, className, ...rest }) {
   const [h, setH] = useState(false);
   return (
     <div
       className={className}
       onClick={onClick}
+      {...rest}
       onMouseEnter={() => hover && setH(true)}
       onMouseLeave={() => hover && setH(false)}
       style={{
@@ -120,8 +139,7 @@ export function Card({ children, padded = true, style, hover = false, onClick, c
         borderRadius: "var(--r-radius-lg)",
         padding: padded ? "var(--r-pad-card)" : 0,
         boxShadow: h ? "var(--r-shadow-pop)" : "var(--r-shadow-card)",
-        transition: "box-shadow 0.18s, transform 0.18s",
-        transform: h ? "translateY(-1px)" : "none",
+        transition: "box-shadow 0.18s",
         ...style,
       }}
     >
@@ -149,7 +167,7 @@ export function Progress({ value, total = 100, color = "var(--r-brand)", height 
   const pct = Math.min(100, Math.max(0, (value / (total || 1)) * 100));
   return (
     <div style={{ width: "100%", height, background: "var(--r-surface-3)", borderRadius: 999, overflow: "hidden" }}>
-      <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 999, transition: "width 0.5s cubic-bezier(.16,1,.3,1)" }} />
+      <div style={{ width: "100%", height: "100%", background: color, borderRadius: 999, transform: `scaleX(${pct / 100})`, transformOrigin: "left", transition: "transform 0.5s cubic-bezier(.16,1,.3,1)" }} />
     </div>
   );
 }
@@ -516,43 +534,93 @@ export function ActionTile({ tone = "info", icon, headline, sub, cta, onClick })
 }
 
 /* ------------------------------------------------------------------ *
- * MiniMetric — the bento tile
+ * MiniMetric — the bento tile.
+ *
+ * Was the textbook "hero-metric" cliché: small label above a big number
+ * above a small subtext, all centered, all the same weight — the exact
+ * shape a "these dashboards all look AI-generated" complaint points at
+ * (impeccable's own craft-floor names it explicitly as a refused default).
+ * Rebuilt around two changes that break that silhouette while keeping the
+ * prop API identical, so every existing caller (dashboard, payments,
+ * expenditure, amenities, …) inherits this without a page-level edit:
+ *   1. the icon carries the tone as a real colour badge instead of a
+ *      13px glyph sitting inline with the label — it now reads as part of
+ *      the data, not a decoration next to it.
+ *   2. `delta` sits on the SAME baseline as the number, as a coloured
+ *      chip, instead of stacked on its own line underneath — the card
+ *      reads as one statement ("84 · +12% this week"), not three stacked
+ *      text blocks of decreasing importance.
+ * `extra` (a sparkline, a progress bar) gets its own zone below a
+ * hairline rather than just trailing the stack, so a card with a chart
+ * reads as headline-then-detail, not one undifferentiated column.
  * ------------------------------------------------------------------ */
 export function MiniMetric({ label, value, delta, tone, icon, extra, onClick }) {
+  const isNeg = tone === "danger";
+  const isPos = tone === "paid" || tone === "success";
+  const toneColor = isPos ? "var(--r-success)" : isNeg ? "var(--r-danger)" : "var(--r-brand)";
+  const toneSoft = isPos ? "var(--r-success-soft)" : isNeg ? "var(--r-danger-soft)" : "var(--r-brand-soft)";
   return (
     <Card style={{ cursor: onClick ? "pointer" : "default" }} hover={!!onClick} onClick={onClick}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--r-fg-4)", fontWeight: 500 }}>
-          <Icon name={icon} size={13} /> {label}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          {icon && (
+            <div style={{
+              width: 26, height: 26, borderRadius: 7, flexShrink: 0,
+              background: toneSoft, color: toneColor,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <Icon name={icon} size={13} />
+            </div>
+          )}
+          <span style={{ fontSize: 12, color: "var(--r-fg-4)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
         </div>
-        {onClick && <Icon name="arrow-up-right" size={13} color="var(--r-fg-5)" />}
+        {onClick && <Icon name="arrow-up-right" size={13} color="var(--r-fg-5)" style={{ flexShrink: 0 }} />}
       </div>
-      <div className="revamp-num" style={{ fontSize: 28, fontWeight: 700, color: "var(--r-fg-1)", letterSpacing: "-0.02em", lineHeight: 1 }}>{value}</div>
-      {delta && (
-        <div style={{
-          fontSize: 11, marginTop: 6, fontWeight: 500,
-          color: tone === "paid" || tone === "success" ? "var(--r-success)"
-            : tone === "danger" ? "var(--r-danger)" : "var(--r-fg-4)",
-        }}>{delta}</div>
-      )}
-      {extra}
+      <div style={{ display: "flex", alignItems: "baseline", gap: 9, flexWrap: "wrap" }}>
+        <div className="revamp-num" style={{ fontSize: 27, fontWeight: 700, color: "var(--r-fg-1)", letterSpacing: "-0.02em", lineHeight: 1 }}>{value}</div>
+        {delta && (
+          <span style={{
+            fontSize: 11, fontWeight: 600, padding: "2.5px 8px", borderRadius: 999, whiteSpace: "nowrap",
+            background: isNeg ? "var(--r-danger-soft)" : isPos ? "var(--r-success-soft)" : "var(--r-surface-2)",
+            color: isNeg ? "var(--r-danger)" : isPos ? "var(--r-success)" : "var(--r-fg-3)",
+          }}>{delta}</span>
+        )}
+      </div>
+      {extra && <div style={{ marginTop: 13, paddingTop: 12, borderTop: "1px solid var(--r-hairline)" }}>{extra}</div>}
     </Card>
   );
 }
 
 /* ------------------------------------------------------------------ *
- * SmallStat — compact 4-up stat card (Members screen)
+ * SmallStat — compact 4-up stat card (Members screen). Same rebuild as
+ * MiniMetric, sized down: icon as a tone badge sitting beside the
+ * label/value pair (horizontal), not stacked above it.
  * ------------------------------------------------------------------ */
 export function SmallStat({ icon, label, value, tone, onClick }) {
+  const isNeg = tone === "danger";
+  const isPos = tone === "success";
+  const toneColor = isPos ? "var(--r-success)" : isNeg ? "var(--r-danger)" : "var(--r-brand)";
+  const toneSoft = isPos ? "var(--r-success-soft)" : isNeg ? "var(--r-danger-soft)" : "var(--r-brand-soft)";
   return (
     <Card style={{ padding: 14, cursor: onClick ? "pointer" : "default" }} hover={!!onClick} onClick={onClick}>
-      <div style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 11, color: "var(--r-fg-4)", fontWeight: 500, marginBottom: 6 }}>
-        <Icon name={icon} size={12} /> {label}
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        {icon && (
+          <div style={{
+            width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+            background: toneSoft, color: toneColor,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <Icon name={icon} size={14} />
+          </div>
+        )}
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 10.5, color: "var(--r-fg-4)", fontWeight: 500, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>
+          <div className="revamp-num" style={{
+            fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1.1,
+            color: isNeg ? "var(--r-danger)" : isPos ? "var(--r-success)" : "var(--r-fg-1)",
+          }}>{value}</div>
+        </div>
       </div>
-      <div className="revamp-num" style={{
-        fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em",
-        color: tone === "danger" ? "var(--r-danger)" : tone === "success" ? "var(--r-success)" : "var(--r-fg-1)",
-      }}>{value}</div>
     </Card>
   );
 }
@@ -884,6 +952,7 @@ export function GuardedAction({
  * actually is.
  * ------------------------------------------------------------------ */
 export function Modal({ open, onClose, title, sub, width = 720, children }) {
+  const mounted = useMounted();
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => { if (e.key === "Escape") onClose?.(); };
@@ -891,8 +960,8 @@ export function Modal({ open, onClose, title, sub, width = 720, children }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  if (!open) return null;
-  return (
+  if (!open || !mounted) return null;
+  return createPortal(
     <div style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div
         onClick={onClose}
@@ -931,7 +1000,8 @@ export function Modal({ open, onClose, title, sub, width = 720, children }) {
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -943,6 +1013,7 @@ export function Modal({ open, onClose, title, sub, width = 720, children }) {
  * so old bookmarked links keep working as a redirect into the right drawer.
  * ------------------------------------------------------------------ */
 export function Drawer({ open, onClose, title, sub, width = 560, children }) {
+  const mounted = useMounted();
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => { if (e.key === "Escape") onClose?.(); };
@@ -950,8 +1021,8 @@ export function Drawer({ open, onClose, title, sub, width = 560, children }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  if (!open) return null;
-  return (
+  if (!open || !mounted) return null;
+  return createPortal(
     <div style={{ position: "fixed", inset: 0, zIndex: 200 }}>
       <div
         onClick={onClose}
@@ -989,7 +1060,8 @@ export function Drawer({ open, onClose, title, sub, width = 560, children }) {
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1035,8 +1107,7 @@ export function Tabs({ value, onChange, tabs, style }) {
 /* ------------------------------------------------------------------ *
  * DataTable — sort, sticky header, empty state, row click. Not a
  * virtualized grid (the pages that need this kit are hundreds, not tens of
- * thousands, of rows) — sortable + sticky + a real empty state replaces most
- * of what the ~10 hand-rolled tables in the accounting pages do today.
+ * thousands, of rows).
  * `cols`: [{key, label, width, render?(row), align?}]
  * ------------------------------------------------------------------ */
 export function DataTable({ cols, rows, rowKey = "_id", onRowClick, emptyIcon = "inbox", emptyTitle = "Nothing here", emptySub, sort, onSort }) {
@@ -1105,4 +1176,46 @@ export function useIsDark() {
     return () => obs.disconnect();
   }, []);
   return dark;
+}
+
+/* ------------------------------------------------------------------ *
+ * Toast — extracted after the same bottom-right fade+scale block got
+ * copy-pasted into a 4th page (payments, expenditure, the amenities
+ * overview, and this one) — docs/ANIMATION_GUIDE.md's own stated rule for
+ * when a per-page pattern becomes a shared primitive. Page still owns the
+ * `{msg|message, type}` state and the dismiss timer; this only owns the
+ * render + the enter/exit animation. Accepts either `msg` or `message` so
+ * existing call sites (`{msg, type: "ok"|"err"}` vs `{message, type:
+ * "success"|"error"}`) don't all need renaming at the same time.
+ * ------------------------------------------------------------------ */
+export function Toast({ toast, onClose }) {
+  const mounted = useMounted();
+  if (!toast || !mounted) return null;
+  const text = toast.msg ?? toast.message;
+  const isError = toast.type === "err" || toast.type === "error";
+  return createPortal(
+    <AnimatePresence>
+      <motion.div
+        key="toast"
+        role="status"
+        initial={{ opacity: 0, y: 12, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 12, scale: 0.96 }}
+        transition={{ duration: 0.18 }}
+        onClick={onClose}
+        style={{
+          position: "fixed", bottom: 24, right: 24, zIndex: 9999,
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "12px 16px", borderRadius: 10, fontSize: 13.5, fontWeight: 600,
+          background: isError ? "var(--r-danger)" : "var(--r-success)",
+          color: "#fff", boxShadow: "var(--r-shadow-pop)", maxWidth: 380,
+          cursor: onClose ? "pointer" : "default",
+        }}
+      >
+        <Icon name={isError ? "alert-circle" : "check-circle-2"} size={16} />
+        {text}
+      </motion.div>
+    </AnimatePresence>,
+    document.body
+  );
 }

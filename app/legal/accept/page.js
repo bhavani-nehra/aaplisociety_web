@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import notify from "@/lib/notify";
+import styles from "@/styles/LegalAccept.module.css";
+import { SkylineArcMark } from "@/components/brand/SkylineArc";
 
 async function apiFetch(url, opts = {}) {
   let res;
@@ -124,16 +126,13 @@ function DocumentSection({ doc, open, onToggle }) {
   });
 
   return (
-    <div style={{ border: "1px solid var(--border)", borderRadius: 10, marginBottom: 12, overflow: "hidden" }}>
-      <button
-        onClick={onToggle}
-        style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.9rem 1.1rem", background: "var(--bg-sunken)", border: "none", cursor: "pointer", fontWeight: 700, fontSize: 14, color: "var(--fg-1)" }}
-      >
+    <div className={styles.doc}>
+      <button onClick={onToggle} aria-expanded={open} className={styles.docBtn}>
         <span>{doc.title}</span>
-        <span style={{ fontSize: 12, color: "var(--fg-4)" }}>{open ? "▾ Hide" : "▸ Read"}</span>
+        <span className={styles.docHint}>{open ? "▾ Hide" : "▸ Read"}</span>
       </button>
       {open && (
-        <div style={{ padding: "1.1rem 1.3rem", maxHeight: 420, overflowY: "auto", background: "var(--bg-surface)" }}>
+        <div className={styles.docBody}>
           {isLoading ? (
             <div style={{ color: "var(--fg-4)", fontSize: 13 }}>Loading…</div>
           ) : isError ? (
@@ -177,17 +176,17 @@ export default function LegalAcceptPage() {
   });
 
   if (status.isLoading) {
-    return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--fg-4)" }}>Loading…</div>;
+    return <div className={styles.center}>Loading…</div>;
   }
 
   if (status.isError) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
-        <div style={{ textAlign: "center" }}>
+      <div className={styles.center}>
+        <div className={styles.card} style={{ textAlign: "center", maxWidth: 420 }}>
           <p style={{ color: "var(--danger)", marginBottom: 12 }}>{status.error.message}</p>
           <button
             onClick={() => status.refetch()}
-            style={{ padding: "0.5rem 1.25rem", borderRadius: 6, border: "none", background: "var(--primary)", color: "#fff", fontWeight: 700, cursor: "pointer" }}
+            style={{ padding: "0.5rem 1.25rem", borderRadius: 6, border: "none", background: "var(--primary)", color: "var(--on-solid)", fontWeight: 700, cursor: "pointer" }}
           >
             Retry
           </button>
@@ -199,12 +198,17 @@ export default function LegalAcceptPage() {
   const documents = status.data?.documents || [];
 
   return (
-    <div style={{ minHeight: "100vh", padding: "3rem 1.5rem", display: "flex", justifyContent: "center" }}>
-      <div style={{ maxWidth: 640, width: "100%" }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8, color: "var(--fg-1)" }}>Before you continue</h1>
-        <p style={{ color: "var(--fg-4)", marginBottom: "1.5rem", fontSize: 14 }}>
-          Your Society needs to accept these before you can use the dashboard. One acceptance covers your whole Society — any Admin or Secretary confirming this is enough.
-        </p>
+    <div className={styles.wrap}>
+      <div className={styles.card}>
+        <div className={styles.head}>
+          <div className={styles.mark}>
+            <SkylineArcMark color="#ffffff" size={30} />
+          </div>
+          <h1 className={styles.title}>Before you continue</h1>
+          <p className={styles.sub}>
+            Your Society needs to accept these before you can use the dashboard. One acceptance covers your whole Society — any Admin or Secretary confirming this is enough.
+          </p>
+        </div>
 
         {documents.map((doc) => (
           <DocumentSection
@@ -215,19 +219,15 @@ export default function LegalAcceptPage() {
           />
         ))}
 
-        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", marginTop: "1.25rem", fontSize: 14, cursor: "pointer" }}>
-          <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} style={{ marginTop: 3 }} />
+        <label className={styles.agree}>
+          <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />
           <span>I have read and agree to the Terms of Service, Privacy Policy, and Refund &amp; Cancellation Policy on behalf of my Society.</span>
         </label>
 
         <button
           onClick={() => accept.mutate()}
           disabled={!checked || accept.isPending}
-          style={{
-            marginTop: "1.25rem", width: "100%", padding: "0.75rem", borderRadius: 8, border: "none",
-            background: checked ? "var(--primary)" : "var(--border)", color: checked ? "#fff" : "var(--fg-5)",
-            fontWeight: 700, cursor: checked ? "pointer" : "not-allowed", fontSize: 14,
-          }}
+          className={`${styles.cta} ${checked ? styles.ctaOn : styles.ctaOff}`}
         >
           {accept.isPending ? "Saving…" : "Accept and continue"}
         </button>

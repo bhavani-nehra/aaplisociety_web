@@ -52,7 +52,7 @@
 }
 
 /* ── Card surface tint — fixed at 20% ───────────────────────────────────
-   The kit's default --r-surface is pure #ffffff, which reads as a harsh
+   The kit's default --r-surface is pure #f3f0e6, which reads as a harsh
    glare against the blue glass frame/bg. Blend it 20% of the way toward
    a blue-tinted target — final value, no slider. Still fully opaque, per
    "clean pure cards" — this is color, not transparency.
@@ -61,18 +61,18 @@
    is simply invalid (ignored, fallback stands) when it isn't. */
 .wrap {
   --card-tint: 20;
-  --r-canvas: #eef1f9;
-  --r-surface: #f8fafd;
-  --r-surface-2: #eef2fa;
+  --r-canvas: #e9e5d9;
+  --r-surface: #f3f0e6;
+  --r-surface-2: #eeebdf;
   --r-surface-3: #e6ecf8;
   --r-border: #dee6f5;
   --r-hairline: #e6ecf8;
-  --r-canvas: color-mix(in srgb, #f6f7f9 calc(100% - var(--card-tint) * 1%), #e6ebf7 calc(var(--card-tint) * 1%));
-  --r-surface: color-mix(in srgb, #ffffff calc(100% - var(--card-tint) * 1%), #eef2fb calc(var(--card-tint) * 1%));
-  --r-surface-2: color-mix(in srgb, #fafbfc calc(100% - var(--card-tint) * 1%), #e4eaf8 calc(var(--card-tint) * 1%));
-  --r-surface-3: color-mix(in srgb, #f3f4f6 calc(100% - var(--card-tint) * 1%), #d9e2f5 calc(var(--card-tint) * 1%));
-  --r-border: color-mix(in srgb, #ececef calc(100% - var(--card-tint) * 1%), #cdd9f2 calc(var(--card-tint) * 1%));
-  --r-hairline: color-mix(in srgb, #f1f1f3 calc(100% - var(--card-tint) * 1%), #dbe4f6 calc(var(--card-tint) * 1%));
+  --r-canvas: color-mix(in srgb, #e9e5d9 calc(100% - var(--card-tint) * 1%), #e6ebf7 calc(var(--card-tint) * 1%));
+  --r-surface: color-mix(in srgb, #f3f0e6 calc(100% - var(--card-tint) * 1%), #eeebdf calc(var(--card-tint) * 1%));
+  --r-surface-2: color-mix(in srgb, #eeebdf calc(100% - var(--card-tint) * 1%), #e4eaf8 calc(var(--card-tint) * 1%));
+  --r-surface-3: color-mix(in srgb, #e3dfd1 calc(100% - var(--card-tint) * 1%), #d9e2f5 calc(var(--card-tint) * 1%));
+  --r-border: color-mix(in srgb, #e2ddd0 calc(100% - var(--card-tint) * 1%), #cdd9f2 calc(var(--card-tint) * 1%));
+  --r-hairline: color-mix(in srgb, #e3dfd1 calc(100% - var(--card-tint) * 1%), #dbe4f6 calc(var(--card-tint) * 1%));
 }
 :global(html[data-theme="dark"]) .wrap {
   --r-canvas: #0a0d15;
@@ -94,3 +94,60 @@
    styles/Dashboard.module.css (wrapped once, in DashboardLayout.js, around
    every admin/member/security page). Keeping a second, page-local frame
    here would have nested two backdrop-filters, blurring each other. */
+
+/* ── Responsive grids ──────────────────────────────────────────────────
+   These three grids used to be inline `style={{ gridTemplateColumns }}`
+   on PageClient — fixed fr-fractions with zero @media fallback, so below
+   roughly 1300px of actual content width (a 1440px laptop screen minus
+   the 260px sidebar, its gaps, and .contentFrame's own padding leaves
+   well under that) the 3-column bento and the 2-column bottom row never
+   adapted: they just kept squeezing every card toward its min-content
+   width, which is how a bug report of "one card per row" and "the
+   dashboard is too big" turn out to be the same defect — the page never
+   had a narrow-viewport layout at all, only one width that happened to
+   fit and everything else overflowing or crushed. Moved here so they can
+   actually respond to width. */
+.bento {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.bentoHero {
+  grid-row: span 2;
+}
+@media (max-width: 1180px) {
+  .bento {
+    grid-template-columns: 1.3fr 1fr;
+  }
+  .bentoHero {
+    grid-row: span 1;
+    grid-column: span 2;
+  }
+}
+@media (max-width: 640px) {
+  .bento {
+    grid-template-columns: 1fr;
+  }
+  .bentoHero {
+    grid-column: span 1;
+  }
+}
+
+.attentionGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.bottomGrid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+@media (max-width: 900px) {
+  .bottomGrid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -41,6 +41,8 @@ import {
   HelpCircle,
   PhoneCall,
   LifeBuoy,
+  Flag,
+  ListChecks,
 } from "lucide-react";
 
 // Shared between app/admin/layout.js and app/my-access/page.js — the latter
@@ -124,12 +126,16 @@ export const ADMIN_NAVIGATION = [
   {
     title: "Accounting",
     items: [
+      { name: "Your year", path: "/admin/accounting/your-year", pageKey: "accountingOverview", icon: <Flag size={16} /> },
+      { name: "Set up your books", path: "/admin/accounting/setup-books", pageKey: "accountingOverview", icon: <ListChecks size={16} /> },
       { name: "Configuration", path: "/admin/accounting", pageKey: "accountingOverview", icon: <Settings size={16} /> },
       { name: "Account Heads", path: "/admin/accounting/chart-of-accounts", pageKey: "chartOfAccounts", icon: <BookOpen size={16} /> },
-      { name: "Assets & Liabilities", path: "/admin/accounting/registers", pageKey: "assets", icon: <Package size={16} /> },
+      { name: "What we own & owe", path: "/admin/accounting/registers", pageKey: "assets", icon: <Package size={16} /> },
       { name: "Cash Flow Setup", path: "/admin/accounting/cash-flow", pageKey: "bankAccounts", icon: <Banknote size={16} /> },
       { name: "Balance Sheet Format", path: "/admin/accounting/format", pageKey: "schedules", icon: <Layers size={16} /> },
-      { name: "Generate Balance Sheet", path: "/admin/accounting/statements", pageKey: "statementsWorkspace", icon: <Zap size={16} /> },
+      { name: "Balance Sheet & I&E", path: "/admin/accounting/statements", pageKey: "statementsWorkspace", icon: <Zap size={16} /> },
+      { name: "Money overview", path: "/admin/money-overview", pageKey: "payments", icon: <LayoutDashboard size={16} /> },
+      { name: "Money (all in one)", path: "/admin/money", pageKey: "payments", icon: <CreditCard size={16} /> },
     ],
   },
   // Not part of the 6-page cluster above (these are day-to-day transaction
@@ -150,14 +156,6 @@ export const ADMIN_NAVIGATION = [
       { name: "Payments", path: "/admin/payments", pageKey: "payments", icon: <CreditCard size={16} /> },
       { name: "Receipts", path: "/admin/receipts", pageKey: "receipts", icon: <FileText size={16} /> },
       { name: "Late Payments", path: "/admin/late-payment", pageKey: "latePayment", icon: <AlertTriangle size={16} /> },
-      // Was labeled "Balance Sheet" — it isn't one (no ledger, no Assets=
-      // Liabilities+Equity). It's a monthly billing/collection dashboard
-      // with manual accrual-entry add/remove. Renamed so it stops being
-      // mistaken for the real statutory Balance Sheet at
-      // /admin/assets-liabilities. See docs/accounting-module-audit-and-
-      // consolidation-plan.md §3 item 5 — full fold-in into Statements is
-      // follow-up work, not done here.
-      { name: "Billing & Accrual Entries", path: "/admin/balance-sheet", pageKey: "balanceSheet", icon: <BarChart3 size={16} /> },
       { name: "Expenditure", path: "/admin/expenditure", pageKey: "expenditure", icon: <Wallet size={16} /> },
     ],
   },

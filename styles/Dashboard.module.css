@@ -370,6 +370,24 @@
   min-width: 0;
   /* NO overflow:hidden — would break position:sticky on topHeader */
 }
+/* Support/retry banners: same left offset as .mainContent so nothing renders
+   underneath the fixed sidebar. */
+.bannerSlot {
+  margin-left: 270px;
+  padding: 10px 10px 0;
+  position: relative;
+  z-index: 50;
+}
+.bannerSlot:empty { display: none; }
+:global(html[data-sidebar-style="segmented"]) .bannerSlot { margin-left: 296px; }
+:global(html[data-sidebar-style="weighted"]) .bannerSlot { margin-left: 280px; }
+/* Command bar (search + quick actions) stays pinned while the page scrolls. */
+.commandSticky {
+  position: sticky;
+  top: 10px;
+  z-index: 90;
+  margin-bottom: 12px;
+}
 /* ── Top Header — 56px, transparent, sticky ────── */
 .topHeader {
   height: 56px;
@@ -449,7 +467,7 @@
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.45) inset,
     0 28px 70px -24px rgba(20, 20, 40, 0.2);
-  background: rgba(255, 255, 255, 0.42);
+  background: rgba(243, 240, 230, 0.42);
 }
 :global(html[data-theme="dark"]) .contentFrame {
   /* Was a hardcoded rgba(22,30,50,0.68) — a fixed navy independent of the
@@ -457,9 +475,9 @@
      aurora svg behind it actually looked like. Neutral --r-surface-based
      value instead, so the svg (not a magic color) is what's visible through
      the glass. */
-  background: rgba(11, 11, 15, 0.82);
-  backdrop-filter: blur(48px);
-  -webkit-backdrop-filter: blur(48px);
+  background: rgba(11, 11, 15, 0.30);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-color: rgba(150, 180, 235, 0.14);
   box-shadow:
     0 1px 0 rgba(180, 205, 255, 0.08) inset,
@@ -502,12 +520,9 @@
   animation: fadeIn 0.1s ease;
 }
 .navLoadingSpinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid var(--primary-muted);
-  border-top-color: var(--primary);
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
+  width: 64px;
+  height: 64px;
+  background: var(--pulse-loader-img) center / contain no-repeat;
 }
 /* ══════════════════════════════════════════════════
    PAGE COMPONENTS — from design spec
@@ -721,25 +736,6 @@
   flex-direction: column;
   gap: 0;
 }
-.fullPageLoaderDots {
-  display: flex;
-  gap: 6px;
-}
-.fullPageLoaderDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--primary);
-  opacity: 0.3;
-  animation: loadingDotPulse 1.4s ease-in-out infinite;
-}
-.fullPageLoaderDot:nth-child(2) {
-  animation-delay: 0.16s;
-  opacity: 0.55;
-}
-.fullPageLoaderDot:nth-child(3) {
-  animation-delay: 0.32s;
-}
 /* ══════════════════════════════════════════════════
    KEYFRAMES
 ══════════════════════════════════════════════════ */
@@ -773,17 +769,5 @@
   }
   50% {
     transform: translateY(-8px);
-  }
-}
-@keyframes loadingDotPulse {
-  0%,
-  80%,
-  100% {
-    transform: scale(0);
-    opacity: 0.3;
-  }
-  40% {
-    transform: scale(1);
-    opacity: 1;
   }
 }

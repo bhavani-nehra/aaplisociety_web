@@ -1,0 +1,114 @@
+/* 404 — one big glass window over the global Aurora background
+ * (app/layout.js .appBgLayer), same recipe as Auth.module.css so the
+ * miss feels like part of the product, not a bare error page.
+ */
+.wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* soft drifting colour blobs behind the glass — depth without noise */
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.45;
+  pointer-events: none;
+  animation: drift 14s ease-in-out infinite alternate;
+}
+.blobA { width: 340px; height: 340px; background: #7d93e6; top: 8%; left: 12%; }
+.blobB { width: 300px; height: 300px; background: #3ecf9b; bottom: 6%; right: 10%; animation-delay: -6s; }
+:root[data-theme="dark"] .big { color: #9db4ff; }
+:root[data-theme="dark"] .blob { opacity: 0.28; }
+
+@keyframes drift {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(40px, -30px) scale(1.12); }
+}
+
+.card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 600px;
+  padding: 40px 44px 36px;
+  border-radius: 32px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  align-items: center;
+  text-align: center;
+  backdrop-filter: blur(32px) saturate(160%);
+  -webkit-backdrop-filter: blur(32px) saturate(160%);
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.7) inset,
+    0 32px 80px -24px rgba(20, 30, 70, 0.35);
+}
+:root[data-theme="dark"] .card {
+  background: rgba(18, 22, 40, 0.45);
+  border-color: rgba(150, 180, 235, 0.14);
+  box-shadow:
+    0 1px 0 rgba(180, 205, 255, 0.08) inset,
+    0 32px 80px -24px rgba(0, 0, 0, 0.6);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .card { background: var(--bg-surface); }
+}
+
+.art { display: flex; justify-content: center; }
+
+.big {
+  font-size: clamp(3.4rem, 9vw, 5.2rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: #1e3a8a;
+  text-shadow: 0 10px 30px rgba(30, 58, 138, 0.25);
+}
+.title {
+  margin: 12px 0 8px;
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--fg-1);
+}
+.line {
+  margin: 0;
+  max-width: 440px;
+  margin: 0 auto;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--fg-2);
+}
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.chip {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: var(--fg-2);
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+:root[data-theme="dark"] .chip {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(150, 180, 235, 0.16);
+}
+.actions { justify-content: center; display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.copy { text-align: center; }
+.timer { margin-top: 14px; font-size: 0.78rem; color: var(--fg-4); }
+
+@media (max-width: 720px) {
+  .card { grid-template-columns: 1fr; padding: 28px 22px; text-align: center; }
+  .chips, .actions { justify-content: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .blob { animation: none; }
+}

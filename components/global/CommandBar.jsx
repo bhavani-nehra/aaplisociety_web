@@ -105,7 +105,10 @@ export default function CommandBar({
     }
   }, [unfinishedCheck]);
 
-  const pages = useMemo(() => [...flattenNavigation(navigation), ...extraPages], [navigation, extraPages]);
+  const pages = useMemo(() => {
+    const all = [...flattenNavigation(navigation), ...extraPages];
+    return all.filter((p, i) => all.findIndex((x) => x.href === p.href) === i);
+  }, [navigation, extraPages]);
   const pageMatches = useMemo(() => filterPages(pages, q, can), [pages, q, can]);
   const visibleActions = quickActions.filter((a) => can(a.perm));
 
@@ -222,7 +225,7 @@ export default function CommandBar({
                   <div key={`${r.type}-${r.id}`} style={rowStyle}>
                     <Icon name={r.icon || "search"} size={13} style={{ color: "var(--r-fg-4)" }} />
                     <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--r-fg-1)" }}>{r.label}</div>
-                    <button type="button" onClick={() => goto(r.href)} style={quickLinkStyle}>Open →</button>
+                    <button type="button" onClick={() => goto(r.href)} style={quickLinkStyle}>Open</button>
                   </div>
                 ))}
               </div>
@@ -239,7 +242,7 @@ export default function CommandBar({
                           type="button"
                           onClick={() => goto(p.href, { type: "page", id: p.href, label: p.label, href: p.href, icon: "file-text" })}
                           style={quickLinkStyle}
-                        >Open →</button>
+                        >Open</button>
                       </div>
                     ))}
                   </div>
@@ -261,7 +264,7 @@ export default function CommandBar({
                               type="button"
                               onClick={() => goto(href, { type: source.label.toLowerCase(), id, label, href, icon: source.icon || "search" })}
                               style={quickLinkStyle}
-                            >Open →</button>
+                            >Open</button>
                           </div>
                         );
                       })}
@@ -326,7 +329,7 @@ export default function CommandBar({
                     <div key={item.href || i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <Icon name={item.blocking ? "alert-triangle" : "info"} size={13} color={item.blocking ? "var(--r-danger)" : "var(--r-warning)"} />
                       <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: "var(--r-fg-2)" }}>{item.label}</div>
-                      {item.href ? <button type="button" onClick={() => goto(item.href)} style={quickLinkStyle}>{item.fixLabel || "Fix"} →</button> : null}
+                      {item.href ? <button type="button" onClick={() => goto(item.href)} style={quickLinkStyle}>{item.fixLabel || "Fix"}</button> : null}
                     </div>
                   ))}
                 </div>
@@ -383,7 +386,7 @@ export default function CommandBar({
 
 const groupTitleStyle = {
   padding: "2px 10px", fontSize: 10.5, fontWeight: 700, color: "var(--r-fg-4)",
-  textTransform: "uppercase", letterSpacing: 0.4,
+  
 };
 
 const rowStyle = { display: "flex", alignItems: "center", gap: 8, padding: "7px 10px" };

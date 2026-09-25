@@ -6,6 +6,7 @@
    Source: design system colors_and_type.css + ui_kits/admin
    ============================================================ */
 :root {
+  --on-solid: #ffffff;
   /* Sidebar glass intensity, 0-100 — fixed final value, no slider. Not
      theme-specific — same number light or dark, only the color it mixes
      toward differs (see --r-sidebar-glass below). */
@@ -33,25 +34,29 @@
   --info-fg:      #1e40af;
   --info-bg:      #dbeafe;
   /* ── Surfaces ───────────────────────────────────── */
-  --bg-canvas:   #f8fafc;   /* app background */
-  --bg-surface:  #ffffff;   /* cards, sidebar */
-  --bg-sunken:   #f9fafb;   /* table headers */
-  --bg-muted:    #f3f4f6;   /* secondary buttons, chips */
-  --bg-input:    #ffffff;   /* inputs/selects — same as surface in light mode */
+  --bg-canvas:   #e9e5d9;   /* app background */
+  --bg-surface:  #f3f0e6;   /* cards, sidebar */
+  --bg-sunken:   #eeebdf;   /* table headers */
+  --bg-muted:    #e3dfd1;   /* secondary buttons, chips */
+  --bg-input:    #f3f0e6;   /* inputs/selects — same as surface in light mode */
   /* aliases used by existing code */
-  --bg-primary:   #ffffff;
-  --bg-secondary: #f8fafc;
-  --bg-tertiary:  #f3f4f6;
+  --bg-primary:   #f3f0e6;
+  --bg-secondary: #e9e5d9;
+  --bg-tertiary:  #e3dfd1;
   /* ── Foreground ─────────────────────────────────── */
   --fg-1: #0f172a;
   --fg-2: #1f2937;
   --fg-3: #374151;
   --fg-4: #6b7280;
-  --fg-5: #9ca3af;
+  /* was #9ca3af (2.54:1 on white — fails WCAG AA normal-text 4.5:1 across
+     76 files that read this as body/caption text, not decoration). Darkened
+     to the nearest AA-passing shade in the same cool-gray family;
+     design-system audit, Plan 06 Phase 2.7.1. */
+  --fg-5: #707680;
   /* aliases */
   --text-primary:   #0f172a;
   --text-secondary: #6b7280;
-  --text-tertiary:  #9ca3af;
+  --text-tertiary:  #707680;
   /* ── Borders ────────────────────────────────────── */
   --border:         #e5e7eb;
   --border-strong:  #d1d5db;
@@ -98,18 +103,21 @@
      the kit verbatim. The app-level tokens above/below are remapped onto
      these values, so this block is the single place a palette change
      has to happen. */
-  --r-canvas:        #f6f7f9;
-  --r-surface:       #ffffff;
-  --r-surface-2:     #fafbfc;
-  --r-surface-3:     #f3f4f6;
+  --r-canvas:        #e9e5d9;
+  --r-surface:       #f3f0e6;
+  --r-surface-2:     #eeebdf;
+  --r-surface-3:     #e3dfd1;
   --r-border:        #ececef;
   --r-border-strong: #dcdde1;
-  --r-hairline:      #f1f1f3;
+  --r-hairline:      #e3dfd1;
   --r-fg-1:          #0a0a0a;
   --r-fg-2:          #1f1f23;
   --r-fg-3:          #46464f;
-  --r-fg-4:          #767680;
-  --r-fg-5:          #a0a0aa;
+  /* was #767680 (4.49:1 on --r-surface, 4.19:1 on --r-canvas — both fail
+     AA 4.5:1); was #a0a0aa (2.59:1 — fails even the 3:1 UI-component
+     floor). design-system audit, Plan 06 Phase 2.7.1. */
+  --r-fg-4:          #6c6c76;
+  --r-fg-5:          #86868f;
   --r-brand:         #1e3a8a;
   --r-brand-soft:    #e8edf9;
   --r-brand-ink:     #ffffff;
@@ -121,7 +129,7 @@
   --r-danger-soft:   #fdecec;
   --r-warning:       #b54708;
   --r-warning-soft:  #fdf2d8;
-  --r-rail:          #ffffff;
+  --r-rail:          #eeebdf;
   --r-shadow-card:   0 1px 0 rgba(0,0,0,0.02), 0 1px 3px rgba(15,15,30,0.04);
   --r-shadow-pop:    0 12px 32px -8px rgba(15,15,30,0.18), 0 2px 6px rgba(15,15,30,0.06);
   --r-shadow-inset:  inset 0 0 0 1px var(--r-border);
@@ -180,6 +188,7 @@
    --r-* value, so this block plus the --r-* block in :root are the only
    two places the dark palette is defined. */
 :root[data-theme="dark"] {
+  --on-solid: #0a1230; /* text on solid brand/status fills */
   /* ── Revamp --r-* layer (kit's .theme-dark, verbatim) ──────────── */
   --r-canvas:        #0b0b0f;
   --r-surface:       #131318;
@@ -191,8 +200,12 @@
   --r-fg-1:          #f5f5f7;
   --r-fg-2:          #e2e2e6;
   --r-fg-3:          #a8a8b3;
-  --r-fg-4:          #76767f;
-  --r-fg-5:          #50505a;
+  /* was #76767f (4.37:1 on canvas, 4.12:1 on surface — both fail AA
+     4.5:1, and this is what --text-tertiary aliases to in dark mode); was
+     #50505a (2.47:1 / 2.32:1 — fails the 3:1 UI-component floor too).
+     design-system audit, Plan 06 Phase 2.7.1. */
+  --r-fg-4:          #82828c;
+  --r-fg-5:          #74747e;
   --r-brand:         #7c9cf7;
   --r-brand-soft:    #202d54;
   --r-brand-ink:     #0d0d12;
@@ -323,7 +336,30 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--fg-5); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* was var(--accent) (#6b8eef): 3.12:1 on --bg-surface (barely clears the
+   3:1 UI floor), 2.98:1 on --bg-canvas (fails it) — the one global focus
+   ring can't afford a background-dependent pass/fail. --border-focus
+   (=--primary light, =--r-brand dark) clears 3:1 against every surface in
+   both themes with real margin. design-system audit, Plan 06 Phase 2.7.1. */
+:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+/* Global reduced-motion kill switch — was previously scoped only to
+   .revamp-modal-* / .revamp-drawer-panel (below), leaving every other
+   animated primitive in this file (.toast, .modal-*, .dropzone,
+   .btn-loading spinner, .skeleton shimmer, .card-interactive lift,
+   .empty-state-icon float, .progress-bar-fill, .acct-* pulses, .fade-up)
+   unguarded. Standard kill-switch pattern: collapses every animation and
+   transition to near-instant rather than disabling per class, so a new
+   animated primitive added later inherits the guarantee automatically
+   instead of needing its own opt-in. design-system audit, Plan 06 §4.3 /
+   Phase 2.7.1. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 input, textarea, select, button { font-family: inherit; font-size: inherit; line-height: inherit; }
 button { cursor: pointer; border: none; outline: none; }
 button:disabled { cursor: not-allowed; opacity: 0.6; }
@@ -351,7 +387,14 @@ a:hover { color: var(--primary-hover); }
   padding: 10px 18px;
   font-size: 14px;
 }
-.btn:disabled { cursor: not-allowed; opacity: 0.6; }
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 1;
+  background: var(--bg-muted);
+  color: var(--fg-5);
+  border-color: var(--border);
+  box-shadow: none;
+}
 .btn:active:not(:disabled) { transform: scale(0.98); }
 /* Primary */
 .btn-primary {
@@ -415,12 +458,9 @@ a:hover { color: var(--primary-hover); }
 .btn-loading::before {
   content: '';
   position: absolute;
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(255,255,255,0.4);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: spin 0.65s linear infinite;
+  width: 24px;
+  height: 24px;
+  background: var(--pulse-loader-on-brand) center / contain no-repeat;
 }
 /* ══════════════════════════════════════════════════
    INPUTS — from AdminPrimitives spec
@@ -545,18 +585,27 @@ tbody tr:last-child td { border-bottom: none; }
 /* ══════════════════════════════════════════════════
    LOADING STATES
 ══════════════════════════════════════════════════ */
+/* Pulse-grid loader (public/motions/02-pulse-grid) — one image for every
+   loading state, swapped by theme. The variables are reused by module CSS. */
+:root {
+  --pulse-loader-img: url(/motions/02-pulse-grid/pulse-grid-light.svg);
+  --pulse-loader-on-brand: url(/motions/02-pulse-grid/pulse-grid-dark.svg);
+}
+:root[data-theme="dark"] {
+  --pulse-loader-img: url(/motions/02-pulse-grid/pulse-grid-dark.svg);
+}
+.pulse-loader,
 .loading-spinner {
   display: inline-block;
-  width: 20px;
-  height: 20px;
-  border: 2px solid rgba(30, 58, 138, 0.2);
-  border-top-color: #1e3a8a;
-  border-radius: 50%;
-  animation: spin 0.65s linear infinite;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  background: var(--pulse-loader-img) center / contain no-repeat;
+  vertical-align: middle;
 }
-.loading-spinner-sm { width: 14px; height: 14px; border-width: 2px; }
-.loading-spinner-lg { width: 32px; height: 32px; border-width: 3px; }
-.loading-spinner-white { border-color: rgba(255,255,255,0.3); border-top-color: white; }
+.loading-spinner-sm { width: 24px; height: 24px; }
+.loading-spinner-lg { width: 48px; height: 48px; }
+.loading-spinner-white { background-image: var(--pulse-loader-on-brand); }
 /* Skeleton shimmer */
 .skeleton {
   background: linear-gradient(90deg, var(--bg-muted) 25%, var(--bg-sunken) 50%, var(--bg-muted) 75%);
@@ -736,10 +785,6 @@ tbody tr:last-child td { border-bottom: none; }
   0%, 100% { transform: translateY(0); }
   50%       { transform: translateY(-8px); }
 }
-@keyframes bounceDot {
-  0%, 80%, 100% { transform: scale(0); opacity: 0.3; }
-  40%            { transform: scale(1); opacity: 1; }
-}
 /* ══════════════════════════════════════════════════
    UTILITY
 ══════════════════════════════════════════════════ */
@@ -820,8 +865,6 @@ tbody tr:last-child td { border-bottom: none; }
 @keyframes revamp-slide-r { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 @keyframes revamp-fade    { from { opacity: 0; } to { opacity: 1; } }
 @keyframes revamp-pop     { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
-@keyframes revamp-spin    { to { transform: rotate(360deg); } }
-.revamp-spin { animation: revamp-spin 0.9s linear infinite; }
 .revamp-modal-backdrop { animation: revamp-fade 0.15s ease-out; }
 .revamp-modal-panel { animation: revamp-pop 0.18s cubic-bezier(0.16, 1, 0.3, 1); }
 .revamp-drawer-panel { animation: revamp-slide-r 0.22s cubic-bezier(0.16, 1, 0.3, 1); }
@@ -846,12 +889,12 @@ tbody tr:last-child td { border-bottom: none; }
   inset: 0;
   z-index: -4;
   pointer-events: none;
-  background-image: url("/bg-brand.svg?v=4");
+  background-image: url("/bg-brand.svg?v=5");
   background-size: cover;
   background-position: center;
 }
 :root[data-theme="dark"] .appBgLayer {
-  background-image: url("/bg-dark-brand.svg?v=4");
+  background-image: url("/bg-dark-brand.svg?v=11");
 }
 .appBgDarkDepth {
   position: fixed;
@@ -862,7 +905,7 @@ tbody tr:last-child td { border-bottom: none; }
   opacity: 0;
 }
 :root[data-theme="dark"] .appBgDarkDepth {
-  opacity: 0.595; /* fixed at 70%, final */
+  opacity: 0.1; /* light touch: new bg-dark-brand carries its own depth */
 }
 .appBgDarkRightFade {
   position: fixed;
@@ -873,7 +916,7 @@ tbody tr:last-child td { border-bottom: none; }
 }
 :root[data-theme="dark"] .appBgDarkRightFade {
   opacity: 1;
-  background: linear-gradient(to right, transparent 0%, transparent 35%, rgba(2, 4, 10, 0.75) 100%);
+  background: linear-gradient(to right, transparent 0%, transparent 35%, rgba(0, 0, 0, 0.3) 100%);
 }
 .appBgScrim {
   position: fixed;
@@ -883,3 +926,24 @@ tbody tr:last-child td { border-bottom: none; }
   background: var(--bg-canvas);
   opacity: 0.16;
 }
+
+/* Dark mode: pastel-blue fills need dark ink, not white (white on #7c9cf7 = 2.6:1,
+   reads cheap). Solid fill gets a subtle vertical gradient + inner highlight. */
+:root[data-theme="dark"] .btn-primary,
+:root[data-theme="dark"] .btn-accent {
+  background: linear-gradient(180deg, #2f4fb0 0%, #1e3a8a 100%);
+  color: #efe8d8;
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 rgba(239,232,216,0.18), 0 1px 2px rgba(0,0,0,0.4);
+}
+:root[data-theme="dark"] .btn-primary:hover:not(:disabled),
+:root[data-theme="dark"] .btn-accent:hover:not(:disabled) {
+  background: linear-gradient(180deg, #3a5cc4 0%, #274aa3 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 18px -4px rgba(124,156,247,0.5);
+}
+:root[data-theme="dark"] .btn-danger  { color: #2a0808; font-weight: 600; }
+:root[data-theme="dark"] .btn-success { color: #04231a; font-weight: 600; }
+:root[data-theme="dark"] .toast-success,
+:root[data-theme="dark"] .toast-warning { color: #10121a; }
+:root[data-theme="dark"] .toast-error { color: #2a0808; }
+:root[data-theme="dark"] .toast-info  { color: #0a1230; }

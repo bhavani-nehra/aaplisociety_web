@@ -46,7 +46,7 @@ const AREA_HELP_ROUTE = {
 
 function SectionHeading({ icon, color, children }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, fontSize: 11.5, fontWeight: 700, color: "var(--r-fg-4)", textTransform: "uppercase", letterSpacing: 0.4 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, fontSize: 11.5, fontWeight: 700, color: "var(--r-fg-4)" }}>
       <Icon name={icon} size={12} color={color} /> {children}
     </div>
   );

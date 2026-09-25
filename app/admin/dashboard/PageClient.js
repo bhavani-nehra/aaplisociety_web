@@ -20,6 +20,14 @@ import {
 } from "@/components/revamp";
 import styles from "./dashboard-styles.module.css";
 
+// A staggered framer-motion fade-in used to wrap every tile below. Removed:
+// on this page it could leave tiles stuck at opacity:0 with no visible
+// failure mode to debug from, and per the product's own Operate-mode
+// guidance a dashboard shouldn't choreograph its own load anyway — the
+// admin is here for the numbers, not to watch them arrive. Tiles now render
+// immediately, every time, with nothing async standing between mount and
+// visible.
+
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 function fmt(n) {
@@ -48,6 +56,86 @@ function Ring({ pct, color = "var(--r-brand)", size = 80, stroke = 8 }) {
         style={{ transition: "stroke-dasharray 0.6s cubic-bezier(.16,1,.3,1)" }}
       />
     </svg>
+  );
+}
+
+/** Collection-rate tier color — same 80%/50% thresholds used everywhere else
+ *  on this page (the header ring, the MiniTable pills), pulled out once so
+ *  the new chart below can't silently drift from them. */
+function tierColor(rate) {
+  return rate >= 80 ? "var(--r-success)" : rate >= 50 ? "var(--r-warning)" : "var(--r-danger)";
+}
+
+/** Rounded-top, square-baseline bar path — dataviz mark spec: 4px rounded
+ *  data-end, square at the baseline, growing from a single baseline. */
+function roundedTopRectPath(x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, Math.max(h, 0));
+  if (h <= 0) return "";
+  return `M${x},${y + h} L${x},${y + rr} Q${x},${y} ${x + rr},${y} L${x + w - rr},${y} Q${x + w},${y} ${x + w},${y + rr} L${x + w},${y + h} Z`;
+}
+
+/** Monthly breakdown as a small bar chart, ahead of the full table below it —
+ *  the table already existed and stays as the accessible/exact data view;
+ *  this is the "at a glance" read the plain numbers table couldn't give.
+ *  Each bar is a meter: track height = that month's billed amount (scaled to
+ *  the series max), fill height = collected, fill colored by the same
+ *  collection-rate tier used everywhere else on this page. Rate is
+ *  direct-labeled on every bar — for a trend this short (months), the rate
+ *  IS the headline, not incidental detail, so labeling every point is the
+ *  point rather than clutter. */
+function MonthlyTrendChart({ trend }) {
+  if (!trend || trend.length < 2) return null;
+  const rows = trend.map((t) => {
+    const billed = Number(t.totalBilled || 0);
+    const collected = Number(t.totalCollected || 0);
+    const rate = billed > 0 ? Math.round((collected / billed) * 100) : 0;
+    return { label: t.label, billed, collected, rate };
+  });
+  const maxBilled = Math.max(...rows.map((r) => r.billed), 1);
+  const plotH = 84;
+  const barW = 18;
+  const gap = 14;
+  const topPad = 16;
+  const bottomPad = 18;
+  const w = rows.length * (barW + gap) - gap;
+  return (
+    <div style={{ padding: "4px 18px 2px" }}>
+      <svg
+        width="100%"
+        viewBox={`0 0 ${w} ${topPad + plotH + bottomPad}`}
+        preserveAspectRatio="xMinYMin meet"
+        style={{ display: "block", maxWidth: "100%" }}
+      >
+        {rows.map((r, i) => {
+          const x = i * (barW + gap);
+          const trackH = Math.max((r.billed / maxBilled) * plotH, 3);
+          const fillH = r.collected > 0 ? Math.max((r.collected / maxBilled) * plotH, 3) : 0;
+          const baseY = topPad + plotH;
+          return (
+            <g key={r.label}>
+              <title>{`${r.label}: ${r.rate}% collected of ₹${fmt(r.billed)} billed`}</title>
+              <path d={roundedTopRectPath(x, baseY - trackH, barW, trackH, 4)} fill="var(--r-surface-3)" />
+              {fillH > 0 && (
+                <path d={roundedTopRectPath(x, baseY - fillH, barW, fillH, 4)} fill={tierColor(r.rate)} />
+              )}
+              <text
+                x={x + barW / 2}
+                y={baseY - trackH - 6 < topPad - 2 ? topPad - 2 : baseY - trackH - 6}
+                textAnchor="middle"
+                fontSize="9"
+                fontWeight="700"
+                fill="var(--r-fg-3)"
+              >
+                {r.rate}%
+              </text>
+              <text x={x + barW / 2} y={baseY + 14} textAnchor="middle" fontSize="9" fill="var(--r-fg-5)">
+                {String(r.label || "").slice(0, 3)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
   );
 }
 
@@ -82,21 +170,17 @@ function Chip({ label, value, tone }) {
 // per-page nag. A committee that sees the same warning forty times stops
 // reading it, which is the outcome that actually costs a renewal.
 function SubscriptionBanner() {
-  const [lifecycle, setLifecycle] = useState(null);
-
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/entitlements", { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        const l = d?.lifecycle;
-        if (alive && l && (l.state === "grace" || l.state === "restricted")) setLifecycle(l);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
+  // react-query so the persisted cache (lib/query-persist.js) restores it on refresh.
+  const { data: ent } = useQuery({
+    queryKey: ["entitlements"],
+    queryFn: async () => {
+      const r = await fetch("/api/entitlements", { credentials: "include" });
+      return r.ok ? r.json() : null;
+    },
+    staleTime: 60_000,
+  });
+  const l = ent?.lifecycle;
+  const lifecycle = l && (l.state === "grace" || l.state === "restricted") ? l : null;
 
   if (!lifecycle) return null;
   const urgent = lifecycle.state === "restricted";
@@ -107,12 +191,17 @@ function SubscriptionBanner() {
       })
     : null;
 
+  // Was hardcoded #ef4444/#fef2f2/#111/etc — no dark-mode support (this
+  // app's dark mode is opt-in via data-theme, so a hardcoded hex never
+  // repaints) on the first screen every admin sees. Rewritten onto the
+  // existing --danger-*/--warning-* triads (design-system audit, Plan 06).
+  const tone = urgent ? "danger" : "warning";
   return (
     <div
       style={{
-        border: `1.5px solid ${urgent ? "#ef4444" : "#f59e0b"}`,
-        background: urgent ? "#fef2f2" : "#fffbeb",
-        color: "#111",
+        border: `1.5px solid var(--${tone})`,
+        background: `var(--${tone}-bg)`,
+        color: `var(--${tone}-fg)`,
         borderRadius: 10,
         padding: "14px 18px",
         marginBottom: 16,
@@ -130,14 +219,13 @@ function SubscriptionBanner() {
       </div>
       <a
         href="/subscription/renew"
+        className="btn"
         style={{
-          display: "inline-block",
           marginTop: 10,
-          background: urgent ? "#b91c1c" : "#b45309",
+          background: `var(--${tone})`,
           color: "#fff",
           padding: "7px 16px",
           borderRadius: 6,
-          textDecoration: "none",
           fontWeight: 600,
           fontSize: 13,
         }}
@@ -149,21 +237,15 @@ function SubscriptionBanner() {
 }
 
 function HandoverBanner() {
-  const [pending, setPending] = useState(null);
-
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/v1/society-handover", { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        const h = d?.handover;
-        if (alive && h && !h.confirmedAt) setPending({ ...d, handover: h });
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const { data: ho } = useQuery({
+    queryKey: ["society-handover"],
+    queryFn: async () => {
+      const r = await fetch("/api/v1/society-handover", { credentials: "include" });
+      return r.ok ? r.json() : null;
+    },
+    staleTime: 60_000,
+  });
+  const pending = ho?.handover && !ho.handover.confirmedAt ? { ...ho, handover: ho.handover } : null;
 
   if (!pending) return null;
   const deadline = pending.scheduledErasure
@@ -174,15 +256,17 @@ function HandoverBanner() {
       })
     : null;
 
+  // Same hardcoded-hex/no-dark-mode bug as SubscriptionBanner above —
+  // rewritten onto --warning-* (design-system audit, Plan 06).
   return (
     <a
       href="/admin/data-handover"
       style={{
         display: "block",
         textDecoration: "none",
-        border: "1.5px solid #f59e0b",
-        background: "#fffbeb",
-        color: "#111",
+        border: "1.5px solid var(--warning)",
+        background: "var(--warning-bg)",
+        color: "var(--warning-fg)",
         borderRadius: 10,
         padding: "14px 18px",
         marginBottom: 16,
@@ -202,6 +286,33 @@ function HandoverBanner() {
   );
 }
 
+function SkelBlock({ h = 100, r = 12, style }) {
+  return <div className="skeleton" style={{ height: h, borderRadius: r, ...style }} />;
+}
+
+/** Shape-matched placeholder shown while dashboard stats load. */
+function DashboardSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading dashboard">
+      <div style={{ marginBottom: 24 }}>
+        <SkelBlock h={14} r={4} style={{ width: 140, marginBottom: 12 }} />
+        <div className={styles.attentionGrid}>
+          {[0, 1, 2].map((i) => <SkelBlock key={i} h={104} />)}
+        </div>
+      </div>
+      <div className={styles.bento}>
+        {[0, 1, 2, 3].map((i) => <SkelBlock key={i} h={132} />)}
+      </div>
+      <SkelBlock h={120} style={{ margin: "14px 0" }} />
+      <SkelBlock h={150} style={{ marginBottom: 14 }} />
+      <div className={styles.bottomGrid}>
+        <SkelBlock h={320} />
+        <SkelBlock h={320} />
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboardPage() {
   const router = useRouter();
   const now = new Date();
@@ -210,29 +321,45 @@ export default function AdminDashboardPage() {
   const [yearOptions, setYearOptions] = useState([now.getFullYear()]);
   const [minYear, setMinYear] = useState(now.getFullYear());
   const [minMonth, setMinMonth] = useState(1);
+  const [latestBill, setLatestBill] = useState(null); // { year, month } of the newest bill, so billed future months stay selectable
   // FY starts Apr — compute current FY year
   const currentFyYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
   const [fyYear, setFyYear] = useState(currentFyYear);
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1; // 1-12
+  // Selectable range ends at the later of today and the newest bill — a
+  // society whose bills run ahead of the calendar (simulated or pre-generated
+  // months) must be able to open them.
+  const endIdx = Math.max(currentYear * 12 + currentMonth, latestBill ? latestBill.year * 12 + latestBill.month : 0);
+  const endYear = Math.floor((endIdx - 1) / 12);
+  const endMonth = ((endIdx - 1) % 12) + 1;
+  const endFyYear = endMonth >= 4 ? endYear : endYear - 1;
+  const { data: yearRange } = useQuery({
+    queryKey: ["year-range"],
+    queryFn: async () => {
+      const r = await fetch("/api/billing/year-range", { credentials: "include" });
+      if (!r.ok) throw new Error("Failed");
+      return r.json();
+    },
+    staleTime: 5 * 60_000,
+  });
   useEffect(() => {
-    fetch("/api/billing/year-range", { credentials: "include" })
-      .then((r) => r.json())
-      .then((d) => {
-        const min = d.minYear || currentYear;
-        const years = [];
-        for (let y = min; y <= currentYear; y++) years.push(y);
-        if (years.length > 0) setYearOptions(years);
-        setMinYear(min);
-        setMinMonth(d.minMonth || 1);
-      })
-      .catch(() => {});
-  }, []);
+    const d = yearRange;
+    if (!d) return;
+    const min = d.minYear || currentYear;
+    const years = [];
+    const last = Math.max(currentYear, d.maxYear || 0);
+    for (let y = min; y <= last; y++) years.push(y);
+    if (d.maxYear && d.maxMonth) setLatestBill({ year: d.maxYear, month: d.maxMonth });
+    if (years.length > 0) setYearOptions(years);
+    setMinYear(min);
+    setMinMonth(d.minMonth || 1);
+  }, [yearRange, currentYear]);
   // When year changes, clamp month to current month if we're on the current year
   const handleYearChange = (newYear) => {
     setFilterYear(newYear);
-    if (newYear === currentYear && filterMonth > currentMonth) {
-      setFilterMonth(currentMonth);
+    if (newYear === endYear && filterMonth > endMonth) {
+      setFilterMonth(endMonth);
     } else if (newYear === minYear && filterMonth < minMonth) {
       setFilterMonth(minMonth);
     }
@@ -243,7 +370,7 @@ export default function AdminDashboardPage() {
     value: i + 1,
   })).filter((m) => {
     if (filterYear === minYear && m.value < minMonth) return false;
-    if (filterYear === currentYear && m.value > currentMonth) return false;
+    if (filterYear === endYear && m.value > endMonth) return false;
     return true;
   });
   const { data: stats, isLoading } = useQuery({
@@ -270,10 +397,10 @@ export default function AdminDashboardPage() {
   const fyYearOptions = useMemo(() => {
     const opts = [];
     const minFy = yearOptions[0] || currentYear - 2;
-    // Cap FY at currentFyYear — never show future FY
-    for (let y = minFy; y <= currentFyYear; y++) opts.push(y);
+    // Cap FY at the FY of the newest bill or today, whichever is later
+    for (let y = minFy; y <= Math.max(currentFyYear, endFyYear); y++) opts.push(y);
     return opts;
-  }, [yearOptions, currentFyYear]);
+  }, [yearOptions, currentFyYear, endFyYear]);
   const periodLabel = filterMonth && filterYear
     ? `${MONTHS[filterMonth - 1]} ${filterYear}`
     : filterYear || "All";
@@ -284,7 +411,7 @@ export default function AdminDashboardPage() {
     ? collectedTrend.reduce((a, b) => a + b, 0) / collectedTrend.length
     : 0;
 
-  const rateColor = collectionRate >= 80 ? "var(--r-success)" : collectionRate >= 50 ? "var(--r-warning)" : "var(--r-danger)";
+  const rateColor = tierColor(collectionRate);
 
   // Momentum — this period's collection vs the one right before it in the
   // same trend series already fetched above. No new request, no invented
@@ -338,45 +465,53 @@ export default function AdminDashboardPage() {
         }
       />
 
-      {isLoading && (
-        <div style={{ textAlign: "center", padding: "2rem", color: "var(--r-fg-4)", fontSize: 13 }}>Loading…</div>
-      )}
+      {isLoading ? (
+        <DashboardSkeleton />
+      ) : (
+      <>
 
       {/* ── NEEDS ATTENTION ─────────────────────────────────────────── */}
       <div style={{ marginBottom: 24 }}>
         <SectionLabel icon="sparkles">Needs attention</SectionLabel>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
-          <ActionTile
-            tone="danger"
-            icon="alert-triangle"
-            headline={`${outstanding.unpaidBillCount || 0} unpaid bills`}
-            sub={`₹${fmt(outstanding.total)} outstanding across all periods`}
-            cta="Open bills"
-            onClick={() => router.push("/admin/view-bills")}
-          />
-          <ActionTile
-            tone="warning"
-            icon="percent"
-            headline={`₹${fmt(outstanding.interest)} interest accrued`}
-            sub={`₹${fmt(period.interestCharged)} charged in ${periodLabel}`}
-            cta="Late payment"
-            onClick={() => router.push("/admin/late-payment")}
-          />
-          <ActionTile
-            tone={collectionRate >= 80 ? "success" : "info"}
-            icon="trending-up"
-            headline={`${collectionRate}% collected — ${periodLabel}`}
-            sub={`${period.paidCount || 0} paid · ${period.unpaidCount || 0} pending of ${period.totalCount || 0} bills`}
-            cta="Record payment"
-            onClick={() => router.push("/admin/payments")}
-          />
+        <div className={styles.attentionGrid}>
+          <div>
+            <ActionTile
+              tone="danger"
+              icon="alert-triangle"
+              headline={`${outstanding.unpaidBillCount || 0} unpaid bills`}
+              sub={`₹${fmt(outstanding.total)} outstanding across all periods`}
+              cta="Open bills"
+              onClick={() => router.push("/admin/view-bills")}
+            />
+          </div>
+          <div>
+            <ActionTile
+              tone="warning"
+              icon="percent"
+              headline={`₹${fmt(outstanding.interest)} interest accrued`}
+              sub={`₹${fmt(period.interestCharged)} charged in ${periodLabel}`}
+              cta="Late payment"
+              onClick={() => router.push("/admin/late-payment")}
+            />
+          </div>
+          <div>
+            <ActionTile
+              tone={collectionRate >= 80 ? "success" : "info"}
+              icon="trending-up"
+              headline={`${collectionRate}% collected — ${periodLabel}`}
+              sub={`${period.paidCount || 0} paid · ${period.unpaidCount || 0} pending of ${period.totalCount || 0} bills`}
+              cta="Record payment"
+              onClick={() => router.push("/admin/payments")}
+            />
+          </div>
         </div>
       </div>
 
       {/* ── BENTO METRICS ───────────────────────────────────────────── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 14, marginBottom: 14 }}>
+      <div className={styles.bento}>
         {/* Collection — hero */}
-        <Card style={{ gridRow: "span 2", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+        <div className={styles.bentoHero}>
+        <Card style={{ height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
           <div>
             <CardHead
               title={`Collection · ${periodLabel}`}
@@ -408,8 +543,10 @@ export default function AdminDashboardPage() {
               : <div style={{ fontSize: 11, color: "var(--r-fg-5)" }}>Not enough history yet.</div>}
           </div>
         </Card>
+        </div>
 
         {/* Members */}
+        <div>
         <MiniMetric
           label="Members" value={totalMembers} icon="users"
           delta={`${period.totalCount || 0} bills this period`}
@@ -421,8 +558,10 @@ export default function AdminDashboardPage() {
             </div>
           }
         />
+        </div>
 
         {/* Collection rate ring + payment modes */}
+        <div>
         <Card>
           <CardHead title="Collection rate" sub={periodLabel} />
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -442,8 +581,10 @@ export default function AdminDashboardPage() {
             </div>
           </div>
         </Card>
+        </div>
 
         {/* Outstanding */}
+        <div>
         <MiniMetric
           label="Total outstanding" value={compactINR(outstanding.total)} icon="alert-triangle" tone="danger"
           delta={`${outstanding.unpaidBillCount || 0} unpaid bills · ₹${fmt(outstanding.interest)} interest`}
@@ -452,31 +593,38 @@ export default function AdminDashboardPage() {
             <div style={{ marginTop: 12 }}><Sparkline data={balanceTrend} w={160} h={28} color="var(--r-danger)" id="bal" /></div>
           ) : null}
         />
+        </div>
 
         {/* FY */}
+        <div>
         <MiniMetric
           label={fy.label || `FY ${fyYear}`} value={compactINR(fy.totalCollected)} icon="wallet" tone="paid"
           delta={`of ₹${fmt(fy.totalBilled)} billed · ${fyCollectionRate}% rate`}
           onClick={() => router.push("/admin/ledger")}
           extra={<div style={{ marginTop: 12 }}><Progress value={fyCollectionRate} total={100} color="var(--r-accent)" height={5} /></div>}
         />
+        </div>
 
         {/* Momentum — vs previous period in the same trend series */}
         {momentum !== null && (
-          <MiniMetric
-            label="Momentum" value={`${momentum > 0 ? "+" : ""}${momentum}%`}
-            icon={momentum >= 0 ? "trending-up" : "trending-down"}
-            tone={momentum >= 0 ? "success" : "danger"}
-            delta="Collected vs previous period"
-          />
+          <div>
+            <MiniMetric
+              label="Momentum" value={`${momentum > 0 ? "+" : ""}${momentum}%`}
+              icon={momentum >= 0 ? "trending-up" : "trending-down"}
+              tone={momentum >= 0 ? "success" : "danger"}
+              delta="Collected vs previous period"
+            />
+          </div>
         )}
 
         {/* Top payment mode — same data already listed in the ring card, surfaced */}
         {topMode && (
-          <MiniMetric
-            label="Top payment mode" value={topMode.mode || "—"} icon="credit-card"
-            delta={`₹${fmt(topMode.total)} via ${topMode.mode}`}
-          />
+          <div>
+            <MiniMetric
+              label="Top payment mode" value={topMode.mode || "—"} icon="credit-card"
+              delta={`₹${fmt(topMode.total)} via ${topMode.mode}`}
+            />
+          </div>
         )}
       </div>
 
@@ -527,7 +675,7 @@ export default function AdminDashboardPage() {
       </Card>
 
       {/* ── RECENT PAYMENTS + MONTHLY BREAKDOWN ─────────────────────── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 14, marginBottom: 24 }}>
+      <div className={styles.bottomGrid}>
         <Card padded={false} style={{ overflow: "hidden" }}>
           <div style={{ padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
@@ -586,7 +734,9 @@ export default function AdminDashboardPage() {
           {trend.length === 0 ? (
             <EmptyState icon="bar-chart-3" title="No billing data" sub="Generate a bill cycle to populate the trend." />
           ) : (
-            <div style={{ overflowX: "auto" }} className="revamp-scroll">
+            <>
+              <MonthlyTrendChart trend={trend} />
+              <div style={{ overflowX: "auto" }} className="revamp-scroll">
               <MiniTable
                 cols={[
                   { label: "Period" }, { label: "Billed", align: "right", num: true },
@@ -609,10 +759,13 @@ export default function AdminDashboardPage() {
                   };
                 })}
               />
-            </div>
+              </div>
+            </>
           )}
         </Card>
       </div>
+      </>
+      )}
     </div>
   );
 }

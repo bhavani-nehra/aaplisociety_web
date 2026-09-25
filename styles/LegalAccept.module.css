@@ -1,0 +1,82 @@
+/* Terms acceptance — same glass window recipe as Auth.module.css, wider to
+ * fit the policy documents, over the global Aurora background. */
+.wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px;
+  position: relative;
+}
+.card {
+  width: 100%;
+  max-width: 680px;
+  padding: 40px 40px 36px;
+  border-radius: 28px;
+  animation: modalSlideIn 0.4s var(--ease-out);
+  backdrop-filter: blur(32px) saturate(160%);
+  -webkit-backdrop-filter: blur(32px) saturate(160%);
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.7) inset,
+    0 32px 80px -24px rgba(20, 30, 70, 0.35);
+}
+:root[data-theme="dark"] .card {
+  background: rgba(18, 22, 40, 0.45);
+  border-color: rgba(150, 180, 235, 0.14);
+  box-shadow:
+    0 1px 0 rgba(180, 205, 255, 0.08) inset,
+    0 32px 80px -24px rgba(0, 0, 0, 0.6);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .card { background: var(--bg-surface); }
+}
+.head { text-align: center; margin-bottom: 24px; }
+.mark {
+  width: 52px; height: 52px; border-radius: 16px; background: #1e3a8a;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 16px; box-shadow: 0 8px 20px rgba(30, 58, 138, 0.35);
+}
+.title { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; color: var(--fg-1); margin: 0 0 6px; }
+.sub { font-size: 13px; line-height: 1.6; color: var(--fg-3); margin: 0; }
+
+/* each document is a frosted panel inside the glass */
+.doc {
+  border-radius: 14px;
+  margin-bottom: 10px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+:root[data-theme="dark"] .doc {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(150, 180, 235, 0.14);
+}
+.docBtn {
+  width: 100%; display: flex; justify-content: space-between; align-items: center;
+  padding: 0.9rem 1.1rem; background: transparent; border: none; cursor: pointer;
+  font-weight: 700; font-size: 14px; color: var(--fg-1);
+}
+.docBtn:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.docHint { font-size: 12px; color: var(--fg-4); }
+.docBody {
+  padding: 1.1rem 1.3rem; max-height: 380px; overflow-y: auto;
+  background: rgba(255, 255, 255, 0.45);
+  border-top: 1px solid rgba(255, 255, 255, 0.55);
+}
+:root[data-theme="dark"] .docBody {
+  background: rgba(10, 14, 28, 0.4);
+  border-top-color: rgba(150, 180, 235, 0.12);
+}
+.agree { display: flex; gap: 10px; align-items: flex-start; margin-top: 18px; font-size: 14px; cursor: pointer; color: var(--fg-2); }
+.agree input { margin-top: 3px; }
+.cta {
+  margin-top: 18px; width: 100%; padding: 0.8rem; border-radius: 12px; border: none;
+  font-weight: 700; font-size: 14px; transition: transform 0.15s, box-shadow 0.15s;
+}
+.ctaOn { background: var(--primary); color: #fff; cursor: pointer; box-shadow: 0 8px 20px -8px var(--primary); }
+.ctaOn:hover { transform: translateY(-1px); }
+.ctaOff { background: rgba(120, 130, 160, 0.25); color: var(--fg-4); cursor: not-allowed; }
+.center { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem; color: var(--fg-3); }
+@media (max-width: 560px) { .card { padding: 28px 20px; } }

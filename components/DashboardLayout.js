@@ -1,4 +1,7 @@
 "use client";
+import { restoreQueryClient, persistQueryClient, readCachedUser, writeCachedUser, clearPersistedSession } from "@/lib/query-persist";
+import PulseLoader from "@/components/brand/PulseLoader";
+import FullScreenLoader from "@/components/brand/FullScreenLoader";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -32,21 +35,32 @@ export default function DashboardLayout({
   // attribute needed; that's just Dashboard.module.css's default state.
   const [user, setUser] = useState(null);
   const [navigating, setNavigating] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const navTimeoutRef = useRef(null);
   const [queryClient] = useState(
     () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            staleTime: 5 * 60 * 1000,
-            cacheTime: 10 * 60 * 1000,
-            refetchOnWindowFocus: false,
-            refetchOnMount: false,
-            retry: 1,
+      restoreQueryClient(
+        new QueryClient({
+          defaultOptions: {
+            queries: {
+              staleTime: 5 * 60 * 1000,
+              gcTime: 30 * 60 * 1000,
+              refetchOnWindowFocus: false,
+              // Default (true): refetch on mount only when stale, so cached data
+              // paints instantly and refreshes quietly in the background.
+              retry: 1,
+            },
           },
-        },
-      }),
+        }),
+      ),
   );
+  // Restore the last cache + user first (instant paint after a refresh), then
+  // revalidate the user below.
+  useEffect(() => {
+    const cachedUser = readCachedUser();
+    if (cachedUser) setUser(cachedUser);
+    return persistQueryClient(queryClient);
+  }, [queryClient]);
   useEffect(() => {
     if (pathname.includes("/auth/login")) return;
     const fetchUser = async () => {
@@ -54,10 +68,15 @@ export default function DashboardLayout({
         const res = await fetch("/api/auth/me", { credentials: "include" });
         if (!res.ok) throw new Error();
         const data = await res.json();
+        const prev = readCachedUser();
+        const idOf = (u) => u?.id ?? u?._id ?? u?.userId ?? null;
+        if (prev && idOf(prev) !== idOf(data.user)) queryClient.clear(); // different account than the cache belongs to
+        writeCachedUser(data.user);
         setUser(data.user);
         if (data.user?.wing) localStorage.setItem("userWing", data.user.wing);
       } catch {
         if (!pathname.includes("/auth/login")) {
+          clearPersistedSession();
           window.location.href = "/auth/login";
         }
       }
@@ -92,23 +111,28 @@ export default function DashboardLayout({
     router.push(path);
   }, [pathname, router]);
   const handleLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
     localStorage.removeItem("userWing");
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/auth/login");
+    clearPersistedSession();
+    queryClient.clear();
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      router.push("/auth/login");
+    } catch {
+      setLoggingOut(false);
+    }
   };
   if (!user || user.legalAcceptanceRequired) {
     return (
       <div className={styles.fullPageLoader}>
-        <div className={styles.fullPageLoaderDots}>
-          <div className={styles.fullPageLoaderDot} />
-          <div className={styles.fullPageLoaderDot} />
-          <div className={styles.fullPageLoaderDot} />
-        </div>
+        <PulseLoader size={96} />
       </div>
     );
   }
   const LayoutUI = (
     <div className={styles.dashboardContainer}>
+      {loggingOut && <FullScreenLoader label="Signing out" />}
       <RouteLoadingBar />
       {navigating && (
         <div className={styles.navLoadingOverlay}>
@@ -183,7 +207,7 @@ export default function DashboardLayout({
                 <div className={styles.userRole}>{user.role}</div>
               )}
             </div>
-            <button className={styles.logoutBtn} onClick={handleLogout} title="Logout">
+            <button className={styles.logoutBtn} onClick={handleLogout} title="Logout" disabled={loggingOut}>
               <LogOut size={16} strokeWidth={1.75} />
             </button>
           </div>
@@ -214,7 +238,9 @@ export default function DashboardLayout({
             only roles the takeover API ever grants against). See
             docs/superpowers/specs/2026-09-11-society-takeover-design.md. */}
         {(user.role === "Admin" || user.role === "Secretary") && (
-          <TakeoverSessionPanel user={user} />
+          <div className={styles.bannerSlot}>
+            <TakeoverSessionPanel user={user} />
+          </div>
         )}
         {/* No top header: it used to hold only the user avatar+name (already
             shown in the sidebar footer below — redundant) and the
@@ -232,7 +258,7 @@ export default function DashboardLayout({
               phase) — see docs/ux-overhaul/2026-09-01-global-command-bar-
               design.md. */}
           {commandBarConfig ? (
-            <div style={{ marginBottom: 12 }}>
+            <div className={styles.commandSticky}>
               <CommandBar navigation={navigation} {...commandBarConfig} />
             </div>
           ) : null}

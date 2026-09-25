@@ -82,7 +82,21 @@ const VisitorSchema = new mongoose.Schema(
     },
     entryMethod: {
       type: String,
-      enum: ["Manual", "Pass", "SOS", "OfflineEntry"],
+      // SEC-23: "GuardRequest" was missing here while `lib/v1/models.js` — the
+      // other schema mapped onto this same `visitors` collection — has always
+      // allowed it, and `app/api/v1/visitors/guard-request/route.js:43,56`
+      // writes it.
+      //
+      // Measured against the database: 10 of 14 existing visitor documents
+      // carry `entryMethod: "GuardRequest"` and therefore FAILED this schema's
+      // validators. The nine web routes that call `.save()` (approve,
+      // guard-admit, confirm-entry, remind, extend, log, offline-entry,
+      // pass/verify, pass/[id]) all run validators, so a guard-requested
+      // visitor could not be actioned from the web dashboard at all.
+      //
+      // Same root cause as the `enteredBy` fix below: two schemas over one
+      // collection, drifting apart. This is the second confirmed instance.
+      enum: ["Manual", "Pass", "SOS", "OfflineEntry", "GuardRequest"],
       default: "Manual",
       index: true,
     },
@@ -134,12 +148,73 @@ const VisitorSchema = new mongoose.Schema(
     },
     approvedAt: { type: Date, default: null },
     approverRole: { type: String, default: "" }, // Owner | Tenant | Admin
+    // The guard who physically admitted this visitor.
+    //
+    // SEC-23: `required: true` was wrong, and actively broke a cross-surface
+    // flow. Two schemas are mapped onto the `visitors` collection —
+    // this one (used by /api/visitor/*, the web guard dashboard) and the one
+    // in lib/v1/models.js (used by /v1/visitors/*, the Flutter app) — and only
+    // this one marked the field required.
+    //
+    // A visitor created from the mobile app carries no `enteredBy`: the v1
+    // schema does not require it, and correctly so, because a *Pending*
+    // visitor has not been admitted by anybody yet. The field describes an
+    // event that has not happened.
+    //
+    // The nine web routes that call `.save()` (approve, guard-admit,
+    // confirm-entry, remind, extend, …) run validators, so acting on one of
+    // those mobile-created visitors from the web dashboard threw
+    // `ValidationError: Path 'enteredBy' is required.` and surfaced as a 500.
+    //
+    // Set when entry is actually recorded, not before. See
+    // final_audit_fix_plan/07-execution-log.md for the wider point: two
+    // schemas over one collection is the underlying hazard, and this is one
+    // symptom of it.
     enteredBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      default: null,
     }, // guard
     gateLabel: { type: String, trim: true, default: "Main Gate" },
+
+    // ── SEC-23: fields the mobile surface persists ──────────────────────────
+    //
+    // Declared here as part of unifying the two schemas that were mapped onto
+    // the `visitors` collection. Both were written by /v1 routes through
+    // `.save()` on a hydrated document, and both survived only because the
+    // mirror schema in lib/v1/models.js was `strict: false`. Once v1 reads
+    // through THIS schema, an undeclared path would be silently discarded —
+    // which is exactly the `photoKey` incident noted above, and the reason
+    // each of these is declared rather than relying on loose mode.
+    //
+    // Deliberately NOT declared: flatNo, wing, ownerName, contactNumber,
+    // guardName, guardPhone, photoUrl, sosResolved. Those are assigned onto
+    // `.lean()` objects in app/api/v1/visitors/route.js purely to shape the
+    // API response, are never saved, and would be schema bloat describing
+    // data that does not exist on the document.
+
+    // Set by POST /v1/visitors/:id/reassign — moves an open visit to another
+    // guard on duty.
+    assignedGuardId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    // Set by POST /v1/visitors/:id/sos-ack — who acknowledged an SOS, and when.
+    // The v1 route calls `visitor.markModified("sosAck")`, which is only
+    // necessary for a path Mongoose does not know about; declaring it here is
+    // what makes that unnecessary and makes the subfields cast correctly.
+    sosAck: {
+      at: { type: Date, default: null },
+      byRole: { type: String, default: null },
+      byName: { type: String, default: null },
+      note: { type: String, default: null },
+      // Legacy shape written by older builds; read as a fallback in
+      // app/api/v1/visitors/route.js.
+      by: { type: String, default: null },
+    },
+
     // Zero-dead-end escalation ladder state
     escalation: {
       level: { type: Number, default: 0 },

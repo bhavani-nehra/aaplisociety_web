@@ -27,7 +27,32 @@ const ProfileEditRequestSchema = new mongoose.Schema(
       index: true,
     },
     requestedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    section: { type: String, enum: ["Contact", "FamilyMember", "EmergencyContact", "Parking", "ShopProfile"], required: true },
+    // SEC-29.
+    //
+    // `TenantContact` was MISSING here while both the other two layers already
+    // supported it: lib/v1/schemas.js:238 accepts it from the mobile client and
+    // lib/profile-edit-apply.js:13 knows how to apply it. So a tenant updating
+    // their own phone number passed validation, reached the model, and died on
+    // `ValidationError: TenantContact is not a valid enum value` — a 500 for a
+    // request the product otherwise fully implements.
+    //
+    // `OwnershipInfo` and `TenantInfo` are Plan 02 §15: the controlled records
+    // a member should REQUEST changes to rather than edit directly. They are
+    // accepted here and applied in lib/profile-edit-apply.js.
+    section: {
+      type: String,
+      enum: [
+        "Contact",
+        "TenantContact",
+        "FamilyMember",
+        "EmergencyContact",
+        "Parking",
+        "ShopProfile",
+        "OwnershipInfo",
+        "TenantInfo",
+      ],
+      required: true,
+    },
     action: { type: String, enum: ["Edit", "Add", "Remove"], required: true },
     familyMemberId: mongoose.Schema.Types.ObjectId,
     payload: { type: mongoose.Schema.Types.Mixed, default: {} },

@@ -274,7 +274,22 @@ const SocietySchema = new mongoose.Schema(
     buildDate: { type: Date },
     credentials: {
       adminEmail: { type: String },
-      plainPassword: { type: String, select: true }, // explicitly included
+      // SEC-19: DEPRECATED — plaintext admin password. Scheduled for removal by
+      // scripts/security/purge-plain-passwords.js, which rotates each account
+      // onto a setup link before unsetting the field.
+      //
+      // It was `select: true`, so every `.select("-__v")` query — including
+      // GET /api/admin/societies and GET /api/superadmin/society-detail —
+      // shipped it to the browser, where the superadmin table rendered it
+      // behind a Reveal/Copy pair. Flipping it to `select: false` closes every
+      // one of those routes at once rather than patching each `.select()`
+      // individually and missing one; `.lean()` honours it too.
+      //
+      // Nothing reads this field any more. `reset-admin-password` no longer
+      // writes it, and the superadmin UI no longer displays it. Do not add a
+      // `+credentials.plainPassword` anywhere — the replacement capability is
+      // the setup-link reset, not reading a password back out.
+      plainPassword: { type: String, select: false },
     },
     // LOOP-05: lifecycle state. Pause blocks login/access without touching
     // data; the delete flow is soft-first (isDeleted + a purge date the admin

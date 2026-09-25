@@ -126,7 +126,29 @@ const MemberSchema = new mongoose.Schema(
       default: "Owner-Occupied",
     },
     possessionDate: { type: Date },
-    // === CURRENT OWNER DATA (from ownerHistory array - most recent) ===
+    // === CURRENT OWNER ===
+    //
+    // SEC-27: these fields ARE the current owner. They are not derived from
+    // `ownerHistory`, despite what this comment used to claim ("from
+    // ownerHistory array - most recent").
+    //
+    // Measured against the database: of 86 members, 78 have no `ownerHistory`
+    // at all and the remaining 8 carry only PAST owners — every entry has
+    // `isCurrent: false`, and the person named at this level is a different
+    // person from the one in the history. `currentTenant`/`tenantHistory`
+    // follow the same split (9 members have a current tenant; zero have tenant
+    // history).
+    //
+    // So the split is: these fields = who owns it now; `ownerHistory` = who
+    // owned it before. The `isCurrent` flag on those entries is currently
+    // vestigial — nothing sets it true.
+    //
+    // This matters because `MemberSchema.methods.transferOwnership` below DOES
+    // set `isCurrent: true` when it pushes a new entry. Nothing calls it today,
+    // but the moment an ownership-transfer workflow ships, these two places
+    // start describing the same fact and the invariant has to be enforced
+    // somewhere. Build that with the transfer, not before it — there is no
+    // drift to fix while `ownerHistory` holds only history.
     ownerName: {
       type: String,
       required: true,
@@ -155,12 +177,55 @@ const MemberSchema = new mongoose.Schema(
       country: { type: String, default: "India" },
     },
     // Emergency Contact
+    //
+    // Kept as the single "primary" contact because every existing read in the
+    // app expects an object here, not a list. The repeatable list below is
+    // additive; this field mirrors whichever entry is marked primary.
     emergencyContact: {
       name: { type: String },
       relation: { type: String },
       phoneNumber: { type: String },
       address: { type: String },
     },
+    // Plan 02 §17 - emergency contacts as a repeatable list.
+    //
+    // One number is not enough in practice: the flat owner is away, the
+    // number rings out, and the guard has nobody else to try. The importer
+    // fills this from the Emergency Contacts sheet.
+    emergencyContacts: [
+      {
+        name: { type: String, required: true },
+        relation: { type: String },
+        contactNumber: { type: String },
+        alternateContact: { type: String },
+        email: { type: String, lowercase: true, trim: true },
+        address: { type: String },
+        // At most one per flat, enforced at import by the atMostOne rule on
+        // the sheet. This is who is called first.
+        isPrimary: { type: Boolean, default: false },
+      },
+    ],
+    // Plan 02 §17 - vehicles as first-class records.
+    //
+    // parkingSlots above records the SLOT (and is what monthly parking is
+    // billed from); this records the VEHICLE. They are different things: a
+    // flat can own a car with no slot, or hold a slot standing empty, and the
+    // society gate needs the registration number either way.
+    vehicles: [
+      {
+        registrationNumber: { type: String, required: true, uppercase: true, trim: true },
+        vehicleType: { type: String, enum: ["Two-Wheeler", "Four-Wheeler"] },
+        make: { type: String },
+        model: { type: String },
+        colour: { type: String },
+        fuelType: { type: String, enum: ["Petrol", "Diesel", "CNG", "Electric", "Hybrid"] },
+        // Free text, matched against parkingSlots[].slotNumber when present.
+        parkingSlot: { type: String },
+        // Only when the registered owner differs from the flat owner.
+        ownerName: { type: String },
+        contactNumber: { type: String },
+      },
+    ],
     // Family Members (residing in the flat)
     familyMembers: [
       {

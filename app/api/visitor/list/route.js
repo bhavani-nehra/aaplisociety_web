@@ -7,6 +7,7 @@ import Visitor from "@/models/Visitor";
 import { requireAuth } from "@/lib/authz";
 import { VISITOR_STATUSES } from "@/lib/visitor-config";
 import { authorize } from "@/lib/rbac/authorize";
+import { safeRegex } from "@/lib/query-safety";
 export async function GET(request) {
   const gate = await authorize(request, "visitor.visitor.view");
   if (!gate.ok) return gate.response;
@@ -43,10 +44,11 @@ export async function GET(request) {
       query.status = "Pending";
     }
     if (q) {
+      const rx = safeRegex(q);
       query.$or = [
-        { name: { $regex: q, $options: "i" } },
-        { phone: { $regex: q, $options: "i" } },
-        { vehicleNumber: { $regex: q, $options: "i" } },
+        { name: rx },
+        { phone: rx },
+        { vehicleNumber: rx },
       ];
     }
     const [visitors, total] = await Promise.all([

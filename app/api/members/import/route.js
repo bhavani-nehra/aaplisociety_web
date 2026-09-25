@@ -15,6 +15,8 @@ import { generateSimpleUsername, buildUsernameBloomFilter } from "@/lib/username
 import { ensureSocietyCode } from "@/lib/society-code";
 import { requireRoles, SOCIETY_ADMIN_ROLES } from "@/lib/authz";
 import { authorize } from "@/lib/rbac/authorize";
+import { signToken } from "@/lib/jwt";
+import { sendEmail, onboardingEmailHtml } from "@/lib/brevo-email";
 async function upsertMemberUser({
   memberDoc,
   basic,
@@ -1590,7 +1592,8 @@ async function handleSimpleImport(workbook, decoded) {
     // Fetched once, not per-member: the society doesn't change across this
     // loop, and re-querying every username in the DB (buildUsernameBloomFilter)
     // for every single member would be wasteful on a large import.
-    const societyForImport = await Society.findById(decoded.societyId).select("name societyCode");
+    // `address` is read by the onboarding email built below.
+    const societyForImport = await Society.findById(decoded.societyId).select("name societyCode address");
     const societyCodeForImport = await ensureSocietyCode(societyForImport);
     const usernameBloom = await buildUsernameBloomFilter();
     // ✅ CREATE ONE BY ONE
@@ -1617,13 +1620,50 @@ async function handleSimpleImport(workbook, decoded) {
         wing: member.wing,
         ownerName: member.ownerName,
       });
+      // SEC-19: the generated password used to be returned here and was the
+      // only way it ever reached the member — the admin downloaded it as an
+      // .xlsx column and forwarded it. The password is still generated and
+      // hashed (the account must not be left without one), but it is discarded
+      // immediately; the member gets a 7-day setup link and picks their own,
+      // exactly as the society bulk-import path already does.
+      let setCredentialsUrl = null;
+      if (isNew && basic.emailPrimary) {
+        const onboardingToken = signToken(
+          { userId: String(memberUser._id), purpose: "onboarding" },
+          { expiresIn: "7d" },
+        );
+        setCredentialsUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/onboarding/set-credentials?token=${onboardingToken}`;
+        // Best-effort: a mail failure must not roll back a member who was
+        // already created. The link is returned either way so the admin can
+        // deliver it by hand.
+        try {
+          await sendEmail({
+            to: basic.emailPrimary,
+            subject: `Set up your account — ${societyForImport?.name ?? "your society"}`,
+            html: onboardingEmailHtml({
+              memberName: member.ownerName,
+              societyName: societyForImport?.name ?? "",
+              societyAddress: societyForImport?.address ?? "",
+              unitKind: "Flat",
+              unitLabel: member.wing ? `${member.wing}-${member.flatNo}` : member.flatNo,
+              setCredentialsUrl,
+            }),
+          });
+        } catch (err) {
+          console.error(
+            `[members/import] onboarding email failed for ${basic.emailPrimary}:`,
+            err?.message,
+          );
+        }
+      }
       userCredentials.push({
         flatNo: member.flatNo,
         wing: member.wing,
         ownerName: member.ownerName,
         username: memberUser.username,
         email: basic.emailPrimary,
-        password: isNew ? password : "(existing account — password unchanged)",
+        isNewUser: isNew,
+        setCredentialsUrl,
       });
     }
     await AuditLog.create({

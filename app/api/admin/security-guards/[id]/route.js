@@ -13,6 +13,8 @@ import { requireRoles } from "@/lib/authz";
 import { logAudit } from "@/lib/audit-logger";
 import { authorize } from "@/lib/rbac/authorize";
 import { passwordPolicyProblem } from "@/lib/password-policy";
+// SEC-19: a password reset must also end the sessions running on the old one.
+import { bumpSessionEpoch } from "@/lib/rbac/session";
 function isPlausiblePhone(phone) {
   const digits = String(phone || "").replace(/\D/g, "");
   return digits.length >= 10 && digits.length <= 13;
@@ -104,15 +106,39 @@ export async function POST(request, { params }) {
       if (pwProblem) return NextResponse.json({ error: pwProblem }, { status: 400 });
     }
     guard.password = await bcrypt.hash(newPassword, 10);
+    // SEC-19: a guard account has no email address (only name / username /
+    // phone — see POST /api/admin/security-guards), so the setup-link flow used
+    // for society admins and members is not available here: there is no channel
+    // to send it on. The temp password genuinely has to be handed over in
+    // person at the gate.
+    //
+    // What makes that acceptable is that it must be single-use. Without this
+    // flag the "temporary" password is simply the guard's password, for as long
+    // as they keep using it, and a value that was read aloud and possibly
+    // written down stays valid indefinitely.
+    guard.mustChangePassword = true;
     await guard.save();
+    // Any session the guard already had is running on the OLD password. A reset
+    // that leaves it working is not a reset — this is the same mechanism role
+    // handover and the admin setup-link reset use.
+    try {
+      await bumpSessionEpoch(String(guard._id));
+    } catch (err) {
+      // Never fatal: the password is already changed, so an un-bumped old
+      // session is the lesser problem and it expires on its own.
+      console.error("[security-guards] bumpSessionEpoch failed:", err?.message);
+    }
     await logAudit(gate.context.userId, gate.context.societyId, "SECURITY_GUARD_PASSWORD_RESET", null, {
       id: guard._id.toString(),
       username: guard.username,
     });
-    // Show the temp password exactly once (only when generated).
+    // Shown exactly once, and only when WE generated it. An admin-supplied
+    // password is never echoed back — the admin already knows it, and echoing
+    // it only widens where it can be captured.
     return NextResponse.json({
       success: true,
       username: guard.username,
+      mustChangePassword: true,
       tempPassword: generated ? newPassword : undefined,
     });
   } catch (err) {

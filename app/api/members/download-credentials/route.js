@@ -15,10 +15,22 @@ export async function POST(request) {
     if (regularToken && verifyToken(regularToken)) {
       authorized = true;
     } else if (adminToken) {
-      try {
-        jwt.verify(adminToken, process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET);
-        authorized = true;
-      } catch { /* invalid */ }
+      // SEC-17: this used to fall back to JWT_SECRET when ADMIN_JWT_SECRET was
+      // unset. In any environment missing the admin secret, an ORDINARY user
+      // token — signed with JWT_SECRET — verified as a superadmin token. Fails
+      // closed now, matching lib/authz.js:requireSuperAdmin which already
+      // refuses when the secret is absent rather than borrowing another one.
+      const adminSecret = process.env.ADMIN_JWT_SECRET;
+      if (!adminSecret) {
+        console.error("ADMIN_JWT_SECRET is not configured");
+      } else {
+        try {
+          const decoded = jwt.verify(adminToken, adminSecret);
+          // Verifying the signature only proved the token is ours. The role is
+          // what makes it a superadmin token.
+          if (decoded?.role === "SuperAdmin") authorized = true;
+        } catch { /* invalid */ }
+      }
     }
     if (!authorized) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const { credentials } = await request.json();
@@ -35,7 +47,11 @@ export async function POST(request) {
       { header: 'Owner Name', key: 'ownerName', width: 30 },
       { header: 'Username', key: 'username', width: 25 },
       { header: 'Email', key: 'email', width: 35 },
-      { header: 'Password', key: 'password', width: 20 },
+      // SEC-16: the 'Password' column is gone. It carried the plaintext
+      // password for every member in the sheet, which then left the building
+      // by email and WhatsApp. The Setup Link below does the same job — the
+      // member sets their own password — without anything recoverable ending
+      // up in a forwarded file.
       { header: 'Status', key: 'status', width: 20 },
       { header: 'Setup Link', key: 'setCredentialsUrl', width: 70 },
     ];
@@ -54,7 +70,6 @@ export async function POST(request) {
         ownerName: cred.ownerName,
         username: cred.username || '',
         email: cred.email,
-        password: cred.password,
        status: cred.isNewUser ? 'New Account' : 'Existing Account',
   setCredentialsUrl: cred.setCredentialsUrl || '',
 });
@@ -63,12 +78,12 @@ export async function POST(request) {
     worksheet.addRow([]);
 const instructionRow = worksheet.addRow(['INSTRUCTIONS:', '', '', '', '', '', '', '']);
     instructionRow.font = { bold: true, color: { argb: 'FFDC2626' } };
-    worksheet.addRow(['1. Members login with Username (or email) + Password']);
-    worksheet.addRow(['2. "Existing Account" rows — password unchanged, use their original password']);
-    worksheet.addRow(['3. Share new account credentials with members via email/WhatsApp']);
-    worksheet.addRow(['4. Advise members to change their password after first login']);
-    worksheet.addRow(['5. Keep this file secure and do not share publicly']);
-    worksheet.addRow(['6. Setup links expire 7 days after import — re-import or resend if they lapse']);
+    worksheet.addRow(['1. Send each member their own Setup Link. They choose their own password.']);
+    worksheet.addRow(['2. This file contains NO passwords — a setup link is the only way in.']);
+    worksheet.addRow(['3. "Existing Account" rows already have a password; they need no setup link.']);
+    worksheet.addRow(['4. Members log in with Username (or email) + the password they set.']);
+    worksheet.addRow(['5. Setup links expire 7 days after import — re-import or resend if they lapse.']);
+    worksheet.addRow(['6. A setup link is single-use. Do not post it in a shared group.']);
     // Generate buffer
     const buffer = await workbook.xlsx.writeBuffer();
     // Return as downloadable file

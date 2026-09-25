@@ -3,6 +3,7 @@ import { validateAdminRequest } from "@/lib/admin-middleware";
 import connectDB from "@/lib/mongodb";
 import SupportTicket from "@/models/SupportTicket";
 import { TICKET_CATEGORIES, TICKET_STATUSES } from "@/lib/support/ticketPolicy";
+import { safeRegex } from "@/lib/query-safety";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,11 +26,8 @@ export async function GET(request) {
   if (status && TICKET_STATUSES.includes(status)) filter.status = status;
   if (category && TICKET_CATEGORIES.includes(category)) filter.category = category;
   if (q) {
-    filter.$or = [
-      { title: { $regex: q, $options: "i" } },
-      { societyName: { $regex: q, $options: "i" } },
-      { submittedByName: { $regex: q, $options: "i" } },
-    ];
+    const rx = safeRegex(q);
+    filter.$or = [{ title: rx }, { societyName: rx }, { submittedByName: rx }];
   }
 
   const tickets = await SupportTicket.find(filter)

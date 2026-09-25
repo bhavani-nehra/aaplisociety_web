@@ -4,6 +4,7 @@ import Society from "@/models/Society";
 import User from "@/models/User";
 import { validateAdminRequest } from "@/lib/admin-middleware";
 import { parseFirstSheet } from "@/lib/excelParse";
+import { escapeRegex } from "@/lib/query-safety";
 export async function POST(request) {
   const validation = validateAdminRequest(request);
   if (!validation.valid) return validation;
@@ -42,7 +43,7 @@ export async function POST(request) {
     }
     if (societyName) {
       const existingName = await Society.findOne({
-        name: { $regex: `^${societyName}$`, $options: "i" },
+        name: new RegExp(`^${escapeRegex(societyName)}$`, "i"),
         isDeleted: { $ne: true },
       }).lean();
       if (existingName)

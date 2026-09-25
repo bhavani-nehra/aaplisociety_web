@@ -5,6 +5,7 @@ import Member from "@/models/Member";
 import { getTokenFromRequest, verifyToken } from "@/lib/jwt";
 import cache from "@/lib/cache";
 import { authorizeAny } from "@/lib/rbac/authorize";
+import { safeRegex } from "@/lib/query-safety";
 // Read by several finance/billing/commercial pages to resolve member names
 // against transactions, not just the dedicated View Members page — same
 // cross-page-dependency pattern as financial-years.
@@ -49,11 +50,12 @@ export async function GET(request) {
       // FIXED: searched and sorted on `roomNo`, which is not a field on
       // models/Member.js (it is `flatNo`), so searching by flat number never
       // matched anything and the list came back in insertion order.
+      const rx = safeRegex(search);
       query.$or = [
-        { flatNo: { $regex: search, $options: "i" } },
-        { ownerName: { $regex: search, $options: "i" } },
-        { wing: { $regex: search, $options: "i" } },
-        { contactNumber: { $regex: search, $options: "i" } },
+        { flatNo: rx },
+        { ownerName: rx },
+        { wing: rx },
+        { contactNumber: rx },
       ];
     }
     const skip = (page - 1) * limit;

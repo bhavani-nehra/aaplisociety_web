@@ -1,25 +1,25 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import Society from "@/models/Society";
-import { getTokenFromRequest, verifyToken } from "@/lib/jwt";
+import { authorize } from "@/lib/rbac/authorize";
 import { matrixConfigSchema } from "@/lib/validators";
+
+// SEC-21: converged off an inline `decoded.role !== "Admin"` check.
+//
+// Despite the path, this route does NOT create a society — it writes
+// `matrixConfig` onto the caller's OWN society (note `findByIdAndUpdate` on the
+// token's societyId below). The permission reflects what it actually does.
+//
+// The old check accepted any token whose literal role string was "Admin",
+// regardless of what that user's RoleAssignment currently granted — so a
+// handed-over admin kept write access to society config until their token
+// happened to expire.
 export async function POST(request) {
+  const gate = await authorize(request, "society.config.update");
+  if (!gate.ok) return gate.response;
+  const { societyId } = gate.context;
   try {
     await connectDB();
-    const token = getTokenFromRequest(request);
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const decoded = verifyToken(token);
-    if (!decoded) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-    }
-    if (decoded.role !== "Admin") {
-      return NextResponse.json(
-        { error: "Admin access required" },
-        { status: 403 }
-      );
-    }
     const body = await request.json();
     const validationResult = matrixConfigSchema.safeParse(body);
     if (!validationResult.success) {
@@ -29,7 +29,7 @@ export async function POST(request) {
       );
     }
     const updatedSociety = await Society.findByIdAndUpdate(
-      decoded.societyId,
+      societyId,
       {
         $set: {
           matrixConfig: {

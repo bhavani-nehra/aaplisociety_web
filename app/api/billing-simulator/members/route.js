@@ -3,6 +3,7 @@ import connectDB from "@/lib/mongodb";
 import Member from "@/models/Member";
 import { getTokenFromRequest, verifyToken } from "@/lib/jwt";
 import { authorizeAny } from "@/lib/rbac/authorize";
+import { safeRegex } from "@/lib/query-safety";
 /**
  * GET /api/billing-simulator/members
  * Returns members for the society with billing-relevant fields only.
@@ -32,15 +33,12 @@ export async function GET(request) {
     const search = searchParams.get("search")?.trim();
     const query = { societyId };
     if (search) {
-      query.$or = [
-        { ownerName: { $regex: search, $options: "i" } },
-        { flatNo: { $regex: search, $options: "i" } },
-        { wing: { $regex: search, $options: "i" } },
-      ];
+      const rx = safeRegex(search);
+      query.$or = [{ ownerName: rx }, { flatNo: rx }, { wing: rx }];
     }
     const members = await Member.find(query)
       .select(
-        "_id flatNo wing ownerName openingBalance openingPrincipal openingInterest advanceCredit carpetAreaSqft parkingSlots contactNumber",
+        "_id flatNo wing ownerName flatType openingBalance openingPrincipal openingInterest advanceCredit carpetAreaSqft parkingSlots contactNumber",
       )
       .sort({ wing: 1, flatNo: 1 })
       .lean();
@@ -50,6 +48,7 @@ export async function GET(request) {
       flatNo: m.flatNo,
       wing: m.wing,
       name: m.ownerName,
+      flatType: m.flatType || null,
       openingBalance: m.openingBalance || 0,
       openingPrincipal: m.openingPrincipal || 0,
       openingInterest: m.openingInterest || 0,

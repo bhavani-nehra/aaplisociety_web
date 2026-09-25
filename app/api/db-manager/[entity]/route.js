@@ -10,6 +10,7 @@ import BillingHead from '@/models/BillingHead';
 import Receipt from '@/models/Receipt';
 import { requireRoles, SOCIETY_ADMIN_ROLES } from '@/lib/authz';
 import { authorize } from '@/lib/rbac/authorize';
+import { safeRegex } from '@/lib/query-safety';
 const modelMap = {
   society: Society,
   members: Member,
@@ -41,7 +42,7 @@ export async function GET(request, { params }) {
     }
     // Apply filters based on search params
     if (searchParams.get('name')) {
-      query.ownerName = { $regex: searchParams.get('name'), $options: 'i' };
+      query.ownerName = safeRegex(searchParams.get('name'));
     }
     if (searchParams.get('status')) {
       if (entity === 'members') {

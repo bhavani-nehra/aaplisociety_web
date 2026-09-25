@@ -32,7 +32,15 @@ export async function GET(request) {
   // ["Admin","SuperAdmin"] as the only allowed *legacy* role, silently
   // overriding whatever RBAC had just granted (e.g. Auditor: view).
   const { searchParams } = new URL(request.url);
-  const societyId = gate.context.societyId || searchParams.get("societyId");
+  // SEC-21: the `|| searchParams.get("societyId")` fallback is gone.
+  //
+  // It was only reachable when the token carried no society context — which
+  // authorize() already refuses with "No active society context" — so it was
+  // almost certainly dead. But "almost certainly dead" is not a property you
+  // want on the line that decides which society's balance sheet a caller
+  // reads, and a client-supplied tenant scope is exactly the pattern Master
+  // Prompt 1 §5 says must never exist next to a trusted one.
+  const societyId = gate.context.societyId;
   const fy = parseInt(searchParams.get("fy") || (() => {
     const now = new Date();
     return now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;

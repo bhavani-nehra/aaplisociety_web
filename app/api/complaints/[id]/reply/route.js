@@ -16,6 +16,15 @@ export async function POST(request, { params }) {
     const decoded = verifyToken(token);
     if (!decoded)
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+    // SEC-21: staff/member branching comes from the RBAC hat authorize()
+    // already resolved, not the literal role string. `User.role` carries
+    // "SOCIETY_ADMIN" and "Staff" in live data, and a custom RBAC staff role
+    // carries no legacy role string at all — each of those matched NEITHER
+    // branch below, so they were subject to neither the member restrictions
+    // nor the staff status check.
+    const isMemberHat = gate.context.hat === "member";
+    const isStaffHat = gate.context.hat === "staff";
+
     const { id } = await params;
     const { message } = await request.json();
     if (!message || message.trim().length < 10) {
@@ -40,7 +49,7 @@ export async function POST(request, { params }) {
         { status: 404 },
       );
     // Member can only reply to their own rejected complaints
-    if (decoded.role === "Member") {
+    if (isMemberHat) {
       if (complaint.memberId.toString() !== decoded.memberId.toString()) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
@@ -62,8 +71,8 @@ export async function POST(request, { params }) {
         );
       }
     }
-    // Admin/Secretary can reply to any complaint in their society
-    if (["Admin", "Secretary"].includes(decoded.role)) {
+    // Staff can reply to any complaint in their society
+    if (isStaffHat) {
       if (!["PENDING", "REJECTED"].includes(complaint.status)) {
         return NextResponse.json(
           { error: "Cannot reply to this complaint" },
@@ -73,11 +82,15 @@ export async function POST(request, { params }) {
     }
     const reply = await ComplaintReply.create({
       complaintId: id,
-      societyId: gate.context.societyId || decoded.societyId,
-      authorId: decoded.userId,
-      authorRole: decoded.role,
-      displayName:
-        decoded.role === "Member" ? complaint.anonymousName : "Society Admin",
+      // SEC-21: verified context only — no second, less-trusted source for
+      // the same fact.
+      societyId: gate.context.societyId,
+      authorId: gate.context.userId,
+      // `authorRole` is persisted and read back by the member reply cap above
+      // (`authorRole: "Member"`), so it must stay a stable literal rather than
+      // whatever role string a given token happens to carry.
+      authorRole: isMemberHat ? "Member" : decoded.role || "Staff",
+      displayName: isMemberHat ? complaint.anonymousName : "Society Admin",
       message: message.trim(),
     });
     // Update complaint reply count and lastReplyAt

@@ -24,12 +24,24 @@ export async function GET(request, { params }) {
         { status: 400 },
       );
     }
-    const isAdmin = ["Admin", "Secretary"].includes(decoded.role);
-    const isMember = decoded.role === "Member";
+    // SEC-21: derived from the RBAC hat that authorize() already resolved, not
+    // from the literal role string on the token.
+    //
+    // The string check missed real accounts: `User.role` also carries
+    // "SOCIETY_ADMIN" and "Staff" in live data, and a custom RBAC staff role
+    // (Auditor, Committee Member) carries no legacy role string at all — all of
+    // which fell through BOTH branches and got neither the staff view nor the
+    // member privacy check. resolveContext() in lib/rbac/authorize.js already
+    // handles every token shape; this just uses its answer.
+    const isAdmin = gate.context.hat === "staff";
+    const isMember = gate.context.hat === "member";
     // --- Fetch complaint ---
     const complaint = await Complaint.findOne({
       _id: id,
-      societyId: gate.context.societyId || decoded.societyId, // always scope to their society
+      // SEC-21: tenant scope comes from the verified context only. The
+      // `|| decoded.societyId` fallback was a second, less-trusted source for
+      // the same fact — the same shape removed from billing/balance-sheet.
+      societyId: gate.context.societyId,
     }).lean();
     if (!complaint) {
       return NextResponse.json(

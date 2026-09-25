@@ -3,6 +3,7 @@ import connectDB from "@/lib/mongodb";
 import Member from "@/models/Member";
 import { requireRoles } from "@/lib/authz";
 import { authorize } from "@/lib/rbac/authorize";
+import { safeRegex } from "@/lib/query-safety";
 export async function GET(request) {
   const gate = await authorize(request, "visitor.visitor.view");
   if (!gate.ok) return gate.response;
@@ -13,14 +14,15 @@ export async function GET(request) {
     if (!q) {
       return NextResponse.json({ success: true, flats: [] });
     }
+    const rx = safeRegex(q);
     const flats = await Member.find({
       societyId: gate.context.societyId,
       isDeleted: { $ne: true },
       $or: [
-        { flatNo: { $regex: q, $options: "i" } },
-        { wing: { $regex: q, $options: "i" } },
-        { ownerName: { $regex: q, $options: "i" } },
-        { tenantName: { $regex: q, $options: "i" } },
+        { flatNo: rx },
+        { wing: rx },
+        { ownerName: rx },
+        { tenantName: rx },
       ],
     })
       .select(

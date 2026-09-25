@@ -11,6 +11,7 @@ import User from "@/models/User";
 import { requireRoles } from "@/lib/authz";
 import { VISITOR_STATUSES, VISITOR_PURPOSES } from "@/lib/visitor-config";
 import { authorize } from "@/lib/rbac/authorize";
+import { safeRegex } from "@/lib/query-safety";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,11 +49,8 @@ export async function GET(request) {
       }
     }
     if (q) {
-      query.$or = [
-        { name: { $regex: q, $options: "i" } },
-        { phone: { $regex: q, $options: "i" } },
-        { vehicleNumber: { $regex: q, $options: "i" } },
-      ];
+      const rx = safeRegex(q);
+      query.$or = [{ name: rx }, { phone: rx }, { vehicleNumber: rx }];
     }
     const [visitors, total, summary] = await Promise.all([
       Visitor.find(query)

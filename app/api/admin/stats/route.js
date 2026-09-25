@@ -3,32 +3,28 @@ import connectDB from "@/lib/mongodb";
 import Society from "@/models/Society";
 import Member from "@/models/Member";
 import Bill from "@/models/Bill";
-import jwt from "jsonwebtoken";
 import { getAdminModels } from "@/lib/admin-models";
+import { validateAdminRequest } from "@/lib/admin-middleware";
 import cache from "@/lib/cache";
+
+// GET /api/admin/stats — platform-wide counts for the superadmin dashboard.
+//
+// SEC-21: converged off a hand-rolled copy of the superadmin check onto the
+// shared `validateAdminRequest`, which every other superadmin route uses.
+//
+// Deliberately NOT converged onto authorize(): this route is cross-society by
+// design (it counts every society, member and bill on the platform), while
+// authorize() is the society-scoped RBAC gate and refuses a token with no
+// society context. Sharing the superadmin helper is the right convergence for
+// this family; forcing it into RBAC would be the wrong one.
+//
+// The inline version also read ADMIN_JWT_SECRET directly, which meant it could
+// not benefit from any hardening added to requireSuperAdmin — it had to be
+// remembered separately, and was not.
 export async function GET(request) {
+  const validation = validateAdminRequest(request);
+  if (!validation.valid) return validation;
   try {
-    // ✅ Simple JWT validation (no API key required)
-    let token = request.cookies.get("admin_token")?.value;
-    if (!token) {
-      const authHeader = request.headers.get("authorization");
-      if (authHeader?.startsWith("Bearer ")) token = authHeader.substring(7);
-    }
-    if (!token)
-      return NextResponse.json({ error: "No token provided" }, { status: 401 });
-    // Verify token
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.ADMIN_JWT_SECRET);
-    } catch (error) {
-      console.error("Token verification failed:", error.message);
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-    }
-    // Check if SuperAdmin
-    if (decoded.role !== "SuperAdmin") {
-      return NextResponse.json({ error: "Not authorized" }, { status: 403 });
-    }
-    // Fetch stats
     await connectDB();
     const { Export } = await getAdminModels();
     const cacheKey = `admin:stats:global`;

@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Btn, Card, Pill, Segmented, StatTile, Table, Icon } from "@/app/admin/commercial/_ui";
+import { useMounted } from "@/components/revamp";
 import notify from "@/lib/notify";
 
 // Admin custody of resident amenity cards: find a card, confirm who holds it,
@@ -42,6 +44,12 @@ function useReducedMotion() {
 
 export default function PageClient() {
   const reduced = useReducedMotion();
+  // The dialog/backdrop/toast below are position:fixed, rendered directly in
+  // the page. DashboardLayout.js wraps every page in .contentFrame, which
+  // sets backdrop-filter — a CSS containing block for fixed descendants — so
+  // without a portal these were fixed to that scrolled content box, not the
+  // real viewport. `mounted` keeps the portal call out of the SSR pass.
+  const mounted = useMounted();
   const [status, setStatus] = useState("ACTIVE");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -289,6 +297,7 @@ export default function PageClient() {
         ) : null}
       </Card>
 
+      {mounted && createPortal(
       <AnimatePresence>
         {target ? (
           <>
@@ -378,8 +387,11 @@ export default function PageClient() {
             </motion.div>
           </>
         ) : null}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+      )}
 
+      {mounted && createPortal(
       <AnimatePresence>
         {toast ? (
           <motion.div
@@ -404,7 +416,9 @@ export default function PageClient() {
             {toast}
           </motion.div>
         ) : null}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+      )}
     </div>
   );
 }

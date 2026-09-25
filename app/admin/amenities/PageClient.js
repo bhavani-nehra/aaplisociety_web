@@ -1,40 +1,69 @@
 "use client";
 import { useState, useEffect } from "react";
-import Link from "next/link";
-import styles from "@/styles/Amenities.module.css";
+import { useRouter } from "next/navigation";
+import {
+  PageHeader, Card, CardHead, Btn, Pill, Icon, SmallStat, Modal, RevampSkeleton, Toast,
+} from "@/components/revamp";
 
-const STATUS_PILL = {
-  OPEN: styles.pillOpen,
-  CLOSED: styles.pillClosed,
-  UNDER_MAINTENANCE: styles.pillMaint,
-  TEMPORARILY_CLOSED: styles.pillTemp,
-  PERMANENTLY_CLOSED: styles.pillPerm,
+const STATUS_TONE = {
+  OPEN: "paid",
+  CLOSED: "neutral",
+  UNDER_MAINTENANCE: "warning",
+  TEMPORARILY_CLOSED: "warning",
+  PERMANENTLY_CLOSED: "unpaid",
 };
+const SEVERITY_TONE = { LOW: "info", MEDIUM: "warning", HIGH: "unpaid", CRITICAL: "unpaid" };
+// Same set list/PageClient.js's "Change status" modal offers — UNDER_MAINTENANCE
+// is excluded there too: it is set by scheduling maintenance, never chosen directly.
+const SETTABLE_STATUSES = ["OPEN", "CLOSED", "TEMPORARILY_CLOSED", "PERMANENTLY_CLOSED"];
+const label = (s) => (s || "").replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase());
 
 function CapacityBar({ snapshot }) {
   if (!snapshot || snapshot.unlimited) {
-    return <span className={styles.capText}>Unlimited</span>;
+    return <span style={{ fontSize: 12, color: "var(--r-fg-4)" }}>Unlimited</span>;
   }
-  const pct = snapshot.usagePct || 0;
-  const cls = pct >= 100 ? styles.capFull : snapshot.level === "WARNING" ? styles.capWarn : styles.capOk;
+  const p = snapshot.usagePct || 0;
+  const color = p >= 100 ? "var(--r-danger)" : snapshot.level === "WARNING" ? "var(--r-warning)" : "var(--r-success)";
   return (
-    <div>
-      <div className={styles.capBar}>
-        <div className={`${styles.capFill} ${cls}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+    <div style={{ minWidth: 100 }}>
+      <div style={{ height: 5, background: "var(--r-surface-3)", borderRadius: 4, overflow: "hidden" }}>
+        <div style={{ width: "100%", height: "100%", background: color, borderRadius: 4, transform: `scaleX(${Math.min(p, 100) / 100})`, transformOrigin: "left", transition: "transform 0.3s" }} />
       </div>
-      <div className={styles.capText}>
-        {snapshot.current} / {snapshot.maxOccupancy} · {pct}%
+      <div style={{ fontSize: 11, color: "var(--r-fg-4)", marginTop: 3 }}>
+        {snapshot.current} / {snapshot.maxOccupancy} · {p}%
       </div>
     </div>
   );
 }
 
+function MiniList({ items, empty, renderRow }) {
+  if (!items.length) return <div style={{ padding: "24px 4px", fontSize: 12.5, color: "var(--r-fg-4)" }}>{empty}</div>;
+  return (
+    <div>
+      {items.map((it, i) => (
+        <div key={it._id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "9px 0", borderTop: i > 0 ? "1px solid var(--r-hairline)" : "none" }}>
+          {renderRow(it)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function AmenitiesOverviewPage() {
+  const router = useRouter();
   const [amenities, setAmenities] = useState([]);
   const [maintenance, setMaintenance] = useState([]);
   const [events, setEvents] = useState([]);
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [statusModal, setStatusModal] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg, type = "ok") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 5000);
+  };
 
   const load = async () => {
     setLoading(true);
@@ -70,152 +99,218 @@ export default function AmenitiesOverviewPage() {
     return () => clearInterval(t);
   }, []);
 
+  const changeStatus = async () => {
+    if (!statusModal) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/amenities/${statusModal.id}/status`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: statusModal.status,
+          note: statusModal.note?.trim() || undefined,
+          isEmergency: !!statusModal.isEmergency,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not change the status");
+      showToast(data.notified ? "Status changed — residents have been notified" : "Status changed");
+      setStatusModal(null);
+      load();
+    } catch (err) {
+      showToast(err.message, "err");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const occupied = amenities.filter((a) => (a.liveOccupancy || 0) > 0);
   const insideTotal = amenities.reduce((s, a) => s + (a.liveOccupancy || 0), 0);
   const closed = amenities.filter((a) => a.status !== "OPEN").length;
   const critical = incidents.filter((i) => ["HIGH", "CRITICAL"].includes(i.severity)).length;
 
-  if (loading && !amenities.length) {
-    return <div className={styles.page}><div className={styles.loading}>Loading amenities…</div></div>;
-  }
+  const cols = [
+    { key: "name", label: "Amenity", render: (a) => <span style={{ fontWeight: 600, color: "var(--r-fg-1)" }}>{a.name}</span> },
+    { key: "status", label: "Status", render: (a) => <Pill tone={STATUS_TONE[a.status] || "neutral"} dot={false}>{label(a.status)}</Pill> },
+    { key: "occupancy", label: "Occupancy", render: (a) => <CapacityBar snapshot={a.capacitySnapshot} /> },
+    {
+      key: "actions", label: "", render: (a) => (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <Btn size="sm" variant="secondary" icon="sliders-horizontal"
+            onClick={() => setStatusModal({ id: a._id, name: a.name, status: a.status, note: "", isEmergency: false })}>Status</Btn>
+          <Btn size="sm" variant="ghost" icon="wrench" onClick={() => router.push(`/admin/amenities/maintenance?amenityId=${a._id}&open=new`)}>Maintenance</Btn>
+          <Btn size="sm" variant="ghost" icon="alert-triangle" onClick={() => router.push(`/admin/amenities/incidents?amenityId=${a._id}&open=new`)}>Incident</Btn>
+          <Btn size="sm" variant="ghost" icon="users" onClick={() => router.push(`/admin/amenities/attendance?amenityId=${a._id}`)}>Attendance</Btn>
+        </div>
+      ),
+    },
+  ];
 
   return (
-    <div className={styles.page}>
-      <div className={styles.header}>
-        <div>
-          <h1 className={styles.title}>Amenities</h1>
-          <p className={styles.subtitle}>Live occupancy, today&apos;s maintenance and events, and open incidents</p>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <Link href="/admin/amenities/list" className={styles.btn}>All amenities</Link>
-          <Link href="/admin/amenities/categories" className={styles.btnPrimary + " " + styles.btn}>Categories</Link>
-        </div>
-      </div>
+    <div style={{ maxWidth: 1480, margin: "0 auto" }}>
+      <PageHeader
+        eyebrow={<><Icon name="building-2" size={11} /> Operations · Amenities</>}
+        title="Amenities"
+        sub="Live occupancy, today's maintenance and events, and open incidents."
+        right={
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn variant="secondary" icon="list" onClick={() => router.push("/admin/amenities/list")}>All amenities</Btn>
+            <Btn variant="primary" icon="tag" onClick={() => router.push("/admin/amenities/categories")}>Categories</Btn>
+          </div>
+        }
+      />
 
-      {!amenities.length && (
-        <div className={`${styles.banner} ${styles.bannerInfo}`}>
-          No amenities yet. Create a category first, then add amenities to it — categories are how residents
-          browse, so it is worth naming them the way your society already talks about these facilities.
-        </div>
-      )}
-
-      <div className={styles.statGrid}>
-        <div className={styles.stat}>
-          <p className={styles.statLabel}>Amenities</p>
-          <div className={styles.statValue}>{amenities.length}</div>
-          <div className={styles.statHint}>{closed} not open</div>
-        </div>
-        <div className={styles.stat}>
-          <p className={styles.statLabel}>People inside now</p>
-          <div className={styles.statValue}>{insideTotal}</div>
-          <div className={styles.statHint}>across {occupied.length} amenities</div>
-        </div>
-        <div className={styles.stat}>
-          <p className={styles.statLabel}>Under maintenance today</p>
-          <div className={styles.statValue}>{maintenance.length}</div>
-        </div>
-        <div className={styles.stat}>
-          <p className={styles.statLabel}>Open incidents</p>
-          <div className={styles.statValue}>{incidents.length}</div>
-          <div className={styles.statHint}>{critical} high or critical</div>
-        </div>
-      </div>
-
-      <div className={styles.grid2}>
-        <div className={styles.card}>
-          <h2 className={styles.cardTitle}>Live occupancy</h2>
-          {!occupied.length ? (
-            <p className={styles.emptyText}>Nobody is checked in right now.</p>
-          ) : (
-            <table className={styles.table}>
-              <tbody>
-                {occupied.map((a) => (
-                  <tr key={a._id}>
-                    <td><span className={styles.rowName}>{a.name}</span></td>
-                    <td style={{ width: 150 }}><CapacityBar snapshot={a.capacitySnapshot} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {loading && !amenities.length ? (
+        <RevampSkeleton h={400} />
+      ) : (
+        <>
+          {!amenities.length && (
+            <Card style={{ marginBottom: 16, background: "var(--r-brand-soft)", border: "none" }}>
+              <div style={{ display: "flex", gap: 10 }}>
+                <Icon name="info" size={16} color="var(--r-brand)" style={{ marginTop: 2 }} />
+                <span style={{ fontSize: 13, color: "var(--r-fg-2)" }}>
+                  No amenities yet. Create a category first, then add amenities to it — categories are how residents
+                  browse, so it is worth naming them the way your society already talks about these facilities.
+                </span>
+              </div>
+            </Card>
           )}
-        </div>
 
-        <div className={styles.card}>
-          <h2 className={styles.cardTitle}>Today&apos;s events</h2>
-          {!events.length ? (
-            <p className={styles.emptyText}>No events scheduled today or tomorrow.</p>
-          ) : (
-            <table className={styles.table}>
-              <tbody>
-                {events.map((e) => (
-                  <tr key={e._id}>
-                    <td>
-                      <div className={styles.rowName}>{e.title}</div>
-                      <div className={styles.rowSub}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 16 }}>
+            <SmallStat icon="building-2" label="Amenities" value={amenities.length} />
+            <SmallStat icon="users" label="People inside now" value={insideTotal} />
+            <SmallStat icon="wrench" label="Under maintenance today" value={maintenance.length} />
+            <SmallStat icon="alert-triangle" label="Open incidents" value={incidents.length} tone={critical ? "danger" : undefined} />
+          </div>
+
+          <Card style={{ marginBottom: 16 }} padded={false}>
+            <div style={{ padding: "14px 18px 4px" }}>
+              <CardHead title="Amenities" />
+            </div>
+            {!amenities.length ? (
+              <div style={{ padding: "24px 18px", fontSize: 13, color: "var(--r-fg-4)" }}>Nothing to show yet.</div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      {cols.map((c) => (
+                        <th key={c.key} style={{ textAlign: "left", padding: "8px 18px", fontSize: 11, fontWeight: 700, color: "var(--r-fg-4)", borderBottom: "1px solid var(--r-hairline)" }}>{c.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {amenities.map((a) => (
+                      <tr key={a._id}>
+                        {cols.map((c) => (
+                          <td key={c.key} style={{ padding: "10px 18px", borderTop: "1px solid var(--r-hairline)" }}>{c.render(a)}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
+            <Card>
+              <CardHead title="Today's events" />
+              <MiniList
+                items={events}
+                empty="No events scheduled today or tomorrow."
+                renderRow={(e) => (
+                  <>
+                    <div>
+                      <div style={{ fontWeight: 600, color: "var(--r-fg-1)", fontSize: 13 }}>{e.title}</div>
+                      <div style={{ fontSize: 11.5, color: "var(--r-fg-4)" }}>
                         {e.amenityName} · {new Date(e.startAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
                       </div>
-                    </td>
-                    <td style={{ textAlign: "right" }}>
-                      <span className={`${styles.pill} ${styles.pillInfo}`}>
-                        {e.registeredCount || 0}{e.capacity ? ` / ${e.capacity}` : ""}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+                    </div>
+                    <Pill tone="info" dot={false}>{e.registeredCount || 0}{e.capacity ? ` / ${e.capacity}` : ""}</Pill>
+                  </>
+                )}
+              />
+            </Card>
 
-        <div className={styles.card}>
-          <h2 className={styles.cardTitle}>Maintenance today</h2>
-          {!maintenance.length ? (
-            <p className={styles.emptyText}>Nothing under maintenance today.</p>
-          ) : (
-            <table className={styles.table}>
-              <tbody>
-                {maintenance.map((m) => (
-                  <tr key={m._id}>
-                    <td>
-                      <div className={styles.rowName}>{m.amenityName}</div>
-                      <div className={styles.rowSub}>{m.reason}</div>
-                    </td>
-                    <td style={{ textAlign: "right" }}>
-                      <span className={`${styles.pill} ${styles.pillMaint}`}>{m.status.replace("_", " ")}</span>
-                      {m.extensions?.length ? (
-                        <div className={styles.rowSub}>extended ×{m.extensions.length}</div>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+            <Card>
+              <CardHead title="Maintenance today" />
+              <MiniList
+                items={maintenance}
+                empty="Nothing under maintenance today."
+                renderRow={(m) => (
+                  <>
+                    <div>
+                      <div style={{ fontWeight: 600, color: "var(--r-fg-1)", fontSize: 13 }}>{m.amenityName}</div>
+                      <div style={{ fontSize: 11.5, color: "var(--r-fg-4)" }}>{m.reason}</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <Pill tone="warning" dot={false}>{m.status.replace("_", " ")}</Pill>
+                      {m.extensions?.length ? <div style={{ fontSize: 10.5, color: "var(--r-fg-4)", marginTop: 3 }}>extended ×{m.extensions.length}</div> : null}
+                    </div>
+                  </>
+                )}
+              />
+            </Card>
 
-        <div className={styles.card}>
-          <h2 className={styles.cardTitle}>Open incidents</h2>
-          {!incidents.length ? (
-            <p className={styles.emptyText}>No open incidents.</p>
-          ) : (
-            <table className={styles.table}>
-              <tbody>
-                {incidents.slice(0, 8).map((i) => (
-                  <tr key={i._id}>
-                    <td>
-                      <div className={styles.rowName}>{i.title}</div>
-                      <div className={styles.rowSub}>{i.amenityName} · {i.incidentType}</div>
-                    </td>
-                    <td style={{ textAlign: "right" }}>
-                      <span className={`${styles.pill} ${styles["sev" + i.severity]}`}>{i.severity}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
+            <Card>
+              <CardHead title="Open incidents" />
+              <MiniList
+                items={incidents.slice(0, 8)}
+                empty="No open incidents."
+                renderRow={(i) => (
+                  <>
+                    <div>
+                      <div style={{ fontWeight: 600, color: "var(--r-fg-1)", fontSize: 13 }}>{i.title}</div>
+                      <div style={{ fontSize: 11.5, color: "var(--r-fg-4)" }}>{i.amenityName} · {i.incidentType}</div>
+                    </div>
+                    <Pill tone={SEVERITY_TONE[i.severity] || "neutral"} dot={false}>{i.severity}</Pill>
+                  </>
+                )}
+              />
+            </Card>
+          </div>
+        </>
+      )}
+
+      <Modal open={Boolean(statusModal)} onClose={() => setStatusModal(null)} title={statusModal ? `Change status — ${statusModal.name}` : ""} width={480}>
+        {statusModal && (
+          <div style={{ display: "grid", gap: 14 }}>
+            <div style={{ padding: 12, borderRadius: 8, background: "var(--r-warning-soft)", fontSize: 12.5, color: "var(--r-warning)", display: "flex", gap: 8 }}>
+              <Icon name="alert-triangle" size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>Changing status notifies every resident. That is why it is a deliberate action here rather than an inline toggle.</span>
+            </div>
+            <div>
+              <div className="label" style={{ marginBottom: 4 }}>New status</div>
+              <select className="input" value={statusModal.status}
+                onChange={(e) => setStatusModal({ ...statusModal, status: e.target.value })}>
+                {SETTABLE_STATUSES.map((s) => <option key={s} value={s}>{label(s)}</option>)}
+              </select>
+              <div style={{ fontSize: 11.5, color: "var(--r-fg-4)", marginTop: 4 }}>
+                Under maintenance is set by scheduling maintenance, not chosen here.
+              </div>
+            </div>
+            <div>
+              <div className="label" style={{ marginBottom: 4 }}>Note for residents</div>
+              <textarea rows={3} className="input" value={statusModal.note}
+                onChange={(e) => setStatusModal({ ...statusModal, note: e.target.value })}
+                placeholder="Why, and when it is expected to reopen" />
+            </div>
+            <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, color: "var(--r-fg-2)" }}>
+              <input type="checkbox" checked={statusModal.isEmergency} style={{ marginTop: 2 }}
+                onChange={(e) => setStatusModal({ ...statusModal, isEmergency: e.target.checked })} />
+              Emergency — send at high priority, overriding notification preferences
+            </label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn variant="primary" onClick={changeStatus} disabled={saving}>{saving ? "Saving…" : "Change status"}</Btn>
+              <Btn variant="ghost" onClick={() => setStatusModal(null)}>Cancel</Btn>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

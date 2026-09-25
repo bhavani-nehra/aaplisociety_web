@@ -1,9 +1,20 @@
 "use client";
 import { useState, useEffect } from "react";
-import styles from "@/styles/Amenities.module.css";
 import notify from "@/lib/notify";
+import {
+  PageHeader, Card, Btn, Pill, Icon, EmptyState, RevampSkeleton, Modal, Toast,
+} from "@/components/revamp";
 
 const BLANK = { name: "", description: "", isActive: true };
+
+function Field({ label, children }) {
+  return (
+    <div>
+      <div className="label" style={{ marginBottom: 4 }}>{label}</div>
+      {children}
+    </div>
+  );
+}
 
 export default function AmenityCategoriesPage() {
   const [categories, setCategories] = useState([]);
@@ -21,9 +32,7 @@ export default function AmenityCategoriesPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/amenities/categories?includeInactive=true&withCounts=true", {
-        credentials: "include",
-      });
+      const res = await fetch("/api/amenities/categories?includeInactive=true&withCounts=true", { credentials: "include" });
       const data = await res.json();
       if (res.ok) setCategories(data.categories || []);
       else showToast(data.error || "Could not load categories", "err");
@@ -42,19 +51,12 @@ export default function AmenityCategoriesPage() {
     setSaving(true);
     try {
       const isEdit = modal.mode === "edit";
-      const res = await fetch(
-        isEdit ? `/api/amenities/categories/${modal.id}` : "/api/amenities/categories",
-        {
-          method: isEdit ? "PATCH" : "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: modal.name.trim(),
-            description: modal.description?.trim() || undefined,
-            isActive: modal.isActive,
-          }),
-        },
-      );
+      const res = await fetch(isEdit ? `/api/amenities/categories/${modal.id}` : "/api/amenities/categories", {
+        method: isEdit ? "PATCH" : "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: modal.name.trim(), description: modal.description?.trim() || undefined, isActive: modal.isActive }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Save failed");
       showToast(isEdit ? "Category updated" : "Category created");
@@ -86,10 +88,7 @@ export default function AmenityCategoriesPage() {
       },
       onCommit: async () => {
         try {
-          const res = await fetch(`/api/amenities/categories/${cat._id}`, {
-            method: "DELETE",
-            credentials: "include",
-          });
+          const res = await fetch(`/api/amenities/categories/${cat._id}`, { method: "DELETE", credentials: "include" });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || "Delete failed");
         } catch (err) {
@@ -125,9 +124,7 @@ export default function AmenityCategoriesPage() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          order: next.map((c, i) => ({ id: c._id, displayOrder: i })),
-        }),
+        body: JSON.stringify({ order: next.map((c, i) => ({ id: c._id, displayOrder: i })) }),
       });
       if (!res.ok) throw new Error("Could not save the new order");
     } catch (err) {
@@ -137,41 +134,29 @@ export default function AmenityCategoriesPage() {
   };
 
   return (
-    <div className={styles.page}>
-      <div className={styles.header}>
-        <div>
-          <h1 className={styles.title}>Amenity categories</h1>
-          <p className={styles.subtitle}>
-            Drag to reorder — residents see amenities grouped in this order
-          </p>
-        </div>
-        <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => setModal({ mode: "create", ...BLANK })}>
-          + New category
-        </button>
-      </div>
+    <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+      <PageHeader
+        eyebrow={<><Icon name="tag" size={11} /> Operations · Categories</>}
+        title="Amenity categories"
+        sub="Drag to reorder — residents see amenities grouped in this order."
+        right={<Btn variant="primary" icon="plus" onClick={() => setModal({ mode: "create", ...BLANK })}>New category</Btn>}
+      />
 
       {loading ? (
-        <div className={styles.loading}>Loading…</div>
+        <RevampSkeleton h={300} />
       ) : !categories.length ? (
-        <div className={styles.tableWrap}>
-          <div className={styles.empty}>
-            <p className={styles.emptyTitle}>No categories yet</p>
-            <p className={styles.emptyText}>
-              Categories are entirely yours to define — Sports, Wellness, Community, or whatever your
-              society actually calls these facilities. Create one to start adding amenities.
-            </p>
-          </div>
-        </div>
+        <Card>
+          <EmptyState icon="tag" title="No categories yet"
+            sub="Categories are entirely yours to define — Sports, Wellness, Community, or whatever your society actually calls these facilities. Create one to start adding amenities." />
+        </Card>
       ) : (
-        <div className={styles.tableWrap}>
-          <table className={styles.table}>
+        <Card padded={false} style={{ overflow: "hidden" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr>
-                <th style={{ width: 34 }}></th>
-                <th>Category</th>
-                <th style={{ width: 110 }}>Amenities</th>
-                <th style={{ width: 100 }}>Status</th>
-                <th style={{ width: 150 }}></th>
+                {["", "Category", "Amenities", "Status", ""].map((h) => (
+                  <th key={h} style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 700, color: "var(--r-fg-4)", borderBottom: "1px solid var(--r-hairline)" }}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -182,97 +167,53 @@ export default function AmenityCategoriesPage() {
                   onDragStart={() => setDragId(c._id)}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={() => onDrop(c._id)}
-                  className={`${styles.dragRow} ${dragId === c._id ? styles.dragging : ""}`}
+                  style={{ borderTop: "1px solid var(--r-hairline)", background: dragId === c._id ? "var(--r-surface-2)" : "transparent", opacity: dragId === c._id ? 0.6 : 1 }}
                 >
-                  <td style={{ color: "var(--border-strong)", cursor: "grab" }}>⠇</td>
-                  <td>
-                    <div className={styles.rowName}>{c.name}</div>
-                    {c.description ? <div className={styles.rowSub}>{c.description}</div> : null}
+                  <td style={{ padding: "10px 14px", color: "var(--r-fg-5)", cursor: "grab" }}><Icon name="grip-vertical" size={14} /></td>
+                  <td style={{ padding: "10px 14px" }}>
+                    <div style={{ fontWeight: 600, color: "var(--r-fg-1)" }}>{c.name}</div>
+                    {c.description ? <div style={{ fontSize: 11.5, color: "var(--r-fg-4)" }}>{c.description}</div> : null}
                   </td>
-                  <td>{c.amenityCount || 0}</td>
-                  <td>
-                    <span className={`${styles.pill} ${c.isActive ? styles.pillOpen : styles.pillMuted}`}>
-                      {c.isActive ? "Active" : "Inactive"}
-                    </span>
+                  <td style={{ padding: "10px 14px", color: "var(--r-fg-3)" }}>{c.amenityCount || 0}</td>
+                  <td style={{ padding: "10px 14px" }}>
+                    <Pill tone={c.isActive ? "paid" : "neutral"} dot={false}>{c.isActive ? "Active" : "Inactive"}</Pill>
                   </td>
-                  <td>
-                    <div className={styles.actions}>
-                      <button
-                        className={`${styles.btn} ${styles.btnSm}`}
-                        onClick={() => setModal({
-                          mode: "edit", id: c._id, name: c.name,
-                          description: c.description || "", isActive: c.isActive,
-                        })}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className={`${styles.btn} ${styles.btnSm} ${styles.btnDanger}`}
-                        onClick={() => remove(c)}
-                      >
-                        Delete
-                      </button>
+                  <td style={{ padding: "10px 14px" }}>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <Btn size="sm" variant="secondary" icon="pencil"
+                        onClick={() => setModal({ mode: "edit", id: c._id, name: c.name, description: c.description || "", isActive: c.isActive })}>Edit</Btn>
+                      <Btn size="sm" variant="danger" icon="trash-2" onClick={() => remove(c)}>Delete</Btn>
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </Card>
       )}
 
-      {modal && (
-        <div className={styles.overlay} onClick={() => setModal(null)}>
-          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.modalHead}>
-              <h2 className={styles.modalTitle}>
-                {modal.mode === "edit" ? "Edit category" : "New category"}
-              </h2>
-            </div>
-            <div className={styles.modalBody}>
-              <div className={styles.field}>
-                <label className={styles.label}>Name</label>
-                <input
-                  className={styles.input}
-                  value={modal.name}
-                  autoFocus
-                  onChange={(e) => setModal({ ...modal, name: e.target.value })}
-                  placeholder="Sports"
-                />
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Description</label>
-                <textarea
-                  className={styles.textarea}
-                  value={modal.description}
-                  onChange={(e) => setModal({ ...modal, description: e.target.value })}
-                  placeholder="Optional — shown to residents above the amenity list"
-                />
-              </div>
-              <label className={styles.checkRow}>
-                <input
-                  type="checkbox"
-                  checked={modal.isActive}
-                  onChange={(e) => setModal({ ...modal, isActive: e.target.checked })}
-                />
-                Active — visible to residents
-              </label>
-            </div>
-            <div className={styles.modalFoot}>
-              <button className={styles.btn} onClick={() => setModal(null)}>Cancel</button>
-              <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={save} disabled={saving}>
-                {saving ? "Saving…" : "Save"}
-              </button>
+      <Modal open={Boolean(modal)} onClose={() => setModal(null)} title={modal?.mode === "edit" ? "Edit category" : "New category"} width={480}>
+        {modal && (
+          <div style={{ display: "grid", gap: 14 }}>
+            <Field label="Name">
+              <input className="input" autoFocus value={modal.name} onChange={(e) => setModal({ ...modal, name: e.target.value })} placeholder="Sports" />
+            </Field>
+            <Field label="Description">
+              <textarea rows={3} className="input" value={modal.description} onChange={(e) => setModal({ ...modal, description: e.target.value })} placeholder="Optional — shown to residents above the amenity list" />
+            </Field>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: "var(--r-fg-2)" }}>
+              <input type="checkbox" checked={modal.isActive} onChange={(e) => setModal({ ...modal, isActive: e.target.checked })} />
+              Active — visible to residents
+            </label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn variant="primary" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save"}</Btn>
+              <Btn variant="ghost" onClick={() => setModal(null)}>Cancel</Btn>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
-      {toast && (
-        <div className={`${styles.toast} ${toast.type === "err" ? styles.toastErr : styles.toastOk}`}>
-          {toast.msg}
-        </div>
-      )}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

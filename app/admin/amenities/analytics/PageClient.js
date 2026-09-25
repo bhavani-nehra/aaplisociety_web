@@ -1,6 +1,9 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import styles from "@/styles/Amenities.module.css";
+import {
+  PageHeader, Card, CardHead, Btn, Icon, Select, Segmented, DataTable,
+  RevampSkeleton, EmptyState, Toast,
+} from "@/components/revamp";
 
 const iso = (d) => d.toISOString().slice(0, 10);
 const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -23,13 +26,42 @@ const dur = (m) => {
 function BarRow({ label, value, max, suffix }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;
   return (
-    <div className={styles.barRow}>
-      <div className={styles.barLabel} title={label}>{label}</div>
-      <div className={styles.barTrack}>
-        <div className={styles.barFill} style={{ width: `${Math.max(pct, 1)}%` }} />
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0" }}>
+      <div style={{ width: 120, flexShrink: 0, fontSize: 12.5, color: "var(--r-fg-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={label}>
+        {label}
       </div>
-      <div className={styles.barValue}>{value}{suffix || ""}</div>
+      <div style={{ flex: 1, height: 8, background: "var(--r-surface-3)", borderRadius: 999, overflow: "hidden" }}>
+        <div style={{
+          height: "100%", width: "100%", background: "var(--r-brand)",
+          borderRadius: 999, transform: `scaleX(${Math.max(pct, 1) / 100})`, transformOrigin: "left",
+          transition: "transform 0.4s cubic-bezier(.16,1,.3,1)",
+        }} />
+      </div>
+      <div style={{ width: 44, flexShrink: 0, textAlign: "right", fontSize: 12.5, fontWeight: 600, color: "var(--r-fg-1)" }}>
+        {value}{suffix || ""}
+      </div>
     </div>
+  );
+}
+
+/** Download-styled anchor — needs a real href+download, which Btn (a <button>)
+ *  can't carry, so it borrows Btn's secondary visual instead of adding a new
+ *  href-capable variant to the shared kit for one call site. */
+function DownloadLink({ href, children }) {
+  return (
+    <a
+      href={href}
+      download
+      style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+        padding: "7px 12px", fontSize: 13, fontWeight: 500, height: 32, borderRadius: 8,
+        fontFamily: "inherit", whiteSpace: "nowrap", lineHeight: 1, textDecoration: "none",
+        background: "var(--r-surface)", color: "var(--r-fg-2)", border: "1px solid var(--r-border)",
+      }}
+    >
+      <Icon name="download" size={14} />
+      {children}
+    </a>
   );
 }
 
@@ -115,125 +147,116 @@ export default function AnalyticsPage() {
   const series = data?.series || [];
   const maxSeries = Math.max(1, ...series.map((s) => s.checkIns || 0));
 
-  return (
-    <div className={styles.page}>
-      <div className={styles.header}>
-        <div>
-          <h1 className={styles.title}>Usage analytics</h1>
-          <p className={styles.subtitle}>{range.from} to {range.to}</p>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className={styles.btn} onClick={recompute} disabled={recomputing}
-            title="Rebuild the rollup for this range from raw attendance — use this if numbers look stale or missing">
-            {recomputing ? "Recomputing…" : "Recompute"}
-          </button>
-          <a className={styles.btn} href={exportUrl()} download>Export CSV</a>
-          <button className={styles.btn} onClick={() => window.print()}>Print / PDF</button>
-        </div>
-      </div>
+  const stats = [
+    { icon: "door-open", label: "Check-ins", value: totals.checkIns || 0, hint: `${totals.residentCheckIns || 0} resident · ${totals.visitorCheckIns || 0} visitor` },
+    { icon: "users", label: "Unique residents", value: totals.uniqueMembers || 0, hint: "distinct people, not visits" },
+    { icon: "hourglass", label: "Average visit", value: totals.avgDurationMins ? `${Math.round(totals.avgDurationMins)}m` : "—", hint: "closed sessions only" },
+    { icon: "gauge", label: "Capacity used", value: totals.capacityUtilisationPct != null ? `${Math.round(totals.capacityUtilisationPct)}%` : "—", hint: "peak occupancy against the cap" },
+    { icon: "wrench", label: "Downtime", value: dur(totals.maintenanceDowntimeMins || 0), hint: "actual, not scheduled" },
+    { icon: "qr-code", label: "QR share", value: totals.checkIns ? `${Math.round(((totals.qrCheckIns || 0) / totals.checkIns) * 100)}%` : "—", hint: `${totals.manualCheckIns || 0} manual · ${totals.overrideCheckIns || 0} override` },
+    { icon: "calendar", label: "Events held", value: totals.eventsHeld || 0, hint: `${totals.eventAttendance || 0} attendances` },
+    { icon: "alert-triangle", label: "Incidents", value: totals.incidentsReported || 0, hint: "reported in this range" },
+  ];
 
-      <div className={styles.toolbar}>
-        {PRESETS.map(([key, text, days]) => (
-          <button key={key} className={`${styles.tab} ${preset === key ? styles.tabActive : ""}`}
-            onClick={() => applyPreset(key, days)}>
-            {text}
-          </button>
-        ))}
-        <input className={styles.input} type="date" value={range.from}
-          onChange={(e) => { setPreset(""); setRange({ ...range, from: e.target.value }); }} />
-        <span className={styles.hint}>to</span>
-        <input className={styles.input} type="date" value={range.to}
-          onChange={(e) => { setPreset(""); setRange({ ...range, to: e.target.value }); }} />
-        <select className={styles.select} value={amenityId} onChange={(e) => setAmenityId(e.target.value)}>
-          <option value="all">All amenities</option>
-          {amenities.map((a) => <option key={a._id} value={a._id}>{a.name}</option>)}
-        </select>
-        <select className={styles.select} value={granularity} onChange={(e) => setGranularity(e.target.value)}>
-          {GRANULARITIES.map((g) => (
-            <option key={g} value={g}>{g.charAt(0).toUpperCase() + g.slice(1)}</option>
-          ))}
-        </select>
-      </div>
+  const perAmenityCols = [
+    { key: "name", label: "Amenity", render: (a) => <span style={{ fontWeight: 600, color: "var(--r-fg-1)" }}>{a.amenityName}</span> },
+    { key: "checkIns", label: "Check-ins", width: 100, render: (a) => a.checkIns || 0 },
+    { key: "unique", label: "Unique", width: 100, render: (a) => a.uniqueMembers || 0 },
+    { key: "avg", label: "Avg visit", width: 110, render: (a) => (a.avgDurationMins ? `${Math.round(a.avgDurationMins)}m` : "—") },
+    { key: "peak", label: "Peak occ.", width: 110, render: (a) => a.peakOccupancy || 0 },
+    { key: "downtime", label: "Downtime", width: 110, render: (a) => dur(a.maintenanceDowntimeMins || 0) },
+    { key: "incidents", label: "Incidents", width: 100, render: (a) => a.incidentsReported || 0 },
+  ];
+
+  return (
+    <div style={{ maxWidth: 1480, margin: "0 auto" }}>
+      <PageHeader
+        eyebrow={<><Icon name="bar-chart-3" size={11} /> Operations · Analytics</>}
+        title="Usage analytics"
+        sub={`${range.from} to ${range.to}`}
+        right={
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn
+              variant="secondary" icon="refresh-cw" disabled={recomputing} onClick={recompute}
+              title="Rebuild the rollup for this range from raw attendance — use this if numbers look stale or missing"
+            >
+              {recomputing ? "Recomputing…" : "Recompute"}
+            </Btn>
+            <DownloadLink href={exportUrl()}>Export CSV</DownloadLink>
+            <Btn variant="secondary" icon="printer" onClick={() => window.print()}>Print / PDF</Btn>
+          </div>
+        }
+      />
+
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <Segmented
+            value={preset}
+            onChange={(key) => {
+              const found = PRESETS.find((p) => p[0] === key);
+              if (found) applyPreset(found[0], found[2]);
+            }}
+            options={PRESETS.map(([key, text]) => ({ value: key, label: text }))}
+          />
+          <input className="input" style={{ width: "auto" }} type="date" value={range.from}
+            onChange={(e) => { setPreset(""); setRange({ ...range, from: e.target.value }); }} />
+          <span style={{ fontSize: 12, color: "var(--r-fg-4)" }}>to</span>
+          <input className="input" style={{ width: "auto" }} type="date" value={range.to}
+            onChange={(e) => { setPreset(""); setRange({ ...range, to: e.target.value }); }} />
+          <Select value={amenityId} size="md" onChange={setAmenityId}>
+            <option value="all">All amenities</option>
+            {amenities.map((a) => <option key={a._id} value={a._id}>{a.name}</option>)}
+          </Select>
+          <Select value={granularity} size="md" onChange={setGranularity}>
+            {GRANULARITIES.map((g) => (
+              <option key={g} value={g}>{g.charAt(0).toUpperCase() + g.slice(1)}</option>
+            ))}
+          </Select>
+        </div>
+      </Card>
 
       {loading ? (
-        <div className={styles.loading}>Crunching numbers…</div>
+        <RevampSkeleton h={400} />
       ) : !data ? (
-        <div className={styles.empty}>
-          <p className={styles.emptyTitle}>No data</p>
-          <p className={styles.emptyText}>Analytics appear once residents start checking in.</p>
-        </div>
+        <Card>
+          <EmptyState icon="bar-chart-3" title="No data" sub="Analytics appear once residents start checking in." />
+        </Card>
       ) : (
         <>
-          <div className={styles.statGrid}>
-            <div className={styles.stat}>
-              <div className={styles.statLabel}>Check-ins</div>
-              <div className={styles.statValue}>{totals.checkIns || 0}</div>
-              <div className={styles.statHint}>
-                {totals.residentCheckIns || 0} resident · {totals.visitorCheckIns || 0} visitor
-              </div>
-            </div>
-            <div className={styles.stat}>
-              <div className={styles.statLabel}>Unique residents</div>
-              <div className={styles.statValue}>{totals.uniqueMembers || 0}</div>
-              <div className={styles.statHint}>distinct people, not visits</div>
-            </div>
-            <div className={styles.stat}>
-              <div className={styles.statLabel}>Average visit</div>
-              <div className={styles.statValue}>{totals.avgDurationMins ? `${Math.round(totals.avgDurationMins)}m` : "—"}</div>
-              <div className={styles.statHint}>closed sessions only</div>
-            </div>
-            <div className={styles.stat}>
-              <div className={styles.statLabel}>Capacity used</div>
-              <div className={styles.statValue}>
-                {totals.capacityUtilisationPct != null ? `${Math.round(totals.capacityUtilisationPct)}%` : "—"}
-              </div>
-              <div className={styles.statHint}>peak occupancy against the cap</div>
-            </div>
-            <div className={styles.stat}>
-              <div className={styles.statLabel}>Downtime</div>
-              <div className={styles.statValue}>{dur(totals.maintenanceDowntimeMins || 0)}</div>
-              <div className={styles.statHint}>actual, not scheduled</div>
-            </div>
-            <div className={styles.stat}>
-              <div className={styles.statLabel}>QR share</div>
-              <div className={styles.statValue}>
-                {totals.checkIns ? `${Math.round(((totals.qrCheckIns || 0) / totals.checkIns) * 100)}%` : "—"}
-              </div>
-              <div className={styles.statHint}>
-                {totals.manualCheckIns || 0} manual · {totals.overrideCheckIns || 0} override
-              </div>
-            </div>
-            <div className={styles.stat}>
-              <div className={styles.statLabel}>Events held</div>
-              <div className={styles.statValue}>{totals.eventsHeld || 0}</div>
-              <div className={styles.statHint}>{totals.eventAttendance || 0} attendances</div>
-            </div>
-            <div className={styles.stat}>
-              <div className={styles.statLabel}>Incidents</div>
-              <div className={styles.statValue}>{totals.incidentsReported || 0}</div>
-              <div className={styles.statHint}>reported in this range</div>
-            </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 16 }}>
+            {stats.map((s) => (
+              <Card key={s.label} style={{ padding: 14 }}>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 11, color: "var(--r-fg-4)", fontWeight: 500, marginBottom: 6 }}>
+                  <Icon name={s.icon} size={12} /> {s.label}
+                </div>
+                <div className="revamp-num" style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--r-fg-1)" }}>{s.value}</div>
+                <div style={{ fontSize: 11, color: "var(--r-fg-4)", marginTop: 4 }}>{s.hint}</div>
+              </Card>
+            ))}
           </div>
 
-          <div className={styles.card}>
-            <h2 className={styles.cardTitle}>Peak hours</h2>
+          <Card style={{ marginBottom: 14 }}>
+            <CardHead title="Peak hours" />
             {!hourlyCounts.length ? (
-              <p className={styles.emptyText}>No check-ins in this range.</p>
+              <EmptyState icon="clock" title="No check-ins in this range" />
             ) : (
               <>
-                <div className={styles.heat}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(24, 1fr)", gap: 3 }}>
                   {hourlyCounts.map((count, h) => {
                     const intensity = count / maxHour;
                     return (
                       <div
                         key={h}
-                        className={styles.heatCell}
                         title={`${hourLabel(h)} — ${count} check-ins`}
                         style={{
+                          height: 30, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 10, fontWeight: 600,
+                          // Single-hue sequential shading off the brand token (not a new
+                          // categorical palette — see Run 19/20/22 precedent on those).
                           background: count === 0
-                            ? "var(--bg-muted)"
-                            : `rgba(37, 99, 235, ${0.15 + intensity * 0.8})`,
-                          color: intensity > 0.55 ? "var(--bg-surface)" : "var(--fg-3)",
+                            ? "var(--r-surface-3)"
+                            : `color-mix(in srgb, var(--r-brand) ${Math.round(15 + intensity * 80)}%, var(--r-surface-3))`,
+                          color: intensity > 0.55 ? "var(--r-brand-ink)" : "var(--r-fg-3)",
                         }}
                       >
                         {count || ""}
@@ -241,64 +264,62 @@ export default function AnalyticsPage() {
                     );
                   })}
                 </div>
-                <div className={styles.heatLabels}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(24, 1fr)", gap: 3, marginTop: 4 }}>
                   {hourlyCounts.map((_, h) => (
-                    <div key={h} className={styles.heatLabel}>{h % 3 === 0 ? hourLabel(h) : ""}</div>
+                    <div key={h} style={{ fontSize: 9, color: "var(--r-fg-5)", textAlign: "center" }}>{h % 3 === 0 ? hourLabel(h) : ""}</div>
                   ))}
                 </div>
                 {data.peakHours?.length ? (
-                  <p className={styles.hint} style={{ marginTop: 12 }}>
+                  <p style={{ fontSize: 12, color: "var(--r-fg-4)", marginTop: 12 }}>
                     Busiest: {data.peakHours.slice(0, 3).map((p) => `${hourLabel(p.hour)} (${p.checkIns})`).join(", ")}.
                     Worth aligning cleaning and maintenance windows away from these.
                   </p>
                 ) : null}
               </>
             )}
-          </div>
+          </Card>
 
-          <div className={styles.grid2}>
-            <div className={styles.card}>
-              <h2 className={styles.cardTitle}>Most used</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 14, marginBottom: 14 }}>
+            <Card>
+              <CardHead title="Most used" />
               {!mostUsed.length ? (
-                <p className={styles.emptyText}>Nothing recorded yet.</p>
+                <EmptyState icon="bar-chart-3" title="Nothing recorded yet" />
               ) : mostUsed.map((a) => (
                 <BarRow key={a.amenityId} label={a.amenityName} value={a.checkIns || 0} max={maxUsed} />
               ))}
-            </div>
+            </Card>
 
-            <div className={styles.card}>
-              <h2 className={styles.cardTitle}>Least used</h2>
+            <Card>
+              <CardHead title="Least used" />
               {!leastUsed.length ? (
-                <p className={styles.emptyText}>Nothing recorded yet.</p>
+                <EmptyState icon="bar-chart-3" title="Nothing recorded yet" />
               ) : (
                 <>
                   {leastUsed.map((a) => (
                     <BarRow key={a.amenityId} label={a.amenityName} value={a.checkIns || 0} max={maxUsed} />
                   ))}
-                  <p className={styles.hint} style={{ marginTop: 12 }}>
+                  <p style={{ fontSize: 12, color: "var(--r-fg-4)", marginTop: 12 }}>
                     An amenity at zero is not automatically waste — check whether it was closed or under
                     maintenance for much of this range before drawing a conclusion.
                   </p>
                 </>
               )}
-            </div>
+            </Card>
 
-            <div className={styles.card}>
-              <h2 className={styles.cardTitle}>Peak days</h2>
+            <Card>
+              <CardHead title="Peak days" />
               {!peakDays.length ? (
-                <p className={styles.emptyText}>No data.</p>
+                <EmptyState icon="calendar" title="No data" />
               ) : peakDays.map((d) => (
                 <BarRow key={d.dayOfWeek} label={DAY_SHORT[d.dayOfWeek] || String(d.dayOfWeek)}
                   value={d.checkIns || 0} max={maxDay} />
               ))}
-            </div>
+            </Card>
 
-            <div className={styles.card}>
-              <h2 className={styles.cardTitle}>
-                Trend · {granularity}
-              </h2>
+            <Card>
+              <CardHead title={`Trend · ${granularity}`} />
               {!series.length ? (
-                <p className={styles.emptyText}>No data.</p>
+                <EmptyState icon="trending-up" title="No data" />
               ) : (
                 <div style={{ maxHeight: 320, overflowY: "auto" }}>
                   {series.map((s) => (
@@ -306,38 +327,16 @@ export default function AnalyticsPage() {
                   ))}
                 </div>
               )}
-            </div>
+            </Card>
           </div>
 
           {data.perAmenity?.length ? (
-            <div className={styles.tableWrap}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>Amenity</th><th style={{ width: 100 }}>Check-ins</th>
-                    <th style={{ width: 100 }}>Unique</th><th style={{ width: 110 }}>Avg visit</th>
-                    <th style={{ width: 110 }}>Peak occ.</th><th style={{ width: 110 }}>Downtime</th>
-                    <th style={{ width: 100 }}>Incidents</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.perAmenity.map((a) => (
-                    <tr key={a.amenityId}>
-                      <td><span className={styles.rowName}>{a.amenityName}</span></td>
-                      <td>{a.checkIns || 0}</td>
-                      <td>{a.uniqueMembers || 0}</td>
-                      <td>{a.avgDurationMins ? `${Math.round(a.avgDurationMins)}m` : "—"}</td>
-                      <td>{a.peakOccupancy || 0}</td>
-                      <td>{dur(a.maintenanceDowntimeMins || 0)}</td>
-                      <td>{a.incidentsReported || 0}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div style={{ marginBottom: 14 }}>
+              <DataTable cols={perAmenityCols} rows={data.perAmenity} rowKey="amenityId" />
             </div>
           ) : null}
 
-          <p className={styles.hint}>
+          <p style={{ fontSize: 12, color: "var(--r-fg-4)" }}>
             Daily figures are bucketed in the society timezone and rolled up nightly. A day still in
             progress is incomplete by definition. Export is CSV rather than native .xlsx — Excel opens it
             directly, and it avoids adding a spreadsheet-writing dependency to the server.
@@ -345,9 +344,7 @@ export default function AnalyticsPage() {
         </>
       )}
 
-      {toast && (
-        <div className={`${styles.toast} ${toast.type === "err" ? styles.toastErr : styles.toastOk}`}>{toast.msg}</div>
-      )}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

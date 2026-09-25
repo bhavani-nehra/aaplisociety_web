@@ -1,22 +1,37 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Fragment } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import QRCode from "qrcode";
-import styles from "@/styles/Amenities.module.css";
 import notify from "@/lib/notify";
+import {
+  PageHeader, Card, CardHead, Btn, Pill, Icon, Tabs, Segmented, DataTable,
+  RevampSkeleton, EmptyState, Modal, Toast,
+} from "@/components/revamp";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const TABS = [
-  "Basics", "Availability", "Access", "Capacity", "Slots",
-  "Rules", "Visitors", "Attendance & QR", "Maintenance",
+  ["Basics", "info"], ["Availability", "clock"], ["Access", "lock"], ["Capacity", "users"],
+  ["Slots", "grid-3x3"], ["Rules", "file-text"], ["Visitors", "user-plus"],
+  ["Attendance & QR", "qr-code"], ["Maintenance", "wrench"],
 ];
 const AUDIENCES = ["EVERYONE", "OWNERS", "TENANTS", "STAFF", "COMMITTEE", "CUSTOM"];
 const MODES = ["NONE", "MANUAL", "QR", "QR_MANUAL"];
 const RULE_KINDS = [
   ["RULE", "Rules"], ["DO", "Do"], ["DONT", "Don't"], ["INSTRUCTION", "Instructions"],
 ];
+const MAINT_STATUS_TONE = { SCHEDULED: "info", IN_PROGRESS: "warning", COMPLETED: "paid", CANCELLED: "neutral" };
 const label = (s) => (s || "").replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase());
+
+function Field({ label: l, hint, children }) {
+  return (
+    <div>
+      <div className="label" style={{ marginBottom: 4 }}>{l}</div>
+      {children}
+      {hint ? <div style={{ fontSize: 11.5, color: "var(--r-fg-4)", marginTop: 4, lineHeight: 1.5 }}>{hint}</div> : null}
+    </div>
+  );
+}
 
 export default function AmenityDetailPage() {
   const { id } = useParams();
@@ -379,14 +394,25 @@ export default function AmenityDetailPage() {
     }
   };
 
-  if (loading) return <div className={styles.page}><div className={styles.loading}>Loading…</div></div>;
+  if (loading) {
+    return (
+      <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+        <RevampSkeleton h={420} />
+      </div>
+    );
+  }
+
   if (!amenity) {
     return (
-      <div className={styles.page}>
-        <div className={styles.empty}>
-          <p className={styles.emptyTitle}>Amenity not found</p>
-          <Link href="/admin/amenities/list" className={styles.btn}>Back to all amenities</Link>
-        </div>
+      <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+        <Card>
+          <EmptyState icon="search-x" title="Amenity not found" sub="It may have been removed." />
+          <div style={{ textAlign: "center", paddingBottom: 20 }}>
+            <Link href="/admin/amenities/list">
+              <Btn variant="secondary" icon="arrow-left">Back to all amenities</Btn>
+            </Link>
+          </div>
+        </Card>
       </div>
     );
   }
@@ -395,102 +421,109 @@ export default function AmenityDetailPage() {
   const weekly = availability.filter((r) => r.type === "WEEKLY");
 
   return (
-    <div className={styles.page}>
-      <div className={styles.breadcrumb}>
-        <Link href="/admin/amenities">Amenities</Link> / <Link href="/admin/amenities/list">All amenities</Link> / {amenity.name}
+    <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--r-fg-4)", marginBottom: 10 }}>
+        <Link href="/admin/amenities" style={{ color: "inherit" }}>Amenities</Link>
+        <Icon name="chevron-right" size={12} />
+        <Link href="/admin/amenities/list" style={{ color: "inherit" }}>All amenities</Link>
+        <Icon name="chevron-right" size={12} />
+        <span style={{ color: "var(--r-fg-2)", fontWeight: 500 }}>{amenity.name}</span>
       </div>
 
-      <div className={styles.detailHead}>
-        <div>
-          <h1 className={styles.title}>{amenity.name}</h1>
-          <p className={styles.subtitle}>
-            {amenity.categoryName}{amenity.location ? ` · ${amenity.location}` : ""}
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span
-            className={`${styles.pill} ${amenity.status === "OPEN" ? styles.pillOpen : styles.pillClosed}`}
-            title="Manual status — set via the Status action, overrides the weekly schedule below"
-          >
-            {label(amenity.status)} (manual)
-          </span>
-          {eff && (
-            <span
-              className={`${styles.pill} ${eff.state === "OPEN" ? styles.pillOpen : styles.pillClosed}`}
-              title="Live status — computed right now from the weekly hours and any closures"
+      <PageHeader
+        eyebrow={<><Icon name="building-2" size={11} /> Operations · Amenities</>}
+        title={amenity.name}
+        sub={`${amenity.categoryName}${amenity.location ? ` · ${amenity.location}` : ""}`}
+        right={
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <Pill
+              tone={amenity.status === "OPEN" ? "paid" : "neutral"} dot={false}
+              style={{ cursor: "default" }}
+              title="Manual status — set via the Status action, overrides the weekly schedule below"
             >
-              {eff.label} (live)
-            </span>
-          )}
-          {amenity.liveOccupancy > 0 && (
-            <span className={`${styles.pill} ${styles.pillInfo}`}>{amenity.liveOccupancy} inside</span>
-          )}
-        </div>
-      </div>
+              {label(amenity.status)} (manual)
+            </Pill>
+            {eff && (
+              <Pill
+                tone={eff.state === "OPEN" ? "paid" : "unpaid"} dot={false}
+                style={{ cursor: "default" }}
+                title="Live status — computed right now from the weekly hours and any closures"
+              >
+                {eff.label} (live)
+              </Pill>
+            )}
+            {amenity.liveOccupancy > 0 && (
+              <Pill tone="info" dot={false}>{amenity.liveOccupancy} inside</Pill>
+            )}
+            <Link href="/admin/amenities/list">
+              <Btn variant="secondary" size="sm" icon="arrow-left">All amenities</Btn>
+            </Link>
+          </div>
+        }
+      />
 
       {eff && eff.state !== "OPEN" && (
-        <div className={`${styles.banner} ${styles.bannerWarn}`}>
-          <strong>{eff.label}</strong>
-          {eff.reason ? ` — ${eff.reason}` : ""}
-          {eff.nextOpenAt
-            ? ` Reopens ${new Date(eff.nextOpenAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}.`
-            : ""}
+        <div style={{
+          display: "flex", gap: 10, padding: 12, borderRadius: 10, marginBottom: 16,
+          background: "var(--r-warning-soft)", color: "var(--r-warning)", fontSize: 13,
+        }}>
+          <Icon name="alert-triangle" size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>
+            <strong>{eff.label}</strong>
+            {eff.reason ? ` — ${eff.reason}` : ""}
+            {eff.nextOpenAt
+              ? ` Reopens ${new Date(eff.nextOpenAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}.`
+              : ""}
+          </span>
         </div>
       )}
 
-      <div className={styles.tabs}>
-        {TABS.map((t) => (
-          <button key={t} className={`${styles.tab} ${tab === t ? styles.tabActive : ""}`} onClick={() => setTab(t)}>
-            {t}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        tabs={TABS.map(([t, icon]) => ({ key: t, label: t, icon }))}
+        style={{ flexWrap: "wrap" }}
+      />
 
       {/* ------------------------------------------------------------ Basics */}
       {tab === "Basics" && (
-        <div className={styles.card} style={{ maxWidth: 640 }}>
+        <Card style={{ maxWidth: 640 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div className={styles.field}>
-              <label className={styles.label}>Name</label>
-              <input className={styles.input} value={draft.name}
+            <Field label="Name">
+              <input className="input" value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-            </div>
-            <div className={styles.field}>
-              <label className={styles.label}>Category</label>
-              <select className={styles.select} value={draft.categoryId}
+            </Field>
+            <Field label="Category">
+              <select className="input" value={draft.categoryId}
                 onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}>
                 {categories.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
               </select>
-            </div>
-            <div className={styles.field}>
-              <label className={styles.label}>Location</label>
-              <input className={styles.input} value={draft.location}
+            </Field>
+            <Field label="Location">
+              <input className="input" value={draft.location}
                 onChange={(e) => setDraft({ ...draft, location: e.target.value })} />
-            </div>
-            <div className={styles.field}>
-              <label className={styles.label}>Description</label>
-              <textarea className={styles.textarea} value={draft.description}
+            </Field>
+            <Field label="Description">
+              <textarea rows={3} className="input" value={draft.description}
                 onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
-            </div>
-            <div className={styles.grid2}>
-              <div className={styles.field}>
-                <label className={styles.label}>Contact person</label>
-                <input className={styles.input} value={draft.contactName}
+            </Field>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <Field label="Contact person">
+                <input className="input" value={draft.contactName}
                   onChange={(e) => setDraft({ ...draft, contactName: e.target.value })} />
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Contact phone</label>
-                <input className={styles.input} value={draft.contactPhone}
+              </Field>
+              <Field label="Contact phone">
+                <input className="input" value={draft.contactPhone}
                   onChange={(e) => setDraft({ ...draft, contactPhone: e.target.value })} />
-              </div>
+              </Field>
             </div>
-            <label className={styles.checkRow}>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: "var(--r-fg-2)" }}>
               <input type="checkbox" checked={draft.isActive}
                 onChange={(e) => setDraft({ ...draft, isActive: e.target.checked })} />
               Active — visible to residents
             </label>
             <div style={{ display: "flex", gap: 10 }}>
-              <button className={`${styles.btn} ${styles.btnPrimary}`} disabled={saving}
+              <Btn variant="primary" disabled={saving}
                 onClick={() => patchAmenity({
                   name: draft.name, categoryId: draft.categoryId,
                   description: draft.description, location: draft.location,
@@ -498,8 +531,8 @@ export default function AmenityDetailPage() {
                   contactPerson: { name: draft.contactName, phone: draft.contactPhone },
                 }, "Basics saved")}>
                 {saving ? "Saving…" : "Save basics"}
-              </button>
-              <button className={`${styles.btn} ${styles.btnDanger}`}
+              </Btn>
+              <Btn variant="danger"
                 onClick={async () => {
                   if (!(await notify.confirm(`Delete "${amenity.name}"? Attendance and incident history is retained.`, { tone: "danger" }))) return;
                   const res = await fetch(`/api/amenities/${id}`, { method: "DELETE", credentials: "include" });
@@ -508,263 +541,189 @@ export default function AmenityDetailPage() {
                   router.push("/admin/amenities/list");
                 }}>
                 Delete amenity
-              </button>
+              </Btn>
             </div>
-            <p className={styles.hint}>
+            <p style={{ fontSize: 11.5, color: "var(--r-fg-4)", lineHeight: 1.5 }}>
               Deleting hides the amenity but attendance, incidents and analytics keep referring to it,
               because those histories are required permanently.
             </p>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* ------------------------------------------------------ Availability */}
       {tab === "Availability" && (
-        <div className={styles.grid2}>
-          <div className={styles.card}>
-            <h2 className={styles.cardTitle}>Weekly hours</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))", gap: 16 }}>
+          <Card>
+            <CardHead title="Weekly hours" />
             {!weekly.length && (
-              <p className={styles.emptyText}>
+              <p style={{ fontSize: 12.5, color: "var(--r-fg-4)", marginBottom: 12 }}>
                 No weekly hours set — residents see this amenity as always open.
               </p>
             )}
 
-            <div style={{ marginBottom: 16, padding: 10, background: "var(--bg-sunken)", borderRadius: 8 }}>
-              <div className={styles.timeRow}>
-                <span className={styles.hint}>Open</span>
-                <input
-                  type="time"
-                  className={styles.input}
-                  style={{ padding: "4px 6px", fontSize: 12 }}
-                  value={quickOpen}
-                  onChange={(e) => setQuickOpen(e.target.value)}
-                />
-                <span className={styles.hint}>–</span>
-                <input
-                  type="time"
-                  className={styles.input}
-                  style={{ padding: "4px 6px", fontSize: 12 }}
-                  value={quickClose}
-                  onChange={(e) => setQuickClose(e.target.value)}
-                />
+            <div style={{ marginBottom: 16, padding: 12, background: "var(--r-surface-2)", borderRadius: 10 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span style={{ fontSize: 12, color: "var(--r-fg-4)" }}>Open</span>
+                <input type="time" className="input" style={{ width: "auto" }} value={quickOpen} onChange={(e) => setQuickOpen(e.target.value)} />
+                <span style={{ fontSize: 12, color: "var(--r-fg-4)" }}>–</span>
+                <input type="time" className="input" style={{ width: "auto" }} value={quickClose} onChange={(e) => setQuickClose(e.target.value)} />
               </div>
               {quickBreaks.map((b) => (
-                <div key={b.key} className={styles.timeRow} style={{ marginTop: 6 }}>
-                  <span className={styles.hint}>Break</span>
-                  <input
-                    type="time"
-                    className={styles.input}
-                    style={{ padding: "4px 6px", fontSize: 12 }}
-                    value={b.start}
-                    onChange={(e) => updateBreak(b.key, "start", e.target.value)}
-                  />
-                  <span className={styles.hint}>–</span>
-                  <input
-                    type="time"
-                    className={styles.input}
-                    style={{ padding: "4px 6px", fontSize: 12 }}
-                    value={b.end}
-                    onChange={(e) => updateBreak(b.key, "end", e.target.value)}
-                  />
-                  <button type="button" className={`${styles.btn} ${styles.btnSm}`} onClick={() => removeBreak(b.key)}>
-                    ×
-                  </button>
+                <div key={b.key} style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
+                  <span style={{ fontSize: 12, color: "var(--r-fg-4)" }}>Break</span>
+                  <input type="time" className="input" style={{ width: "auto" }} value={b.start} onChange={(e) => updateBreak(b.key, "start", e.target.value)} />
+                  <span style={{ fontSize: 12, color: "var(--r-fg-4)" }}>–</span>
+                  <input type="time" className="input" style={{ width: "auto" }} value={b.end} onChange={(e) => updateBreak(b.key, "end", e.target.value)} />
+                  <Btn size="sm" variant="ghost" onClick={() => removeBreak(b.key)}>×</Btn>
                 </div>
               ))}
-              <div className={styles.timeRow} style={{ marginTop: 8 }}>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 {quickBreaks.length < 2 && (
-                  <button type="button" className={`${styles.btn} ${styles.btnSm}`} onClick={addBreak}>
-                    + Add break
-                  </button>
+                  <Btn size="sm" variant="secondary" onClick={addBreak}>+ Add break</Btn>
                 )}
-                <button type="button" className={`${styles.btn} ${styles.btnPrimary} ${styles.btnSm}`} onClick={applyAllDays}>
-                  Apply to all 7 days
-                </button>
+                <Btn size="sm" variant="primary" onClick={applyAllDays}>Apply to all 7 days</Btn>
               </div>
-              <p className={styles.hint} style={{ marginTop: 6 }}>
+              <p style={{ fontSize: 11.5, color: "var(--r-fg-4)", marginTop: 8, lineHeight: 1.5 }}>
                 Up to 2 breaks (e.g. lunch, cleaning) — applied to every day. Then just uncheck a day below to close it.
               </p>
             </div>
 
-            <div className={styles.weekGrid}>
+            <div style={{ display: "grid", gridTemplateColumns: "104px 1fr", rowGap: 10, columnGap: 14 }}>
               {DAYS.map((d, i) => {
                 const day = weeklyDraft.find((wd) => wd.dayOfWeek === i) || { windows: [] };
                 const isOpen = day.windows.length > 0;
                 const primary = day.windows[0];
                 const extra = day.windows.slice(1);
                 return (
-                  <div key={d} style={{ display: "contents" }}>
-                    <div className={styles.dayName}>
-                      <label style={{ display: "flex", gap: 6, alignItems: "center", cursor: "pointer" }}>
-                        <input type="checkbox" checked={isOpen} onChange={(e) => toggleDayOpen(i, e.target.checked)} />
-                        {d}
-                      </label>
-                    </div>
-                    <div className={styles.timeRow}>
+                  <Fragment key={d}>
+                    <label style={{ display: "flex", gap: 6, alignItems: "center", cursor: "pointer", fontSize: 13, color: "var(--r-fg-2)" }}>
+                      <input type="checkbox" checked={isOpen} onChange={(e) => toggleDayOpen(i, e.target.checked)} />
+                      {d}
+                    </label>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                       {!isOpen ? (
-                        <span className={styles.hint}>Closed</span>
+                        <span style={{ fontSize: 12, color: "var(--r-fg-4)" }}>Closed</span>
                       ) : (
                         <>
-                          <input
-                            type="time"
-                            className={styles.input}
-                            style={{ padding: "4px 6px", fontSize: 12 }}
-                            value={primary.openTime}
-                            onChange={(e) => updateWindow(i, primary.key, "openTime", e.target.value)}
-                          />
-                          <span className={styles.hint}>–</span>
-                          <input
-                            type="time"
-                            className={styles.input}
-                            style={{ padding: "4px 6px", fontSize: 12 }}
-                            value={primary.closeTime}
-                            onChange={(e) => updateWindow(i, primary.key, "closeTime", e.target.value)}
-                          />
+                          <input type="time" className="input" style={{ width: "auto" }} value={primary.openTime}
+                            onChange={(e) => updateWindow(i, primary.key, "openTime", e.target.value)} />
+                          <span style={{ fontSize: 12, color: "var(--r-fg-4)" }}>–</span>
+                          <input type="time" className="input" style={{ width: "auto" }} value={primary.closeTime}
+                            onChange={(e) => updateWindow(i, primary.key, "closeTime", e.target.value)} />
                           {extra.map((w) => (
-                            <span key={w.key} className={styles.timeRow} style={{ gap: 4 }}>
-                              <span className={styles.hint}>+</span>
-                              <input
-                                type="time"
-                                className={styles.input}
-                                style={{ padding: "4px 6px", fontSize: 12 }}
-                                value={w.openTime}
-                                onChange={(e) => updateWindow(i, w.key, "openTime", e.target.value)}
-                              />
-                              <span className={styles.hint}>–</span>
-                              <input
-                                type="time"
-                                className={styles.input}
-                                style={{ padding: "4px 6px", fontSize: 12 }}
-                                value={w.closeTime}
-                                onChange={(e) => updateWindow(i, w.key, "closeTime", e.target.value)}
-                              />
-                              <button type="button" className={`${styles.btn} ${styles.btnSm}`} onClick={() => removeWindow(i, w.key)}>
-                                ×
-                              </button>
+                            <span key={w.key} style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                              <span style={{ fontSize: 12, color: "var(--r-fg-4)" }}>+</span>
+                              <input type="time" className="input" style={{ width: "auto" }} value={w.openTime}
+                                onChange={(e) => updateWindow(i, w.key, "openTime", e.target.value)} />
+                              <span style={{ fontSize: 12, color: "var(--r-fg-4)" }}>–</span>
+                              <input type="time" className="input" style={{ width: "auto" }} value={w.closeTime}
+                                onChange={(e) => updateWindow(i, w.key, "closeTime", e.target.value)} />
+                              <Btn size="sm" variant="ghost" onClick={() => removeWindow(i, w.key)}>×</Btn>
                             </span>
                           ))}
-                          <button type="button" className={`${styles.btn} ${styles.btnSm}`} onClick={() => addWindow(i)}>
-                            + split shift
-                          </button>
+                          <Btn size="sm" variant="ghost" onClick={() => addWindow(i)}>+ split shift</Btn>
                         </>
                       )}
                     </div>
-                  </div>
+                  </Fragment>
                 );
               })}
             </div>
-            <p className={styles.hint} style={{ marginTop: 14 }}>
+            <p style={{ fontSize: 11.5, color: "var(--r-fg-4)", marginTop: 14, lineHeight: 1.5 }}>
               For a one-off holiday, don't uncheck the day here — use Closures below instead so it doesn't
               repeat every week.
             </p>
             <div style={{ marginTop: 14 }}>
-              <button
-                type="button"
-                className={`${styles.btn} ${styles.btnPrimary}`}
-                onClick={saveAvailability}
-                disabled={savingAvailability}
-              >
+              <Btn variant="primary" disabled={savingAvailability} onClick={saveAvailability}>
                 {savingAvailability ? "Saving…" : "Save weekly hours"}
-              </button>
+              </Btn>
             </div>
-          </div>
+          </Card>
 
-          <div className={styles.card}>
-            <h2 className={styles.cardTitle}>Closures</h2>
+          <Card>
+            <CardHead title="Closures" />
             {!closures.length ? (
-              <p className={styles.emptyText}>No holiday or temporary closures scheduled.</p>
+              <p style={{ fontSize: 12.5, color: "var(--r-fg-4)" }}>No holiday or temporary closures scheduled.</p>
             ) : (
-              <table className={styles.table}>
-                <tbody>
-                  {closures.map((c) => (
-                    <tr key={c._id}>
-                      <td>
-                        <div className={styles.rowName}>{c.reason}</div>
-                        <div className={styles.rowSub}>
-                          {new Date(c.startDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-                          {" – "}
-                          {new Date(c.endDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                        </div>
-                      </td>
-                      <td style={{ textAlign: "right" }}>
-                        <span className={`${styles.pill} ${c.closureType === "HOLIDAY" ? styles.pillInfo : styles.pillTemp}`}>
-                          {label(c.closureType)}
-                        </span>
-                      </td>
-                      <td style={{ textAlign: "right" }}>
-                        <button className={`${styles.btn} ${styles.btnDanger} ${styles.btnSm}`}
-                          onClick={() => removeClosure(c._id)}>
-                          Cancel
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div>
+                {closures.map((c, i) => (
+                  <div key={c._id} style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
+                    padding: "10px 0", borderTop: i > 0 ? "1px solid var(--r-hairline)" : "none",
+                  }}>
+                    <div>
+                      <div style={{ fontWeight: 600, color: "var(--r-fg-1)", fontSize: 13 }}>{c.reason}</div>
+                      <div style={{ fontSize: 11.5, color: "var(--r-fg-4)" }}>
+                        {new Date(c.startDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                        {" – "}
+                        {new Date(c.endDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <Pill tone={c.closureType === "HOLIDAY" ? "info" : "warning"} dot={false}>{label(c.closureType)}</Pill>
+                      <Btn size="sm" variant="danger" onClick={() => removeClosure(c._id)}>Cancel</Btn>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
-            <p className={styles.hint} style={{ marginTop: 12 }}>
+            <p style={{ fontSize: 11.5, color: "var(--r-fg-4)", marginTop: 12, lineHeight: 1.5 }}>
               Closures more than a week out appear here and on the resident page but send no notification —
               a holiday eight months away is not news.
             </p>
 
-            <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--bg-muted)", display: "flex", flexDirection: "column", gap: 10 }}>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <div className={styles.field} style={{ flex: "1 1 140px" }}>
-                  <label className={styles.label}>Type</label>
-                  <select className={styles.select} value={closureDraft.closureType}
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--r-hairline)", display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                <Field label="Type">
+                  <select className="input" value={closureDraft.closureType}
                     onChange={(e) => setClosureDraft({ ...closureDraft, closureType: e.target.value })}>
                     <option value="HOLIDAY">Holiday</option>
                     <option value="TEMPORARY">Temporary</option>
                   </select>
-                </div>
-                <div className={styles.field} style={{ flex: "1 1 140px" }}>
-                  <label className={styles.label}>Start date</label>
-                  <input type="date" className={styles.input} value={closureDraft.startDate}
+                </Field>
+                <Field label="Start date">
+                  <input type="date" className="input" value={closureDraft.startDate}
                     onChange={(e) => setClosureDraft({ ...closureDraft, startDate: e.target.value })} />
-                </div>
-                <div className={styles.field} style={{ flex: "1 1 140px" }}>
-                  <label className={styles.label}>End date</label>
-                  <input type="date" className={styles.input} value={closureDraft.endDate}
+                </Field>
+                <Field label="End date">
+                  <input type="date" className="input" value={closureDraft.endDate}
                     onChange={(e) => setClosureDraft({ ...closureDraft, endDate: e.target.value })} />
-                </div>
+                </Field>
               </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Reason</label>
-                <input className={styles.input} placeholder="e.g. Diwali, deep cleaning, pump repair"
+              <Field label="Reason">
+                <input className="input" placeholder="e.g. Diwali, deep cleaning, pump repair"
                   value={closureDraft.reason}
                   onChange={(e) => setClosureDraft({ ...closureDraft, reason: e.target.value })} />
-              </div>
-              <button className={`${styles.btn} ${styles.btnPrimary}`} style={{ alignSelf: "flex-start" }}
-                disabled={savingClosure} onClick={addClosure}>
+              </Field>
+              <Btn variant="primary" style={{ alignSelf: "flex-start" }} disabled={savingClosure} onClick={addClosure}>
                 {savingClosure ? "Adding…" : "Add closure"}
-              </button>
+              </Btn>
             </div>
-          </div>
+          </Card>
         </div>
       )}
 
       {/* ----------------------------------------------------------- Access */}
       {tab === "Access" && (
-        <div className={styles.card} style={{ maxWidth: 560 }}>
+        <Card style={{ maxWidth: 560 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div className={styles.field}>
-              <label className={styles.label}>Who may use this amenity</label>
-              <select className={styles.select} value={draft.access?.audience || "EVERYONE"}
+            <Field label="Who may use this amenity">
+              <select className="input" value={draft.access?.audience || "EVERYONE"}
                 onChange={(e) => setDraft({ ...draft, access: { ...draft.access, audience: e.target.value } })}>
                 {AUDIENCES.map((a) => <option key={a} value={a}>{label(a)}</option>)}
               </select>
-            </div>
+            </Field>
 
             {draft.access?.audience === "CUSTOM" && (
-              <div className={styles.field}>
-                <label className={styles.label}>Custom roles</label>
+              <Field label="Custom roles">
                 {!settings?.customAccessRoles?.length ? (
-                  <p className={styles.hint}>
+                  <p style={{ fontSize: 11.5, color: "var(--r-fg-4)", lineHeight: 1.5 }}>
                     No custom roles configured yet. Add them in amenity settings first — the API rejects
                     roles that are not in the society list.
                   </p>
                 ) : settings.customAccessRoles.map((role) => (
-                  <label key={role} className={styles.checkRow}>
+                  <label key={role} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: "var(--r-fg-2)", marginBottom: 6 }}>
                     <input
                       type="checkbox"
                       checked={(draft.access?.customRoles || []).includes(role)}
@@ -782,42 +741,40 @@ export default function AmenityDetailPage() {
                     {role}
                   </label>
                 ))}
-              </div>
+              </Field>
             )}
 
-            <div className={styles.grid2}>
-              <div className={styles.field}>
-                <label className={styles.label}>Minimum age</label>
-                <input className={styles.input} type="number" min={0} max={120}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <Field label="Minimum age">
+                <input className="input" type="number" min={0} max={120}
                   value={draft.access?.minAge ?? ""}
                   onChange={(e) => setDraft({ ...draft, access: { ...draft.access, minAge: e.target.value === "" ? null : Number(e.target.value) } })} />
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Maximum age</label>
-                <input className={styles.input} type="number" min={0} max={120}
+              </Field>
+              <Field label="Maximum age">
+                <input className="input" type="number" min={0} max={120}
                   value={draft.access?.maxAge ?? ""}
                   onChange={(e) => setDraft({ ...draft, access: { ...draft.access, maxAge: e.target.value === "" ? null : Number(e.target.value) } })} />
-              </div>
+              </Field>
             </div>
-            <p className={styles.hint}>
+            <p style={{ fontSize: 11.5, color: "var(--r-fg-4)", lineHeight: 1.5 }}>
               Age limits apply to resident self check-in. A guard recording a check-in can override them,
               and the override is recorded with a reason — someone standing in front of you may be a
               legitimate exception the rules cannot see.
             </p>
 
-            <button className={`${styles.btn} ${styles.btnPrimary}`} disabled={saving}
+            <Btn variant="primary" disabled={saving}
               onClick={() => patchAmenity({ access: draft.access }, "Access rules saved")}>
               {saving ? "Saving…" : "Save access"}
-            </button>
+            </Btn>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* --------------------------------------------------------- Capacity */}
       {tab === "Capacity" && (
-        <div className={styles.card} style={{ maxWidth: 520 }}>
+        <Card style={{ maxWidth: 520 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <label className={styles.checkRow}>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: "var(--r-fg-2)" }}>
               <input type="checkbox" checked={draft.capacity?.unlimited !== false}
                 onChange={(e) => setDraft({ ...draft, capacity: { ...draft.capacity, unlimited: e.target.checked } })} />
               Unlimited capacity
@@ -825,87 +782,82 @@ export default function AmenityDetailPage() {
 
             {draft.capacity?.unlimited === false && (
               <>
-                <div className={styles.field}>
-                  <label className={styles.label}>Maximum occupancy</label>
-                  <input className={styles.input} type="number" min={1}
+                <Field label="Maximum occupancy">
+                  <input className="input" type="number" min={1}
                     value={draft.capacity?.maxOccupancy ?? ""}
                     onChange={(e) => setDraft({ ...draft, capacity: { ...draft.capacity, maxOccupancy: Number(e.target.value) } })} />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Warning threshold (%)</label>
-                  <input className={styles.input} type="number" min={1} max={100}
+                </Field>
+                <Field
+                  label="Warning threshold (%)"
+                  hint="The dashboard turns amber at this point, so the guard can slow admissions before the amenity becomes unpleasant rather than at the moment it is full."
+                >
+                  <input className="input" type="number" min={1} max={100}
                     value={draft.capacity?.warningThresholdPct ?? 80}
                     onChange={(e) => setDraft({ ...draft, capacity: { ...draft.capacity, warningThresholdPct: Number(e.target.value) } })} />
-                  <span className={styles.hint}>
-                    The dashboard turns amber at this point, so the guard can slow admissions before the
-                    amenity becomes unpleasant rather than at the moment it is full.
-                  </span>
-                </div>
+                </Field>
                 {amenity.liveOccupancy > 0 && (
-                  <div className={`${styles.banner} ${styles.bannerInfo}`} style={{ marginBottom: 0 }}>
-                    {amenity.liveOccupancy} {amenity.liveOccupancy === 1 ? "person is" : "people are"} checked in
-                    right now. The maximum cannot be set below that.
+                  <div style={{ display: "flex", gap: 8, padding: 12, borderRadius: 8, background: "var(--r-brand-soft)", fontSize: 12.5, color: "var(--r-fg-2)" }}>
+                    <Icon name="info" size={15} color="var(--r-brand)" style={{ flexShrink: 0, marginTop: 1 }} />
+                    <span>
+                      {amenity.liveOccupancy} {amenity.liveOccupancy === 1 ? "person is" : "people are"} checked in
+                      right now. The maximum cannot be set below that.
+                    </span>
                   </div>
                 )}
               </>
             )}
 
-            <button className={`${styles.btn} ${styles.btnPrimary}`} disabled={saving}
+            <Btn variant="primary" disabled={saving}
               onClick={() => patchAmenity({ capacity: draft.capacity }, "Capacity saved")}>
               {saving ? "Saving…" : "Save capacity"}
-            </button>
+            </Btn>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* ------------------------------------------------------------ Slots */}
       {tab === "Slots" && (
-        <div className={styles.grid2}>
-          <div className={styles.card}>
-            <h2 className={styles.cardTitle}>Slot policy</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))", gap: 16 }}>
+          <Card>
+            <CardHead title="Slot policy" />
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <label className={styles.checkRow}>
+              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: "var(--r-fg-2)" }}>
                 <input type="checkbox" checked={!!draft.slotPolicy?.enabled}
                   onChange={(e) => setDraft({ ...draft, slotPolicy: { ...draft.slotPolicy, enabled: e.target.checked } })} />
                 Use time slots
               </label>
-              <p className={styles.hint}>
+              <p style={{ fontSize: 11.5, color: "var(--r-fg-4)", lineHeight: 1.5 }}>
                 Booking is not enabled, but slots still attribute attendance, scope QR check-ins and give
                 analytics a unit finer than a whole day. A gym typically needs none; a tennis court does.
               </p>
 
               {draft.slotPolicy?.enabled && (
                 <>
-                  <div className={styles.grid2}>
-                    <div className={styles.field}>
-                      <label className={styles.label}>Slot duration (min)</label>
-                      <input className={styles.input} type="number" min={5} max={1440}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <Field label="Slot duration (min)">
+                      <input className="input" type="number" min={5} max={1440}
                         value={draft.slotPolicy?.slotDurationMins ?? 60}
                         onChange={(e) => setDraft({ ...draft, slotPolicy: { ...draft.slotPolicy, slotDurationMins: Number(e.target.value) } })} />
-                    </div>
-                    <div className={styles.field}>
-                      <label className={styles.label}>Gap between slots (min)</label>
-                      <input className={styles.input} type="number" min={0} max={240}
+                    </Field>
+                    <Field label="Gap between slots (min)">
+                      <input className="input" type="number" min={0} max={240}
                         value={draft.slotPolicy?.gapBetweenSlotsMins ?? 0}
                         onChange={(e) => setDraft({ ...draft, slotPolicy: { ...draft.slotPolicy, gapBetweenSlotsMins: Number(e.target.value) } })} />
-                    </div>
-                    <div className={styles.field}>
-                      <label className={styles.label}>Buffer time (min)</label>
-                      <input className={styles.input} type="number" min={0} max={240}
+                    </Field>
+                    <Field label="Buffer time (min)" hint="Trimmed off the end of each slot for cleaning or changeover.">
+                      <input className="input" type="number" min={0} max={240}
                         value={draft.slotPolicy?.bufferTimeMins ?? 0}
                         onChange={(e) => setDraft({ ...draft, slotPolicy: { ...draft.slotPolicy, bufferTimeMins: Number(e.target.value) } })} />
-                      <span className={styles.hint}>Trimmed off the end of each slot for cleaning or changeover.</span>
-                    </div>
-                    <div className={styles.field}>
-                      <label className={styles.label}>Capacity per slot</label>
-                      <input className={styles.input} type="number" min={1}
+                    </Field>
+                    <Field label="Capacity per slot">
+                      <input className="input" type="number" min={1}
                         value={draft.slotPolicy?.maxCapacityPerSlot ?? ""}
                         onChange={(e) => setDraft({ ...draft, slotPolicy: { ...draft.slotPolicy, maxCapacityPerSlot: e.target.value === "" ? null : Number(e.target.value) } })} />
-                    </div>
+                    </Field>
                   </div>
 
                   <div style={{ display: "flex", gap: 8 }}>
-                    <button className={styles.btn} disabled={saving}
+                    <Btn variant="secondary" disabled={saving}
                       onClick={async () => {
                         // Dry run first: regenerating replaces generated slots, so
                         // showing the count beforehand is worth the extra call.
@@ -919,8 +871,8 @@ export default function AmenityDetailPage() {
                         showToast(`Would generate ${data.generated} slots across the week`);
                       }}>
                       Preview
-                    </button>
-                    <button className={`${styles.btn} ${styles.btnPrimary}`} disabled={saving}
+                    </Btn>
+                    <Btn variant="primary" disabled={saving}
                       onClick={async () => {
                         await patchAmenity({ slotPolicy: draft.slotPolicy }, "Slot policy saved");
                         const res = await fetch(`/api/amenities/${id}/slots`, {
@@ -933,61 +885,48 @@ export default function AmenityDetailPage() {
                         load();
                       }}>
                       Save and regenerate
-                    </button>
+                    </Btn>
                   </div>
                 </>
               )}
             </div>
-          </div>
+          </Card>
 
-          <div className={styles.card}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <h2 className={styles.cardTitle} style={{ margin: 0 }}>Generated slots</h2>
-              {!!slots.length && (
+          <Card>
+            <CardHead
+              title="Generated slots"
+              right={!!slots.length && (
                 selectingSlots ? (
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <span className={styles.hint}>{selectedSlotIds.length} selected</span>
-                    <button type="button" className={`${styles.btn} ${styles.btnSm}`}
-                      onClick={() => setSelectedSlotIds(slots.map((s) => s._id))}>
-                      Select all
-                    </button>
-                    <button type="button" className={`${styles.btn} ${styles.btnSm} ${styles.btnDanger}`}
-                      disabled={savingSlot || !selectedSlotIds.length} onClick={() => deleteSlots(selectedSlotIds)}>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11.5, color: "var(--r-fg-4)" }}>{selectedSlotIds.length} selected</span>
+                    <Btn size="sm" variant="secondary" onClick={() => setSelectedSlotIds(slots.map((s) => s._id))}>Select all</Btn>
+                    <Btn size="sm" variant="danger" disabled={savingSlot || !selectedSlotIds.length} onClick={() => deleteSlots(selectedSlotIds)}>
                       Delete selected
-                    </button>
-                    <button type="button" className={`${styles.btn} ${styles.btnSm}`}
-                      onClick={() => { setSelectingSlots(false); setSelectedSlotIds([]); }}>
-                      Cancel
-                    </button>
+                    </Btn>
+                    <Btn size="sm" variant="ghost" onClick={() => { setSelectingSlots(false); setSelectedSlotIds([]); }}>Cancel</Btn>
                   </div>
                 ) : (
-                  <button type="button" className={`${styles.btn} ${styles.btnSm}`} onClick={() => setSelectingSlots(true)}>
-                    Select slots to delete
-                  </button>
+                  <Btn size="sm" variant="secondary" onClick={() => setSelectingSlots(true)}>Select slots to delete</Btn>
                 )
               )}
-            </div>
+            />
             {!slots.length ? (
-              <p className={styles.emptyText}>No slots yet.</p>
+              <p style={{ fontSize: 12.5, color: "var(--r-fg-4)" }}>No slots yet.</p>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {DAYS.map((d, i) => {
                   const rows = slots.filter((s) => s.dayOfWeek === i && s.isActive !== false);
                   if (!rows.length && selectingSlots) return null;
                   return (
                     <div key={d}>
-                      <div className={styles.dayName} style={{ marginBottom: 5 }}>{d}</div>
-                      <div className={styles.slotChips}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--r-fg-3)", marginBottom: 6 }}>{d}</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                         {rows.map((s) => {
                           const picked = selectedSlotIds.includes(s._id);
                           return (
                             <button
                               key={s._id}
                               type="button"
-                              className={`${styles.slotChip} ${s.isCustom ? styles.slotCustom : ""}`}
-                              style={selectingSlots
-                                ? { cursor: "pointer", outline: picked ? "2px solid var(--danger-fg)" : "1px solid transparent", background: picked ? "var(--danger-bg)" : undefined }
-                                : { cursor: "pointer" }}
                               title={selectingSlots ? "Click to select" : "Click to edit"}
                               onClick={() => (selectingSlots
                                 ? setSelectedSlotIds((prev) => (picked ? prev.filter((x) => x !== s._id) : [...prev, s._id]))
@@ -995,8 +934,22 @@ export default function AmenityDetailPage() {
                                   dayOfWeek: i, startTime: s.startTime, endTime: s.endTime,
                                   capacity: s.capacity ?? "", label: s.label || "", isNew: false,
                                 }))}
+                              style={{
+                                display: "inline-flex", alignItems: "center", gap: 4,
+                                padding: "6px 10px", borderRadius: 999, fontSize: 12, fontWeight: 500,
+                                fontFamily: "inherit", cursor: "pointer",
+                                background: selectingSlots
+                                  ? (picked ? "var(--r-danger-soft)" : "var(--r-surface-2)")
+                                  : (s.isCustom ? "var(--r-brand-soft)" : "var(--r-surface-2)"),
+                                color: selectingSlots
+                                  ? (picked ? "var(--r-danger)" : "var(--r-fg-2)")
+                                  : (s.isCustom ? "var(--r-brand)" : "var(--r-fg-2)"),
+                                border: selectingSlots
+                                  ? (picked ? "1px solid var(--r-danger)" : "1px solid transparent")
+                                  : "1px solid var(--r-border)",
+                              }}
                             >
-                              {selectingSlots ? (picked ? "☑ " : "☐ ") : ""}
+                              {selectingSlots ? (picked ? "" : "") : ""}
                               {s.startTime}–{s.endTime}
                               {s.capacity ? ` · ${s.capacity}` : ""}
                             </button>
@@ -1005,11 +958,15 @@ export default function AmenityDetailPage() {
                         {!selectingSlots && (
                           <button
                             type="button"
-                            className={styles.slotChip}
-                            style={{ cursor: "pointer", background: "transparent", border: "1px dashed var(--fg-5)" }}
                             onClick={() => setEditingSlot({
                               dayOfWeek: i, startTime: "", endTime: "", capacity: "", label: "", isNew: true,
                             })}
+                            style={{
+                              display: "inline-flex", alignItems: "center", padding: "6px 10px",
+                              borderRadius: 999, fontSize: 12, fontWeight: 500, fontFamily: "inherit",
+                              cursor: "pointer", background: "transparent", color: "var(--r-fg-4)",
+                              border: "1px dashed var(--r-border)",
+                            }}
                           >
                             + Add
                           </button>
@@ -1018,61 +975,51 @@ export default function AmenityDetailPage() {
                     </div>
                   );
                 })}
-                <p className={styles.hint}>
+                <p style={{ fontSize: 11.5, color: "var(--r-fg-4)", lineHeight: 1.5 }}>
                   {selectingSlots
                     ? "Tick the slots you want gone, then Delete selected."
                     : "Highlighted slots were created by hand and are preserved when the grid is regenerated. Click any slot to edit its time or capacity, or add one by hand."}
                 </p>
               </div>
             )}
-          </div>
+          </Card>
         </div>
       )}
 
-      {editingSlot && (
-        <div className={styles.overlay} onClick={() => !savingSlot && setEditingSlot(null)}>
-          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.modalHead}>
-              <h2 className={styles.modalTitle}>
-                {editingSlot.isNew ? "Add slot" : "Edit slot"} · {DAYS[editingSlot.dayOfWeek]}
-              </h2>
+      <Modal
+        open={Boolean(editingSlot)}
+        onClose={() => !savingSlot && setEditingSlot(null)}
+        title={editingSlot ? `${editingSlot.isNew ? "Add slot" : "Edit slot"} · ${DAYS[editingSlot.dayOfWeek]}` : ""}
+        width={480}
+      >
+        {editingSlot && (
+          <div style={{ display: "grid", gap: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <Field label="Start time">
+                <input className="input" type="time" value={editingSlot.startTime}
+                  onChange={(e) => setEditingSlot({ ...editingSlot, startTime: e.target.value })} />
+              </Field>
+              <Field label="End time">
+                <input className="input" type="time" value={editingSlot.endTime}
+                  onChange={(e) => setEditingSlot({ ...editingSlot, endTime: e.target.value })} />
+              </Field>
+              <Field label="Capacity (optional)">
+                <input className="input" type="number" min={1} value={editingSlot.capacity}
+                  onChange={(e) => setEditingSlot({ ...editingSlot, capacity: e.target.value })} />
+              </Field>
+              <Field label="Label (optional)">
+                <input className="input" type="text" maxLength={80} value={editingSlot.label}
+                  onChange={(e) => setEditingSlot({ ...editingSlot, label: e.target.value })} />
+              </Field>
             </div>
-            <div className={styles.modalBody}>
-              <div className={styles.grid2}>
-                <div className={styles.field}>
-                  <label className={styles.label}>Start time</label>
-                  <input className={styles.timeInput} type="time" value={editingSlot.startTime}
-                    onChange={(e) => setEditingSlot({ ...editingSlot, startTime: e.target.value })} />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>End time</label>
-                  <input className={styles.timeInput} type="time" value={editingSlot.endTime}
-                    onChange={(e) => setEditingSlot({ ...editingSlot, endTime: e.target.value })} />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Capacity (optional)</label>
-                  <input className={styles.input} type="number" min={1} value={editingSlot.capacity}
-                    onChange={(e) => setEditingSlot({ ...editingSlot, capacity: e.target.value })} />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Label (optional)</label>
-                  <input className={styles.input} type="text" maxLength={80} value={editingSlot.label}
-                    onChange={(e) => setEditingSlot({ ...editingSlot, label: e.target.value })} />
-                </div>
-              </div>
-            </div>
-            <div className={styles.modalFoot} style={{ justifyContent: "space-between" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               {!editingSlot.isNew ? (
-                <button className={`${styles.btn} ${styles.btnDanger}`} disabled={savingSlot}
-                  onClick={() => removeSlot(editingSlot)}>
-                  Remove
-                </button>
+                <Btn variant="danger" disabled={savingSlot} onClick={() => removeSlot(editingSlot)}>Remove</Btn>
               ) : <span />}
               <div style={{ display: "flex", gap: 8 }}>
-                <button className={styles.btn} disabled={savingSlot} onClick={() => setEditingSlot(null)}>
-                  Cancel
-                </button>
-                <button className={`${styles.btn} ${styles.btnPrimary}`} disabled={savingSlot}
+                <Btn variant="ghost" disabled={savingSlot} onClick={() => setEditingSlot(null)}>Cancel</Btn>
+                <Btn
+                  variant="primary" disabled={savingSlot}
                   onClick={() => {
                     if (!editingSlot.startTime || !editingSlot.endTime) {
                       return showToast("Start and end time are required", "err");
@@ -1083,28 +1030,28 @@ export default function AmenityDetailPage() {
                     saveSlot(editingSlot.isNew ? null : editingSlot, editingSlot);
                   }}>
                   {savingSlot ? "Saving…" : "Save"}
-                </button>
+                </Btn>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
       {/* ------------------------------------------------------------ Rules */}
       {tab === "Rules" && (
-        <div className={styles.card}>
-          <h2 className={styles.cardTitle}>Rulebook</h2>
-          <div className={styles.ruleCols}>
+        <Card>
+          <CardHead title="Rulebook" />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 22 }}>
             {RULE_KINDS.map(([kind, heading]) => {
               const rows = ruleDraft.filter((r) => r.kind === kind);
               return (
                 <div key={kind}>
-                  <div className={styles.dayName} style={{ marginBottom: 9 }}>{heading}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--r-fg-2)", marginBottom: 9 }}>{heading}</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
                     {rows.map((r) => (
                       <div key={r.key} style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
                         <input
-                          className={styles.input}
+                          className="input"
                           style={{ flex: 1 }}
                           value={r.text}
                           maxLength={240}
@@ -1112,46 +1059,39 @@ export default function AmenityDetailPage() {
                           onChange={(e) => setRuleDraft(ruleDraft.map((row) =>
                             row.key === r.key ? { ...row, text: e.target.value } : row))}
                         />
-                        <button
-                          type="button"
-                          className={`${styles.btn} ${styles.btnSm}`}
-                          title="Remove"
-                          onClick={() => setRuleDraft(ruleDraft.filter((row) => row.key !== r.key))}
-                        >
+                        <Btn size="sm" variant="ghost" title="Remove"
+                          onClick={() => setRuleDraft(ruleDraft.filter((row) => row.key !== r.key))}>
                           ✕
-                        </button>
+                        </Btn>
                       </div>
                     ))}
-                    <button
-                      type="button"
-                      className={`${styles.btn} ${styles.btnSm}`}
-                      style={{ alignSelf: "flex-start" }}
+                    <Btn
+                      size="sm" variant="secondary" style={{ alignSelf: "flex-start" }}
                       onClick={() => setRuleDraft([...ruleDraft, { key: newRuleKey(), kind, text: "", displayOrder: ruleDraft.length }])}
                     >
                       + Add
-                    </button>
+                    </Btn>
                   </div>
                 </div>
               );
             })}
           </div>
-          <p className={styles.hint} style={{ marginTop: 16 }}>
+          <p style={{ fontSize: 11.5, color: "var(--r-fg-4)", marginTop: 18, lineHeight: 1.5 }}>
             Rules are saved as a complete set. Retired rules are deactivated rather than deleted, so an
             incident raised for a rule violation still resolves to the rule as it stood that day. Blank
             lines are dropped on save.
           </p>
-          <button className={`${styles.btn} ${styles.btnPrimary}`} style={{ marginTop: 14 }}
-            disabled={savingRules} onClick={saveRules}>
+          <Btn variant="primary" style={{ marginTop: 14 }} disabled={savingRules} onClick={saveRules}>
             {savingRules ? "Saving…" : "Save rulebook"}
-          </button>
-        </div>
+          </Btn>
+        </Card>
       )}
 
       {/* --------------------------------------------------------- Visitors */}
       {tab === "Visitors" && (
-        <div className={styles.card} style={{ maxWidth: 560 }}>
+        <Card style={{ maxWidth: 560 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <label className={styles.checkRow}>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: "var(--r-fg-2)" }}>
               <input type="checkbox" checked={!!draft.visitorPolicy?.allowed}
                 onChange={(e) => setDraft({ ...draft, visitorPolicy: { ...draft.visitorPolicy, allowed: e.target.checked } })} />
               Visitors allowed
@@ -1159,33 +1099,29 @@ export default function AmenityDetailPage() {
 
             {draft.visitorPolicy?.allowed && (
               <>
-                <div className={styles.grid2}>
-                  <div className={styles.field}>
-                    <label className={styles.label}>Max visitors per resident</label>
-                    <input className={styles.input} type="number" min={0} max={100}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <Field label="Max visitors per resident">
+                    <input className="input" type="number" min={0} max={100}
                       value={draft.visitorPolicy?.maxVisitorsPerResident ?? 2}
                       onChange={(e) => setDraft({ ...draft, visitorPolicy: { ...draft.visitorPolicy, maxVisitorsPerResident: Number(e.target.value) } })} />
-                  </div>
-                  <div className={styles.field}>
-                    <label className={styles.label}>Max visitors in total</label>
-                    <input className={styles.input} type="number" min={0}
+                  </Field>
+                  <Field label="Max visitors in total">
+                    <input className="input" type="number" min={0}
                       value={draft.visitorPolicy?.maxVisitorsTotal ?? ""}
                       onChange={(e) => setDraft({ ...draft, visitorPolicy: { ...draft.visitorPolicy, maxVisitorsTotal: e.target.value === "" ? null : Number(e.target.value) } })} />
-                  </div>
-                  <div className={styles.field}>
-                    <label className={styles.label}>Allowed from</label>
-                    <input className={styles.timeInput} type="time"
+                  </Field>
+                  <Field label="Allowed from">
+                    <input className="input" type="time"
                       value={draft.visitorPolicy?.allowedFrom || ""}
                       onChange={(e) => setDraft({ ...draft, visitorPolicy: { ...draft.visitorPolicy, allowedFrom: e.target.value } })} />
-                  </div>
-                  <div className={styles.field}>
-                    <label className={styles.label}>Allowed until</label>
-                    <input className={styles.timeInput} type="time"
+                  </Field>
+                  <Field label="Allowed until">
+                    <input className="input" type="time"
                       value={draft.visitorPolicy?.allowedTo || ""}
                       onChange={(e) => setDraft({ ...draft, visitorPolicy: { ...draft.visitorPolicy, allowedTo: e.target.value } })} />
-                  </div>
+                  </Field>
                 </div>
-                <label className={styles.checkRow}>
+                <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: "var(--r-fg-2)" }}>
                   <input type="checkbox" checked={!!draft.visitorPolicy?.approvalRequired}
                     onChange={(e) => setDraft({ ...draft, visitorPolicy: { ...draft.visitorPolicy, approvalRequired: e.target.checked } })} />
                   Committee approval required before entry
@@ -1193,56 +1129,54 @@ export default function AmenityDetailPage() {
               </>
             )}
 
-            <button className={`${styles.btn} ${styles.btnPrimary}`} disabled={saving}
+            <Btn variant="primary" disabled={saving}
               onClick={() => patchAmenity({ visitorPolicy: draft.visitorPolicy }, "Visitor policy saved")}>
               {saving ? "Saving…" : "Save visitor policy"}
-            </button>
+            </Btn>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* --------------------------------------------------- Attendance & QR */}
       {tab === "Attendance & QR" && (
-        <div className={styles.grid2}>
-          <div className={styles.card}>
-            <h2 className={styles.cardTitle}>Attendance mode</h2>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {MODES.map((m) => (
-                <label key={m} className={styles.checkRow}>
-                  <input type="radio" name="mode" checked={draft.attendanceMode === m}
-                    onChange={() => setDraft({ ...draft, attendanceMode: m })} />
-                  {m === "QR_MANUAL" ? "QR with manual override" : label(m)}
-                </label>
-              ))}
-              <p className={styles.hint}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 16 }}>
+          <Card>
+            <CardHead title="Attendance mode" />
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <Segmented
+                value={draft.attendanceMode}
+                onChange={(v) => setDraft({ ...draft, attendanceMode: v })}
+                options={MODES.map((m) => ({ value: m, label: m === "QR_MANUAL" ? "QR with manual override" : label(m) }))}
+              />
+              <p style={{ fontSize: 11.5, color: "var(--r-fg-4)", lineHeight: 1.5 }}>
                 QR with manual override is usually the right answer in practice: residents self-scan, and a
                 guard can still admit someone whose phone is flat rather than turning them away.
               </p>
-              <button className={`${styles.btn} ${styles.btnPrimary}`} disabled={saving}
+              <Btn variant="primary" disabled={saving}
                 onClick={() => patchAmenity({ attendanceMode: draft.attendanceMode }, "Attendance mode saved")}>
                 {saving ? "Saving…" : "Save mode"}
-              </button>
+              </Btn>
             </div>
-          </div>
+          </Card>
 
-          <div className={styles.card}>
-            <h2 className={styles.cardTitle}>QR code</h2>
+          <Card>
+            <CardHead title="QR code" />
             {qr && qr.isActive ? (
               <div>
-                <p style={{ fontSize: 13, color: "var(--fg-3)", margin: "0 0 8px" }}>
+                <p style={{ fontSize: 13, color: "var(--r-fg-3)", margin: "0 0 8px" }}>
                   Active code{qr.label ? ` · ${qr.label}` : ""} · {qr.mode}
                 </p>
-                <p className={styles.hint}>
+                <p style={{ fontSize: 11.5, color: "var(--r-fg-4)", lineHeight: 1.5 }}>
                   Scanned {qr.scanCount || 0} times.
                   {qr.lastScannedAt
                     ? ` Last used ${new Date(qr.lastScannedAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}.`
                     : " Not used yet."}
                 </p>
-                <p className={styles.hint} style={{ marginTop: 10 }}>
+                <p style={{ fontSize: 11.5, color: "var(--r-fg-4)", marginTop: 10, lineHeight: 1.5 }}>
                   The scannable value is not shown again — only a hash is stored, which is what makes a
                   leaked screenshot recoverable by revoking rather than a permanent problem.
                 </p>
-                <button className={`${styles.btn} ${styles.btnDanger} ${styles.btnSm}`} style={{ marginTop: 12 }}
+                <Btn variant="danger" size="sm" style={{ marginTop: 12 }}
                   onClick={async () => {
                     if (!(await notify.confirm("Revoke this code? Printed copies stop working immediately.", { tone: "danger" }))) return;
                     const res = await fetch(`/api/amenities/${id}/qr?tokenId=${qr._id}`, {
@@ -1253,12 +1187,12 @@ export default function AmenityDetailPage() {
                     load();
                   }}>
                   Revoke
-                </button>
+                </Btn>
               </div>
             ) : (
               <div>
-                <p className={styles.emptyText}>No active code for this amenity.</p>
-                <button className={`${styles.btn} ${styles.btnPrimary}`} style={{ marginTop: 12 }}
+                <p style={{ fontSize: 12.5, color: "var(--r-fg-4)" }}>No active code for this amenity.</p>
+                <Btn variant="primary" style={{ marginTop: 12 }}
                   onClick={async () => {
                     const res = await fetch(`/api/amenities/${id}/qr`, {
                       method: "POST", credentials: "include",
@@ -1271,110 +1205,105 @@ export default function AmenityDetailPage() {
                     load();
                   }}>
                   Generate QR code
-                </button>
+                </Btn>
               </div>
             )}
-          </div>
+          </Card>
         </div>
       )}
 
       {/* ------------------------------------------------------ Maintenance */}
       {tab === "Maintenance" && (
-        <div className={styles.tableWrap}>
-          {!maintenance.length ? (
-            <div className={styles.empty}>
-              <p className={styles.emptyTitle}>No maintenance history</p>
-              <p className={styles.emptyText}>
-                Schedule maintenance from the <Link href="/admin/amenities/maintenance">maintenance calendar</Link>.
-              </p>
-            </div>
-          ) : (
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Reason</th><th style={{ width: 200 }}>Window</th>
-                  <th style={{ width: 130 }}>Status</th><th style={{ width: 150 }}>Recorded by</th>
-                </tr>
-              </thead>
-              <tbody>
-                {maintenance.map((m) => (
-                  <tr key={m._id}>
-                    <td>
-                      <div className={styles.rowName}>{m.reason}</div>
-                      {m.extensions?.length ? (
-                        <div className={styles.rowSub}>Extended {m.extensions.length}×</div>
-                      ) : null}
-                      {m.reopenedEarly ? <div className={styles.rowSub}>Reopened early</div> : null}
-                    </td>
-                    <td>
-                      {new Date(m.startDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-                      {" – "}
-                      {new Date(m.actualEndDate || m.endDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                    </td>
-                    <td>
-                      <span className={`${styles.pill} ${m.status === "COMPLETED" ? styles.pillOpen : m.status === "CANCELLED" ? styles.pillMuted : styles.pillMaint}`}>
-                        {label(m.status)}
-                      </span>
-                    </td>
-                    <td className={styles.rowSub}>{m.createdByName || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+        <DataTable
+          cols={[
+            {
+              key: "reason", label: "Reason", render: (m) => (
+                <div>
+                  <div style={{ fontWeight: 600, color: "var(--r-fg-1)" }}>{m.reason}</div>
+                  {m.extensions?.length ? (
+                    <div style={{ fontSize: 11, color: "var(--r-fg-4)" }}>Extended {m.extensions.length}×</div>
+                  ) : null}
+                  {m.reopenedEarly ? <div style={{ fontSize: 11, color: "var(--r-fg-4)" }}>Reopened early</div> : null}
+                </div>
+              ),
+            },
+            {
+              key: "window", label: "Window", width: 200, render: (m) => (
+                <span style={{ fontSize: 12.5 }}>
+                  {new Date(m.startDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                  {" – "}
+                  {new Date(m.actualEndDate || m.endDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                </span>
+              ),
+            },
+            {
+              key: "status", label: "Status", width: 130,
+              render: (m) => <Pill tone={MAINT_STATUS_TONE[m.status] || "neutral"} dot={false}>{label(m.status)}</Pill>,
+            },
+            { key: "createdBy", label: "Recorded by", width: 150, render: (m) => <span style={{ color: "var(--r-fg-4)" }}>{m.createdByName || "—"}</span> },
+          ]}
+          rows={maintenance}
+          rowKey="_id"
+          emptyIcon="wrench"
+          emptyTitle="No maintenance history"
+          emptySub={<>Schedule maintenance from the <Link href="/admin/amenities/maintenance">maintenance calendar</Link>.</>}
+        />
       )}
 
-      {newToken && (
-        <div className={styles.overlay} onClick={() => setNewToken(null)}>
-          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.modalHead}><h2 className={styles.modalTitle}>QR code generated</h2></div>
-            <div className={styles.modalBody}>
-              <div className={`${styles.banner} ${styles.bannerWarn}`} style={{ marginBottom: 0 }}>
+      <Modal open={Boolean(newToken)} onClose={() => setNewToken(null)} title="QR code generated" width={420}>
+        {newToken && (
+          <div style={{ display: "grid", gap: 14 }}>
+            <div style={{
+              padding: 12, borderRadius: 8, background: "var(--r-warning-soft)", fontSize: 12.5,
+              color: "var(--r-warning)", display: "flex", gap: 8,
+            }}>
+              <Icon name="alert-triangle" size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>
                 This is the only time the code is shown. Only a hash is stored, so it cannot be retrieved
                 later — print it now, or generate a fresh one.
-              </div>
-              <div style={{ display: "flex", justifyContent: "center", padding: "12px 0" }}>
-                {qrImage ? (
-                  <img src={qrImage} width={220} height={220} alt="Scannable QR code" />
-                ) : (
-                  <div style={{ width: 220, height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--fg-5)", fontSize: 12 }}>
-                    Rendering…
-                  </div>
-                )}
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Token</label>
-                <textarea className={styles.textarea} readOnly value={newToken.token || ""}
-                  onClick={(e) => e.target.select()} style={{ fontFamily: "monospace", fontSize: 12 }} />
-              </div>
-              {newToken.deepLink ? (
-                <div className={styles.field}>
-                  <label className={styles.label}>Deep link</label>
-                  <input className={styles.input} readOnly value={newToken.deepLink}
-                    onClick={(e) => e.target.select()} style={{ fontFamily: "monospace", fontSize: 12 }} />
-                </div>
-              ) : null}
+              </span>
             </div>
-            <div className={styles.modalFoot}>
+            <div style={{ display: "flex", justifyContent: "center", padding: "12px 0" }}>
+              {qrImage ? (
+                <img src={qrImage} width={220} height={220} alt="Scannable QR code" />
+              ) : (
+                <div style={{ width: 220, height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--r-fg-5)", fontSize: 12 }}>
+                  Rendering…
+                </div>
+              )}
+            </div>
+            <Field label="Token">
+              <textarea className="input" readOnly value={newToken.token || ""}
+                onClick={(e) => e.target.select()} style={{ fontFamily: "monospace", fontSize: 12 }} />
+            </Field>
+            {newToken.deepLink ? (
+              <Field label="Deep link">
+                <input className="input" readOnly value={newToken.deepLink}
+                  onClick={(e) => e.target.select()} style={{ fontFamily: "monospace", fontSize: 12 }} />
+              </Field>
+            ) : null}
+            <div style={{ display: "flex", gap: 8 }}>
               {qrImage ? (
                 <a
-                  className={styles.btn}
                   href={qrImage}
                   download={`amenity-qr-${id}.png`}
+                  style={{
+                    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+                    padding: "7px 12px", fontSize: 13, fontWeight: 500, height: 32, borderRadius: 8,
+                    background: "var(--r-surface)", color: "var(--r-fg-2)", border: "1px solid var(--r-border)",
+                    textDecoration: "none", fontFamily: "inherit",
+                  }}
                 >
                   Download PNG
                 </a>
               ) : null}
-              <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => setNewToken(null)}>Done</button>
+              <Btn variant="primary" onClick={() => setNewToken(null)}>Done</Btn>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
-      {toast && (
-        <div className={`${styles.toast} ${toast.type === "err" ? styles.toastErr : styles.toastOk}`}>{toast.msg}</div>
-      )}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

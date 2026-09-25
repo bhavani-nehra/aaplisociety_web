@@ -723,7 +723,7 @@ export default function BillingTestPage() {
           </p>
         </div>
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ background: phaseColor, color: "#fff", padding: "3px 12px", borderRadius: 20, fontSize: "0.75rem", fontWeight: 700 }}>{phaseLabel}</span>
+          <span style={{ background: phaseColor, color: "var(--on-solid)", padding: "3px 12px", borderRadius: 20, fontSize: "0.75rem", fontWeight: 700 }}>{phaseLabel}</span>
           <button onClick={() => setShowBills(s => !s)} style={{ padding: "5px 12px", border: `2px solid var(--success)`, background: showBills ? "var(--success)" : "white", color: showBills ? "white" : "var(--success)", borderRadius: 7, cursor: "pointer", fontWeight: 600, fontSize: "0.75rem" }}>Bills</button>
           <button onClick={() => setShowLedger(s => !s)} style={{ padding: "5px 12px", border: `2px solid var(--warning)`, background: showLedger ? "var(--warning)" : "white", color: showLedger ? "white" : "var(--warning)", borderRadius: 7, cursor: "pointer", fontWeight: 600, fontSize: "0.75rem" }}>Ledger</button>
           <button onClick={exportBills} style={{ padding: "5px 12px", border: "2px solid var(--fg-3)", background: "white", color: "var(--fg-3)", borderRadius: 7, cursor: "pointer", fontWeight: 600, fontSize: "0.75rem" }}>Export Excel</button>
@@ -756,18 +756,18 @@ export default function BillingTestPage() {
                 {label}
               </button>
             ))}
-            <label style={{ padding: "7px 14px", background: "#0891b2" /* TODO: unmapped color, needs design review */, color: "white", borderRadius: 7, cursor: "pointer", fontWeight: 600, fontSize: "0.8rem", display: "inline-flex", alignItems: "center" }}>
+            <label style={{ padding: "7px 14px", background: "#0891b2" /* TODO: unmapped color, needs design review */, color: "var(--on-solid)", borderRadius: 7, cursor: "pointer", fontWeight: 600, fontSize: "0.8rem", display: "inline-flex", alignItems: "center" }}>
               4. Upload Template
               <input type="file" accept=".xlsx,.xls" style={{ display: "none" }} ref={fileRef} onChange={e => { const f = e.target.files?.[0]; if (f) { runValidation(f); e.target.value = ""; } }} />
             </label>
             {phase === "payment-preview" && payBatchKey && (
               <button onClick={confirmPayments} disabled={phase === "confirming"}
-                style={{ padding: "7px 14px", background: "var(--warning)", color: "white", border: "none", borderRadius: 7, cursor: "pointer", fontWeight: 600, fontSize: "0.8rem", opacity: phase === "confirming" ? 0.6 : 1 }}>
+                style={{ padding: "7px 14px", background: "var(--warning)", color: "var(--on-solid)", border: "none", borderRadius: 7, cursor: "pointer", fontWeight: 600, fontSize: "0.8rem", opacity: phase === "confirming" ? 0.6 : 1 }}>
                 5. Confirm Payments
               </button>
             )}
             {(phase === "payments-done" || phase === "done-gen") && (
-              <button onClick={autoGenNext} style={{ padding: "7px 14px", background: "var(--danger)", color: "white", border: "none", borderRadius: 7, cursor: "pointer", fontWeight: 700, fontSize: "0.8rem" }}>
+              <button onClick={autoGenNext} style={{ padding: "7px 14px", background: "var(--danger)", color: "var(--on-solid)", border: "none", borderRadius: 7, cursor: "pointer", fontWeight: 700, fontSize: "0.8rem" }}>
                 Auto-Gen Next Month →
               </button>
             )}
@@ -813,7 +813,7 @@ export default function BillingTestPage() {
                   gen={excelValidation.bills?.length ?? 0} alreadyBilled={excelValidation.alreadyBilledRows?.length ?? 0}
                 </span>
                 {canGenFromExcel && (
-                  <button onClick={() => generateFromExcel(false)} style={{ padding: "5px 14px", background: "var(--success)", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600, fontSize: "0.8rem" }}>
+                  <button onClick={() => generateFromExcel(false)} style={{ padding: "5px 14px", background: "var(--success)", color: "var(--on-solid)", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600, fontSize: "0.8rem" }}>
                     Generate Bills from Excel
                   </button>
                 )}

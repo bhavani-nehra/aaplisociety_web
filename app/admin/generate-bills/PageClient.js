@@ -78,7 +78,7 @@ export default function GenerateBillsPage() {
           <button
             type="button"
             onClick={() => setActiveSegment("commercial")}
-            style={{ padding: "0.5rem 1rem", borderRadius: 8, border: "none", background: "var(--success)", color: "#fff", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer" }}
+            style={{ padding: "0.5rem 1rem", borderRadius: 8, border: "none", background: "var(--success)", color: "var(--on-solid)", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer" }}
           >
             Continue to Commercial →
           </button>

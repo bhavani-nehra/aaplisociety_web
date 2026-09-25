@@ -164,21 +164,21 @@ export default function SuperAdminExportsPage() {
           <button
             onClick={loadPreview}
             disabled={previewLoading}
-            style={{ padding: "0.6rem 1.25rem", borderRadius: 6, border: "none", background: "var(--accent)", color: "#fff", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", fontSize: "0.9rem" }}
+            style={{ padding: "0.6rem 1.25rem", borderRadius: 6, border: "none", background: "var(--accent)", color: "var(--on-solid)", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", fontSize: "0.9rem" }}
           >
             {previewLoading ? "Loading..." : "👁 Preview"}
           </button>
           <button
             onClick={() => handleExport("xlsx")}
             disabled={!preview?.length || exporting}
-            style={{ padding: "0.6rem 1.25rem", borderRadius: 6, border: "none", background: preview?.length ? "var(--success)" : "var(--fg-3)", color: "#fff", fontWeight: 700, cursor: preview?.length ? "pointer" : "not-allowed", whiteSpace: "nowrap", fontSize: "0.9rem" }}
+            style={{ padding: "0.6rem 1.25rem", borderRadius: 6, border: "none", background: preview?.length ? "var(--success)" : "var(--fg-3)", color: "var(--on-solid)", fontWeight: 700, cursor: preview?.length ? "pointer" : "not-allowed", whiteSpace: "nowrap", fontSize: "0.9rem" }}
           >
             ⬇ Excel
           </button>
           <button
             onClick={() => handleExport("csv")}
             disabled={!preview?.length || exporting}
-            style={{ padding: "0.6rem 1.25rem", borderRadius: 6, border: "none", background: preview?.length ? "#7c3aed" : "var(--fg-3)", color: "#fff", fontWeight: 700, cursor: preview?.length ? "pointer" : "not-allowed", whiteSpace: "nowrap", fontSize: "0.9rem" }}
+            style={{ padding: "0.6rem 1.25rem", borderRadius: 6, border: "none", background: preview?.length ? "#7c3aed" : "var(--fg-3)", color: "var(--on-solid)", fontWeight: 700, cursor: preview?.length ? "pointer" : "not-allowed", whiteSpace: "nowrap", fontSize: "0.9rem" }}
           >
             ⬇ CSV
           </button>

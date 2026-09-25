@@ -201,4 +201,4 @@ const H2 = { margin: "0 0 4px", fontSize: 15, fontWeight: 700 };
 const MUTED = { margin: "12px 0 0", fontSize: 13.5, color: "var(--fg-4)", lineHeight: 1.6 };
 const GRID2 = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 };
 const INPUT = { width: "100%", padding: "8px 11px", borderRadius: 8, fontSize: 13, border: "1px solid var(--border-strong)", background: "var(--bg-input, var(--bg-surface))", color: "var(--fg-2)", outline: "none", fontFamily: "inherit" };
-const PRIMARY = { padding: "10px 18px", borderRadius: 8, border: "none", background: "var(--accent)", color: "#fff", fontSize: 13.5, fontWeight: 600, cursor: "pointer" };
+const PRIMARY = { padding: "10px 18px", borderRadius: 8, border: "none", background: "var(--accent)", color: "var(--on-solid)", fontSize: 13.5, fontWeight: 600, cursor: "pointer" };

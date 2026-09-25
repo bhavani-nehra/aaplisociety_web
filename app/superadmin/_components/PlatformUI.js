@@ -259,7 +259,7 @@ export function Empty({ title, sub }) {
 export function Btn({ children, variant = "secondary", size = "md", ...rest }) {
   const pad = size === "sm" ? "5px 10px" : "8px 14px";
   const variants = {
-    primary: { background: "var(--primary)", color: "#fff", border: "1px solid var(--primary)" },
+    primary: { background: "var(--primary)", color: "var(--on-solid)", border: "1px solid var(--primary)" },
     secondary: { background: "var(--bg-surface)", color: "var(--fg-1)", border: "1px solid var(--border-strong)" },
     danger: { background: "var(--danger-bg)", color: "var(--danger)", border: "1px solid var(--danger)" },
     ghost: { background: "transparent", color: "var(--fg-3)", border: "1px solid transparent" },

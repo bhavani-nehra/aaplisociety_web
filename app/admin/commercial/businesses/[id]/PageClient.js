@@ -28,7 +28,7 @@ const S = {
   label: { fontSize: "0.78rem", fontWeight: 700, color: "var(--fg-3)" },
   hint: { fontSize: "0.72rem", color: "var(--fg-5)" },
   input: { padding: "0.5rem 0.65rem", border: "1px solid var(--border-strong)", borderRadius: 8, fontSize: "0.875rem", width: "100%" },
-  btn: { padding: "0.55rem 0.95rem", borderRadius: 8, border: "1px solid var(--primary)", background: "var(--primary)", color: "#fff", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer" },
+  btn: { padding: "0.55rem 0.95rem", borderRadius: 8, border: "1px solid var(--primary)", background: "var(--primary)", color: "var(--on-solid)", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer" },
   btnGhost: { padding: "0.5rem 0.85rem", borderRadius: 8, border: "1px solid var(--border-strong)", background: "var(--bg-surface)", color: "var(--fg-3)", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer" },
   err: { background: "var(--danger-bg)", border: "1px solid var(--danger-bg)", color: "var(--danger-fg)", padding: "0.75rem 1rem", borderRadius: 8, marginBottom: "1rem", fontSize: "0.85rem" },
   ok: { background: "var(--success-bg)", border: "1px solid var(--success-bg)", color: "var(--success-fg)", padding: "0.75rem 1rem", borderRadius: 8, marginBottom: "1rem", fontSize: "0.85rem" },

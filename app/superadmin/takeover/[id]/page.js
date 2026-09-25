@@ -111,7 +111,7 @@ export default function TakeoverClaimPage() {
             <p style={{ color: "var(--danger)", marginBottom: 12 }}>{fatalError}</p>
             <button
               onClick={retry}
-              style={{ padding: "0.5rem 1.25rem", borderRadius: 6, border: "none", background: "var(--primary)", color: "#fff", fontWeight: 700, cursor: "pointer" }}
+              style={{ padding: "0.5rem 1.25rem", borderRadius: 6, border: "none", background: "var(--primary)", color: "var(--on-solid)", fontWeight: 700, cursor: "pointer" }}
             >
               Retry
             </button>

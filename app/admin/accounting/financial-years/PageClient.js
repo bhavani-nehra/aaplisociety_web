@@ -406,7 +406,7 @@ const PRIMARY = {
   borderRadius: 8,
   border: "none",
   background: "var(--accent)",
-  color: "#fff",
+  color: "var(--on-solid)",
   fontSize: 13.5,
   fontWeight: 600,
   cursor: "pointer",

@@ -1,7 +1,7 @@
 .container {
   min-height: 100vh;
-  background: #fafafa;
-  color: #121212;
+  background: transparent; /* global app background shows through */
+  color: var(--fg-1);
 }
 .navbar {
   background: #f3f3f3;

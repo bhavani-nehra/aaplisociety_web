@@ -439,7 +439,7 @@ export default function ViewMembersPage() {
                     style={{
                       marginLeft: 'auto',
                       background: 'var(--success)',
-                      color: 'white',
+                      color: 'var(--on-solid)',
                       padding: '0.25rem 0.75rem',
                       borderRadius: '12px',
                       fontSize: '0.75rem',

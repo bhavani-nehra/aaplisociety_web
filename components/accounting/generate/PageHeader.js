@@ -31,7 +31,7 @@ export function Btn({ variant = "primary", size = "md", children, onClick, disab
   const base = { fontFamily: "inherit", fontWeight: 500, borderRadius: 8, border: "1px solid transparent", cursor: disabled ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 8, transition: "all 0.2s ease", opacity: disabled ? 0.6 : 1, whiteSpace: "nowrap" };
   const sizes = { sm: { padding: "6px 12px", fontSize: 12 }, md: { padding: "10px 18px", fontSize: 14 }, lg: { padding: "12px 22px", fontSize: 15 } };
   const variants = {
-    primary: { background: "var(--primary)", color: "#fff" },
+    primary: { background: "var(--primary)", color: "var(--on-solid)" },
     secondary: { background: "var(--bg-muted)", color: "var(--fg-2)", border: "1px solid var(--border)" },
     ghost: { background: "transparent", color: "var(--primary)" },
   };

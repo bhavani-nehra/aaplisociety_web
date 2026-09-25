@@ -29,6 +29,7 @@ const AuditLogSchema = new mongoose.Schema(
         "UPDATE_MATRIX_CONFIG",
         "GENERATE_BILLS",
         "RECORD_PAYMENT",
+        "REVERSE_PAYMENT",
         "IMPORT_MEMBERS",
         "IMPORT_MEMBERS_ENHANCED",
         "UPDATE_MEMBER",
@@ -66,6 +67,13 @@ const AuditLogSchema = new mongoose.Schema(
         // ── contactability ──
         "MEMBER_CONTACT_FLAGGED",
         "MEMBER_CONTACT_CLEARED",
+        // Soft delete / restore (Plan 02 §2). A flat is never hard-deleted:
+        // its bills, receipts and ledger rows reference it, and removing the
+        // row would orphan a society's financial history.
+        "MEMBER_ARCHIVED",
+        "MEMBER_RESTORED",
+        // A copy of one person's records leaving the system (Plan 02 §8/§14).
+        "MEMBER_EXPORTED",
         // commercial module (additive; existing actions untouched)
         "BUSINESS_PROFILE_CREATED",
         "BUSINESS_PROFILE_UPDATED",
@@ -155,6 +163,32 @@ const AuditLogSchema = new mongoose.Schema(
         "TAKEOVER_EXPIRED",
         // ── legal document acceptance (legal/*.md, lib/legal/documents.js) ──
         "TERMS_ACCEPTED",
+        // ── ownership transfer (models/OwnershipTransfer.js, Plan 02 §4) ──
+        // A flat changing hands is the highest-consequence non-financial event
+        // in the product: it moves a home, a login, a ledger position and a
+        // sitting tenant. Every step is recorded, not just the outcome.
+        "OWNERSHIP_TRANSFER_INITIATED",
+        "OWNERSHIP_TRANSFER_BUYER_INVITED",
+        "OWNERSHIP_TRANSFER_BUYER_ACCEPTED",
+        "OWNERSHIP_TRANSFER_APPROVED",
+        "OWNERSHIP_TRANSFER_REJECTED",
+        "OWNERSHIP_TRANSFER_CANCELLED",
+        "OWNERSHIP_TRANSFER_EFFECTIVE",
+        "OWNERSHIP_TRANSFER_CLOSED",
+        // ── role handover (Plan 01 §10-§13) — atomic, no-consent replacement
+        // of a single-holder role's active assignment. Distinct from
+        // ROLE_ASSIGNED/ROLE_UNASSIGNED: those log two separate, unlinked
+        // events for what is really one transaction; this is the one row
+        // that names old holder, new holder, actor and the resulting access
+        // diff together. ──
+        "ROLE_HANDOVER",
+        // ── masked calling (models/CallSession.js, Plan 03 §13/§14/§15) ──
+        // One row per attempt, refused ones included, so misuse of the calling
+        // feature is auditable even though neither party ever sees a number.
+        "CALL_INITIATED",
+        "CALL_REFUSED",
+        "CALL_STATUS_UPDATED",
+        "CALL_RECORDING_ACCESSED",
       ],
     },
     oldData: { type: mongoose.Schema.Types.Mixed },

@@ -52,6 +52,10 @@ export const POST = withRoute(async (req) => {
   }
 
   const key = buildKey(societyId, spec.folder, ext);
+  // Plan 03 §8. Where a target declares a policy size below its hard cap, the
+  // client is told so it can compress to it. Advisory: the hard cap is what
+  // the attach step enforces, because tightening the enforced limit ahead of
+  // the shipped Flutter builds would break upload for guards mid-shift.
   const uploadUrl = await presignUpload(key, contentType);
 
   return json({
@@ -64,5 +68,9 @@ export const POST = withRoute(async (req) => {
     headers: { "Content-Type": contentType },
     expiresIn: 300,
     maxBytes: spec.maxBytes,
+    targetBytes: spec.targetBytes ?? spec.maxBytes,
+    // The client must call this after the PUT completes. Until it does, the
+    // object is unverified: nothing has checked its real size or its bytes.
+    attachRequired: true,
   });
 });

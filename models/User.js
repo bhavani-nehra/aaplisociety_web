@@ -117,6 +117,22 @@ const UserSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       // points to profiles[n].profileId for the current session
     },
+    // ---- Profile photo (Plan 03 §9) ---------------------------------------
+    //
+    // ONE field, holding ONE R2 object key. The "exactly one active profile
+    // image" rule is the schema: there is nowhere to put a second, so there
+    // can never be a set of images with a flag deciding which is live, and no
+    // way for that flag to be wrong.
+    //
+    // A key, not a URL. R2 objects are private; a stored URL would either be
+    // a presigned one that expires (a broken image in every cached record) or
+    // a public one (an avatar readable by anyone who ever saw the link). The
+    // key is signed on read, per request, by presignDownload.
+    //
+    // Replacing an avatar deletes the object it replaced — see
+    // app/api/v1/members/me/avatar.
+    avatarKey: { type: String, default: null },
+
     // The single gate every login path checks. `false` = the account cannot
     // sign in and any live session dies at the next request (via sessionEpoch).
     isActive: {

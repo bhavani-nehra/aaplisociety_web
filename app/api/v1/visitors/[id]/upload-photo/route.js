@@ -3,7 +3,7 @@ import { getClaims, requireRoles, requireTenant } from "@/lib/v1/auth";
 import { Visitor } from "@/lib/v1/models";
 import { VISITOR_ACCESS_ROLES } from "@/lib/v1/constants";
 import { detectFileType } from "@/lib/v1/fileSignature";
-import { buildKey, uploadBuffer, presignDownload } from "@/lib/v1/storage";
+import { buildKey, uploadBuffer, presignDownload, deleteObject } from "@/lib/v1/storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,8 +40,32 @@ export const POST = withRoute(async (req, ctx) => {
   const ext = detected === "image/png" ? "png" : "jpg";
   const key = buildKey(societyId, "visitor-photos", ext);
   await uploadBuffer(key, buffer, detected);
+
+  // Plan 03 §22 - clean up the photo being replaced.
+  //
+  // A guard who retakes a photo three times used to leave three objects in the
+  // bucket, two of them referenced by nothing and billed forever. Captured
+  // before the record is overwritten, because after the save the old key is
+  // gone from the only place that knew it.
+  const previousKey = visitor.photoKey;
+
   visitor.photoKey = key;
   await visitor.save();
+
+  // Deleted only AFTER the record points at the new object. The other order
+  // risks deleting the old photo and then failing to save, leaving the visitor
+  // pointing at a key that no longer exists.
+  //
+  // A failure here is logged and swallowed: the upload itself succeeded, and
+  // an orphaned object is a storage cost, not a reason to tell the guard their
+  // photo did not save.
+  if (previousKey && previousKey !== key) {
+    try {
+      await deleteObject(previousKey);
+    } catch (e) {
+      console.error("[visitor-photo] could not delete replaced object", previousKey, e?.message);
+    }
+  }
 
   // Return the URL under BOTH keys. The client reads `photoUrl` (that is the
   // field name every visitor payload uses elsewhere), while `url` is kept for

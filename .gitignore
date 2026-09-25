@@ -128,7 +128,7 @@ tests/*
 .jest-cache
 screenshots
 .mongo-tmp/
-
+.impeccable
 # Ruflo local secrets and runtime data
 .env
 .env.*.local
@@ -175,3 +175,19 @@ COMMIT_PLAN.md
 COMMIT_PLAN2.md
 MANUAL_TEST_CHECKLIST.md
 Society Product — FINAL CORRECTED AUDIT (Verificat 344862d4df5e48bfbf048a457852aeb6.md
+
+.codex/
+.gitignore
+AapliSociety-Accounting-Billing.md
+COMMIT_PLAN3.md
+COMMIT_PLAN4.md
+DESIGN_SKILLS.md
+driver-smoke-test.html
+repo_context.md
+soc_web.txt
+.reticle.json
+.reticle/
+RETICLE.md
+__tests__/
+final_audit_and_fixes/
+final_audit_fix_plan/

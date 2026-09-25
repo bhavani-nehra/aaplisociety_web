@@ -5,7 +5,13 @@ const nextJest = require("next/jest");
 const createJestConfig = nextJest({ dir: "./" });
 const customJestConfig = {
   testEnvironment: "node",
-  testMatch: ["**/tests/unit/**/*.unit.test.js"],
+  // `tests/` is gitignored (.gitignore:124), so suites written there exist only
+  // on the machine that wrote them and never reach CI. `__tests__/` is tracked.
+  // Both are matched so the pre-existing suites under tests/unit keep running.
+  testMatch: [
+    "**/__tests__/unit/**/*.unit.test.js",
+    "**/tests/unit/**/*.unit.test.js",
+  ],
   // next/jest does NOT actually read jsconfig.json's `paths` — it only maps
   // its own built-in aliases (next/font, css/image mocks, etc). Every "@/..."
   // import used throughout app/lib/models needs this mapped explicitly or

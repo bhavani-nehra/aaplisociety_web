@@ -1,3 +1,4 @@
+const { withReticle } = require('@reticlehq/next');
 const nextConfig = {
   reactStrictMode: true,
   experimental: {
@@ -69,6 +70,26 @@ const nextConfig = {
   async rewrites() {
     return [{ source: "/v1/:path*", destination: "/api/v1/:path*" }];
   },
+
+  // Dev only: keep Watchpack off Windows system files and heavy dirs (it was
+  // lstat-ing C:\hiberfil.sys etc.), which slows compiles and bloats memory.
+  webpack(config, { dev }) {
+    if (dev) {
+      config.watchOptions = {
+        ...config.watchOptions,
+        ignored: [
+          "**/node_modules/**",
+          "**/.git/**",
+          "**/.next/**",
+          "C:/hiberfil.sys",
+          "C:/pagefile.sys",
+          "C:/swapfile.sys",
+          "C:/DumpStack.log.tmp",
+        ],
+      };
+    }
+    return config;
+  },
 };
 
 // withSentryConfig's webpack plugin does real work during `next build`
@@ -80,7 +101,8 @@ const nextConfig = {
 // capture (instrumentation.js / instrumentation-client.js) is unaffected —
 // those only key off NEXT_PUBLIC_SENTRY_DSN, not this.
 const { withSentryConfig } = require("@sentry/nextjs");
-module.exports = process.env.VERCEL
+const withReticleMaybe = process.env.RETICLE === "1" ? withReticle : (c) => c;
+module.exports = withReticleMaybe(process.env.VERCEL
   ? withSentryConfig(nextConfig, {
       silent: true,
       org: process.env.SENTRY_ORG,
@@ -98,4 +120,4 @@ module.exports = process.env.VERCEL
       autoInstrumentAppDirectory: false,
       autoInstrumentMiddleware: false,
     })
-  : nextConfig;
+  : nextConfig);

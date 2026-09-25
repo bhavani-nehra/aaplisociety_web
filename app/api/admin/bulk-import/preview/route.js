@@ -59,9 +59,15 @@ export async function POST(request) {
       previewId,
       societyPayload: result.societyPayload,
       validMembers: result.validMembers,
+      // Plan 02 §17
+      optional: result.optional,
       existingMemberEmailMap: result.existingMemberEmailMap,
       multiSocietyAdminUserId: result.multiSocietyAdminUserId,
       warnings: result.warnings,
+      // SEC-26: persist the verdict and the per-row detail so the commit route
+      // can assert on them instead of inferring them from the token's existence.
+      ok: result.ok,
+      rowResults: result.rowResults,
     });
   }
 

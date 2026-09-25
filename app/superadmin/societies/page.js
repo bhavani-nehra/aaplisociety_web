@@ -1,5 +1,6 @@
 ﻿"use client";
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import ExcelJS from "exceljs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
@@ -265,7 +266,7 @@ function BillHistoryStep({ societyId, societyName, joinPeriodId, interestRate, o
               a.click();
               URL.revokeObjectURL(url);
             }}
-            style={{ background: "var(--accent)", color: "#fff", border: "none", padding: "0.5rem 1.2rem", borderRadius: 6, cursor: "pointer", fontWeight: 600, fontSize: "0.85rem" }}
+            style={{ background: "var(--accent)", color: "var(--on-solid)", border: "none", padding: "0.5rem 1.2rem", borderRadius: 6, cursor: "pointer", fontWeight: 600, fontSize: "0.85rem" }}
           >
             ⬇️ Download Bill History Template
           </button>
@@ -281,7 +282,7 @@ function BillHistoryStep({ societyId, societyName, joinPeriodId, interestRate, o
           </div>
           <button
             onClick={() => onComplete && onComplete(saveResult)}
-            style={{ marginTop: "1rem", background: "var(--success)", color: "#fff", border: "none", padding: "0.6rem 1.5rem", borderRadius: 6, cursor: "pointer", fontWeight: 700 }}
+            style={{ marginTop: "1rem", background: "var(--success)", color: "var(--on-solid)", border: "none", padding: "0.6rem 1.5rem", borderRadius: 6, cursor: "pointer", fontWeight: 700 }}
           >
             Continue →
           </button>
@@ -386,7 +387,7 @@ function BillHistoryStep({ societyId, societyName, joinPeriodId, interestRate, o
             {allValid && validatedBills && bhStep !== "saving" && (
               <button
                 onClick={handleSave}
-                style={{ flex: 1, background: "var(--success)", color: "#fff", border: "none", padding: "0.75rem", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: "0.9rem" }}
+                style={{ flex: 1, background: "var(--success)", color: "var(--on-solid)", border: "none", padding: "0.75rem", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: "0.9rem" }}
               >
                 ✅ All Valid — Save {validatedBills.length} Bill Records
               </button>
@@ -430,7 +431,10 @@ function BhModal({ society, onClose }) {
       }
     })();
   }, []);
-  return (
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+  return createPortal(
     <div
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center" }}
       onClick={onClose}
@@ -475,12 +479,15 @@ function BhModal({ society, onClose }) {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 export default function AdminSocietiesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const queryClient = useQueryClient();
   // View Credentials dialog
   const [viewCredsTarget, setViewCredsTarget] = useState(null); // { societyId, name }
@@ -940,23 +947,48 @@ export default function AdminSocietiesPage() {
                       <button
                         style={{ ...ACTION_BTN, ...ACTION_TONES.warning }}
                         onClick={async () => {
-                          const custom = await notify.prompt(
-                            `Reset admin password for "${society.name}".\n\nEnter new password (min 8 chars), or leave blank to auto-generate:`
+                          // SEC-19: this used to prompt for a password, then
+                          // print the new one in a toast. Support's procedure
+                          // was "reset it and read it out", which is why
+                          // plaintext admin passwords existed at all. Now the
+                          // admin sets their own via an expiring setup link and
+                          // nobody here ever sees a password.
+                          const ok = await notify.confirm(
+                            `Send a setup link to the admin of "${society.name}"?\n\n` +
+                            `• Their current password stops working immediately\n` +
+                            `• Any session they have open is signed out\n` +
+                            `• They choose a new password themselves via an emailed link (valid 7 days)\n\n` +
+                            `You will not see their password — nobody will.`
                           );
-                          if (custom === null) return; // cancelled
+                          if (!ok) return;
                           const res = await fetch("/api/superadmin/reset-admin-password", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             credentials: "include",
-                            body: JSON.stringify({ societyId: society._id, newPassword: custom || undefined }),
+                            body: JSON.stringify({ societyId: society._id }),
                           });
                           const data = await res.json();
                           if (!res.ok) { notify.error(data.error || "Failed"); return; }
-                          notify.success(`Admin password reset!\n\nEmail: ${data.adminEmail}\nNew Password: ${data.newPassword}\n\nSave this — it won't be shown again.`);
+                          if (data.emailSent) {
+                            notify.success(
+                              `Setup link sent to ${data.adminEmail}.\n` +
+                              `Valid for ${data.expiresInDays} days.` +
+                              (data.sessionsInvalidated ? "" : "\n\nNote: existing sessions could not be signed out — check Redis.")
+                            );
+                          } else {
+                            // Email delivery failed. Hand the link over rather
+                            // than leaving support with no path — it expires and
+                            // can only set credentials.
+                            await notify.prompt(
+                              `Password rotated, but the email could not be sent.\n\n` +
+                              `Send this link to ${data.adminEmail} yourself (valid ${data.expiresInDays} days):`,
+                              data.setCredentialsUrl
+                            );
+                          }
                           queryClient.invalidateQueries(["admin-societies"]);
                         }}
                       >
-                        🔐 Reset Admin Pass
+                        🔐 Send Admin Setup Link
                       </button>
                       <button
                         style={{ ...ACTION_BTN, ...ACTION_TONES.info }}
@@ -1081,7 +1113,7 @@ export default function AdminSocietiesPage() {
   BillHistoryStep={BillHistoryStep}
 />
       {/* ── VIEW CREDENTIALS DIALOG ── */}
-      {viewCredsTarget && (
+      {viewCredsTarget && mounted && createPortal(
         <div
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center" }}
           onClick={() => { setViewCredsTarget(null); setViewCreds(null); }}
@@ -1168,7 +1200,8 @@ export default function AdminSocietiesPage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       {/* ── DELETE / MANAGE SOCIETY WIZARD (LOOP-05) ── */}
       {deleteTarget && (
@@ -1294,47 +1327,39 @@ function RowActions({ children }) {
 }
 
 /**
- * Admin credentials, hidden until asked for.
+ * Admin contact for the society. No password, because there is no longer a
+ * password to show.
  *
- * The password used to be rendered in plain text in every row, so opening this
- * page put every society's admin password on screen at once — in front of
- * whoever was walking past, and in any screenshot or screen-share of it. The
- * capability is unchanged; it now takes a deliberate click, and closes again.
+ * SEC-19 history: this cell rendered `credentials.plainPassword` — first inline
+ * on every row, then behind a Reveal/Copy pair. Hiding it behind a click made
+ * the screenshot problem smaller and the underlying one no smaller at all: the
+ * password was still stored in plaintext in Mongo, still shipped to this page
+ * in an API response, and still one Copy button from a WhatsApp message.
+ *
+ * Nobody needs to read an admin's password. The thing support actually needs is
+ * "get this admin back into their account", and that is the
+ * "Send Admin Setup Link" action in the row above — it rotates the password to
+ * a value no human ever sees, signs out their existing sessions, and emails
+ * them a 7-day link to choose a new one.
  */
 function CredentialsCell({ credentials }) {
-  const [shown, setShown] = useState(false);
   if (!credentials?.adminEmail) return <span style={{ color: "var(--fg-5)" }}>—</span>;
-  const password = credentials.plainPassword;
   return (
     <div style={{ display: "grid", gap: 3, minWidth: 180 }}>
       <div style={{ fontSize: 12, color: "var(--fg-3)", overflow: "hidden", textOverflow: "ellipsis" }}>
         {credentials.adminEmail}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-        <code style={{ fontFamily: "monospace", fontSize: 12, color: shown ? "var(--fg-2)" : "var(--fg-5)", letterSpacing: shown ? 0 : 2 }}>
-          {!password ? "—" : shown ? password : "••••••••"}
-        </code>
-        {password && (
-          <>
-            <button
-              onClick={() => setShown((v) => !v)}
-              style={credBtn}
-              title={shown ? "Hide password" : "Reveal password"}
-            >
-              {shown ? "Hide" : "Reveal"}
-            </button>
-            <button
-              onClick={() => {
-                navigator.clipboard?.writeText(password);
-                notify.success("Password copied");
-              }}
-              style={credBtn}
-              title="Copy password"
-            >
-              Copy
-            </button>
-          </>
-        )}
+        <button
+          onClick={() => {
+            navigator.clipboard?.writeText(credentials.adminEmail);
+            notify.success("Email copied");
+          }}
+          style={credBtn}
+          title="Copy admin email"
+        >
+          Copy email
+        </button>
       </div>
     </div>
   );

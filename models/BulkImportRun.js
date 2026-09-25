@@ -18,8 +18,24 @@ const BulkImportRunSchema = new mongoose.Schema(
         "COMPLETED",
         "FAILED",
         "ROLLED_BACK",
+        // SEC-20: the data is real and committed, but a post-transaction step
+        // that the society NEEDS in order to be usable did not finish — today
+        // that is RBAC role seeding and the admin's RoleAssignment, without
+        // which the admin cannot log in at all (the login route no longer
+        // accepts a bare root role string).
+        //
+        // Deliberately distinct from FAILED: nothing should be rolled back or
+        // retried wholesale. Exactly one idempotent repair step needs running,
+        // which is what repairDetail names.
+        "NEEDS_REPAIR",
       ],
       default: "VALIDATING",
+    },
+    // SEC-20: what NEEDS_REPAIR means for this run and how to fix it.
+    repairDetail: {
+      step: { type: String, default: null }, // e.g. "rbac-seeding"
+      reason: { type: String, default: null }, // the thrown message
+      repairedAt: { type: Date, default: null },
     },
     societyId: { type: mongoose.Schema.Types.ObjectId, ref: "Society" },
     stage: { type: String, default: "" }, // human label of current step

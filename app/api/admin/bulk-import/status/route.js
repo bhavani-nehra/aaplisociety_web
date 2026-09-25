@@ -30,6 +30,12 @@ export async function GET(request) {
     errors: run.errorMessages,
     startedAt: run.startedAt,
     finishedAt: run.finishedAt,
-    result: ["COMPLETED", "FAILED", "ROLLED_BACK"].includes(run.status) ? run.result : null,
+    // SEC-20: NEEDS_REPAIR is a terminal state with a real payload — the
+    // society, members and bills exist. Withholding `result` would leave the
+    // wizard showing a spinner over an import that has already finished.
+    result: ["COMPLETED", "FAILED", "ROLLED_BACK", "NEEDS_REPAIR"].includes(run.status)
+      ? run.result
+      : null,
+    repairDetail: run.repairDetail || null,
   });
 }

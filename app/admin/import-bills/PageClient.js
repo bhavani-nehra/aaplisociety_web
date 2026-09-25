@@ -181,14 +181,14 @@ export default function ImportBillsPage() {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h1>📥 Import Bills</h1>
+        <h1>Import Bills</h1>
         <p>Bulk import bills using Excel template with dynamic columns</p>
       </div>
       {/* Step 1: Upload */}
       {step === 1 && (
         <div className={styles.uploadSection}>
           <div className={styles.instructionsCard}>
-            <h3>📋 Instructions</h3>
+            <h3>Instructions</h3>
             <ul>
               <li>
                 Download the template with your current billing configuration
@@ -204,7 +204,7 @@ export default function ImportBillsPage() {
               onClick={downloadTemplate}
               className="btn btn-primary btn-lg"
             >
-              📥 Download Dynamic Template
+              Download Dynamic Template
             </button>
           </div>
           <div className={styles.uploadCard}>
@@ -223,8 +223,8 @@ export default function ImportBillsPage() {
               className="btn btn-success btn-lg"
             >
               {validateMutation.isPending
-                ? "🔄 Validating..."
-                : "✅ Upload & Preview"}
+                ? "Validating..."
+                : "Upload & Preview"}
             </button>
           </div>
         </div>
@@ -235,19 +235,19 @@ export default function ImportBillsPage() {
           <div className={styles.statsGrid}>
             <div className={styles.statCard} style={{ borderColor: "var(--success)" }}>
               <div className={styles.statNumber}>{preview.valid}</div>
-              <div className={styles.statLabel}>✅ Valid</div>
+              <div className={styles.statLabel}>Valid</div>
             </div>
             <div className={styles.statCard} style={{ borderColor: "var(--warning)" }}>
               <div className={styles.statNumber}>{preview.warnings}</div>
-              <div className={styles.statLabel}>⚠️ Warnings</div>
+              <div className={styles.statLabel}>Warnings</div>
             </div>
             <div className={styles.statCard} style={{ borderColor: "var(--danger)" }}>
               <div className={styles.statNumber}>{preview.errors}</div>
-              <div className={styles.statLabel}>❌ Errors</div>
+              <div className={styles.statLabel}>Errors</div>
             </div>
             <div className={styles.statCard} style={{ borderColor: "var(--warning)" }}>
               <div className={styles.statNumber}>{preview.duplicates}</div>
-              <div className={styles.statLabel}>🔁 Duplicates</div>
+              <div className={styles.statLabel}>Duplicates</div>
             </div>
           </div>
           {/* Errors */}
@@ -256,7 +256,7 @@ export default function ImportBillsPage() {
               className={styles.alertBox}
               style={{ background: "var(--danger-bg)", borderColor: "var(--danger)" }}
             >
-              <h4>❌ Errors Found ({preview.errors})</h4>
+              <h4>Errors Found ({preview.errors})</h4>
               <ul>
                 {preview.errorList?.slice(0, 10).map((e, i) => (
                   <li key={i}>
@@ -275,7 +275,7 @@ export default function ImportBillsPage() {
               className={styles.alertBox}
               style={{ background: "var(--warning-bg)", borderColor: "var(--warning)" }}
             >
-              <h4>🔁 Duplicate Bills ({preview.duplicates})</h4>
+              <h4>Duplicate Bills ({preview.duplicates})</h4>
               <p>These bills already exist in the database:</p>
               <ul>
                 {preview.duplicateList?.slice(0, 5).map((d, i) => (
@@ -288,7 +288,7 @@ export default function ImportBillsPage() {
           )}
           {/* Preview Table */}
           <div className={styles.tableCard}>
-            <h3>📊 Preview (First 20 rows)</h3>
+            <h3>Preview (First 20 rows)</h3>
             <div className={styles.tableWrapper}>
               <table className={styles.previewTable}>
                 <thead>
@@ -349,8 +349,8 @@ export default function ImportBillsPage() {
               className="btn btn-success btn-lg"
             >
               {confirmMutation.isPending
-                ? "⏳ Importing..."
-                : `✅ Confirm Import (${preview.valid} bills)`}
+                ? "Importing..."
+                : `Confirm Import (${preview.valid} bills)`}
             </button>
           </div>
         </div>
@@ -358,7 +358,7 @@ export default function ImportBillsPage() {
       {/* Step 3: Success */}
       {step === 3 && (
         <div className={styles.successSection}>
-          <div className={styles.successIcon}>🎉</div>
+          <div className={styles.successIcon}></div>
           <h2>Import Successful!</h2>
           <p>{preview?.valid} bills imported successfully</p>
           <div className={styles.successActions}>
@@ -366,7 +366,7 @@ export default function ImportBillsPage() {
               onClick={() => (window.location.href = "/admin/view-bills")}
               className="btn btn-primary btn-lg"
             >
-              📄 View Bills
+              View Bills
             </button>
             <button
               onClick={() => {

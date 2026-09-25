@@ -208,7 +208,7 @@ export default function ImportMembersPage() {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h1 className={styles.title}>📥 Import Members</h1>
+        <h1 className={styles.title}>Import Members</h1>
         <p className={styles.subtitle}>
           Upload Excel → Preview & Validate → Confirm Import
         </p>
@@ -219,14 +219,14 @@ export default function ImportMembersPage() {
           <div className={styles.progressHeader}>
             <h3>
               {uploadProgress.stage === "analyzing" &&
-                "📊 Analyzing Excel file..."}
+                "Analyzing Excel file..."}
               {uploadProgress.stage === "validating" &&
-                "✅ Running validations..."}
+                "Running validations..."}
               {uploadProgress.stage === "importing" &&
-                "📥 Importing members..."}
+                "Importing members..."}
               {uploadProgress.stage === "processing" &&
-                "⚙️ Creating accounts..."}
-              {uploadProgress.stage === "complete" && "✅ Complete!"}
+                "Creating accounts..."}
+              {uploadProgress.stage === "complete" && "Complete!"}
             </h3>
           </div>
           <div className={styles.progressBar}>
@@ -244,7 +244,7 @@ export default function ImportMembersPage() {
           {/* Validation Summary */}
           <div className={styles.validationSummary}>
             <div className={styles.summaryCard}>
-              <h3>📋 Validation Results</h3>
+              <h3>Validation Results</h3>
               <div className={styles.summaryStats}>
                 <div
                   className={styles.stat}
@@ -253,7 +253,7 @@ export default function ImportMembersPage() {
                   <span className={styles.statNumber}>
                     {previewData.validation.summary.valid}
                   </span>
-                  <span className={styles.statLabel}>✅ Valid</span>
+                  <span className={styles.statLabel}>Valid</span>
                 </div>
                 <div
                   className={styles.stat}
@@ -262,7 +262,7 @@ export default function ImportMembersPage() {
                   <span className={styles.statNumber}>
                     {previewData.validation.summary.errors}
                   </span>
-                  <span className={styles.statLabel}>❌ Errors</span>
+                  <span className={styles.statLabel}>Errors</span>
                 </div>
                 <div
                   className={styles.stat}
@@ -274,7 +274,7 @@ export default function ImportMembersPage() {
                   <span className={styles.statNumber}>
                     {previewData.validation.summary.duplicates}
                   </span>
-                  <span className={styles.statLabel}>⚪ Duplicates</span>
+                  <span className={styles.statLabel}>Duplicates</span>
                 </div>
                 <div
                   className={styles.stat}
@@ -283,39 +283,39 @@ export default function ImportMembersPage() {
                   <span className={styles.statNumber}>
                     {previewData.validation.summary.warnings}
                   </span>
-                  <span className={styles.statLabel}>⚠️ Warnings</span>
+                  <span className={styles.statLabel}>Warnings</span>
                 </div>
               </div>
               {!previewData.validation.summary.canImport && (
                 <div className={styles.errorBanner}>
-                  ❌ Cannot import: Fix all errors and duplicates first, then
+                  Cannot import: Fix all errors and duplicates first, then
                   re-upload
                 </div>
               )}
               {previewData.validation.summary.canImport && (
                 <div className={styles.successBanner}>
-                  ✅ All validations passed! Ready to import{" "}
+                  All validations passed! Ready to import{" "}
                   {previewData.validation.summary.valid} members
                 </div>
               )}
             </div>
             {/* Legend */}
             <div className={styles.legend}>
-              <h4>🎨 Color Guide:</h4>
+              <h4>Color Guide:</h4>
               <div className={styles.legendItems}>
                 <div className={styles.legendItem}>
                   <span
                     className={styles.legendColor}
                     style={{ backgroundColor: "var(--success-bg)" }}
                   ></span>
-                  <span>✅ Valid Data</span>
+                  <span>Valid Data</span>
                 </div>
                 <div className={styles.legendItem}>
                   <span
                     className={styles.legendColor}
                     style={{ backgroundColor: "var(--danger-bg)" }}
                   ></span>
-                  <span>❌ Error (missing/invalid)</span>
+                  <span>Error (missing/invalid)</span>
                 </div>
                 <div className={styles.legendItem}>
                   <span
@@ -325,14 +325,14 @@ export default function ImportMembersPage() {
                       border: "2px solid var(--danger)",
                     }}
                   ></span>
-                  <span>⚪ Duplicate (in DB or file)</span>
+                  <span>Duplicate (in DB or file)</span>
                 </div>
                 <div className={styles.legendItem}>
                   <span
                     className={styles.legendColor}
                     style={{ backgroundColor: "var(--warning-bg)" }}
                   ></span>
-                  <span>⚠️ Warning (optional field)</span>
+                  <span>Warning (optional field)</span>
                 </div>
               </div>
             </div>
@@ -393,7 +393,7 @@ export default function ImportMembersPage() {
                 setActiveSheet(0);
               }}
             >
-              ❌ Cancel
+              Cancel
             </button>
             <button
               className={styles.btnPrimary}
@@ -404,8 +404,8 @@ export default function ImportMembersPage() {
               }
             >
               {confirmMutation.isPending
-                ? "⏳ Importing..."
-                : `✅ Confirm Import (${previewData.validation.summary.valid} valid members)`}
+                ? "Importing..."
+                : `Confirm Import (${previewData.validation.summary.valid} valid members)`}
             </button>
           </div>
         </>
@@ -414,7 +414,7 @@ export default function ImportMembersPage() {
       {importResults && (
         <div className={styles.resultsCard}>
           <div className={styles.resultsHeader}>
-            <h2>✅ Import Successful!</h2>
+            <h2>Import Successful!</h2>
             <button
               className={styles.closeBtn}
               onClick={() => setImportResults(null)}
@@ -424,28 +424,28 @@ export default function ImportMembersPage() {
           </div>
           <div className={styles.statsGrid}>
             <div className={`${styles.statBox} ${styles.success}`}>
-              <div className={styles.statIcon}>✅</div>
+              <div className={styles.statIcon}></div>
               <div className={styles.statValue}>
                 {importResults.summary?.successful || 0}
               </div>
               <div className={styles.statLabel}>Successfully Imported</div>
             </div>
             <div className={`${styles.statBox} ${styles.warning}`}>
-              <div className={styles.statIcon}>⚠️</div>
+              <div className={styles.statIcon}></div>
               <div className={styles.statValue}>
                 {importResults.summary?.warnings || 0}
               </div>
               <div className={styles.statLabel}>Warnings</div>
             </div>
             <div className={`${styles.statBox} ${styles.error}`}>
-              <div className={styles.statIcon}>❌</div>
+              <div className={styles.statIcon}></div>
               <div className={styles.statValue}>
                 {importResults.summary?.failed || 0}
               </div>
               <div className={styles.statLabel}>Failed</div>
             </div>
             <div className={`${styles.statBox} ${styles.info}`}>
-              <div className={styles.statIcon}>📊</div>
+              <div className={styles.statIcon}></div>
               <div className={styles.statValue}>
                 {importResults.summary?.total || 0}
               </div>
@@ -454,15 +454,15 @@ export default function ImportMembersPage() {
           </div>
           {/* Detailed Checklist */}
           <div className={styles.checklist}>
-            <h3>📋 Import Checklist</h3>
+            <h3>Import Checklist</h3>
             <div className={styles.checklistItems}>
               <div className={styles.checklistItem}>
-                <span className={styles.checkIcon}>✅</span>
+                <span className={styles.checkIcon}></span>
                 <span>Basic member information imported</span>
               </div>
               {importResults.details?.ownerHistoryImported > 0 && (
                 <div className={styles.checklistItem}>
-                  <span className={styles.checkIcon}>✅</span>
+                  <span className={styles.checkIcon}></span>
                   <span>
                     {importResults.details.ownerHistoryImported} owner history
                     records imported
@@ -471,7 +471,7 @@ export default function ImportMembersPage() {
               )}
               {importResults.details?.tenantHistoryImported > 0 && (
                 <div className={styles.checklistItem}>
-                  <span className={styles.checkIcon}>✅</span>
+                  <span className={styles.checkIcon}></span>
                   <span>
                     {importResults.details.tenantHistoryImported} tenant history
                     records imported
@@ -480,7 +480,7 @@ export default function ImportMembersPage() {
               )}
               {importResults.details?.parkingSlotsImported > 0 && (
                 <div className={styles.checklistItem}>
-                  <span className={styles.checkIcon}>✅</span>
+                  <span className={styles.checkIcon}></span>
                   <span>
                     {importResults.details.parkingSlotsImported} parking slots
                     assigned
@@ -489,7 +489,7 @@ export default function ImportMembersPage() {
               )}
               {importResults.details?.familyMembersImported > 0 && (
                 <div className={styles.checklistItem}>
-                  <span className={styles.checkIcon}>✅</span>
+                  <span className={styles.checkIcon}></span>
                   <span>
                     {importResults.details.familyMembersImported} family members
                     added
@@ -498,7 +498,7 @@ export default function ImportMembersPage() {
               )}
               {importResults.details?.tenantsImported > 0 && (
                 <div className={styles.checklistItem}>
-                  <span className={styles.checkIcon}>✅</span>
+                  <span className={styles.checkIcon}></span>
                   <span>
                     {importResults.details.tenantsImported} current tenants
                     recorded
@@ -507,7 +507,7 @@ export default function ImportMembersPage() {
               )}
               {importResults.details?.usersCreated > 0 && (
                 <div className={styles.checklistItem}>
-                  <span className={styles.checkIcon}>✅</span>
+                  <span className={styles.checkIcon}></span>
                   <span>
                     {importResults.details.usersCreated} login accounts created
                   </span>
@@ -518,10 +518,10 @@ export default function ImportMembersPage() {
           {/* Warnings */}
           {importResults.warnings && importResults.warnings.length > 0 && (
             <div className={styles.warningsList}>
-              <h3>⚠️ Warnings ({importResults.warnings.length})</h3>
+              <h3>Warnings ({importResults.warnings.length})</h3>
               {importResults.warnings.map((warning, idx) => (
                 <div key={idx} className={styles.warningItem}>
-                  <span className={styles.warningIcon}>⚠️</span>
+                  <span className={styles.warningIcon}></span>
                   <div>
                     <strong>Row {warning.row}:</strong> {warning.message}
                   </div>
@@ -532,10 +532,10 @@ export default function ImportMembersPage() {
           {/* Errors */}
           {importResults.errors && importResults.errors.length > 0 && (
             <div className={styles.errorsList}>
-              <h3>❌ Errors ({importResults.errors.length})</h3>
+              <h3>Errors ({importResults.errors.length})</h3>
               {importResults.errors.map((error, idx) => (
                 <div key={idx} className={styles.errorItem}>
-                  <span className={styles.errorIcon}>❌</span>
+                  <span className={styles.errorIcon}></span>
                   <div>
                     <strong>Row {error.row}:</strong> {error.error}
                     {error.details && (
@@ -550,13 +550,13 @@ export default function ImportMembersPage() {
           {importResults.userCredentials &&
             importResults.userCredentials.length > 0 && (
               <div className={styles.credentialsSection}>
-                <h3>🔑 Login Credentials Generated</h3>
+                <h3>Login Credentials Generated</h3>
                 <p>Download the credentials file and distribute to members</p>
                 <button
                   onClick={downloadCredentials}
                   className={styles.downloadBtn}
                 >
-                  📥 Download Member Credentials (.xlsx)
+                  Download Member Credentials (.xlsx)
                 </button>
               </div>
             )}
@@ -566,7 +566,7 @@ export default function ImportMembersPage() {
       {!previewData && !importResults && (
         <div className={styles.uploadSection}>
           <div className={styles.instructionsCard}>
-            <h3>📝 Before You Start</h3>
+            <h3>Before You Start</h3>
             <ol className={styles.instructions}>
               <li>Download the enhanced template with multiple sheets</li>
               <li>Fill in member details across all relevant sheets</li>
@@ -580,7 +580,7 @@ export default function ImportMembersPage() {
               <li>Upload the completed file for preview</li>
             </ol>
             <button onClick={downloadTemplate} className={styles.templateBtn}>
-              📄 Download Enhanced Template
+              Download Enhanced Template
             </button>
           </div>
           <div
@@ -591,7 +591,7 @@ export default function ImportMembersPage() {
             onClick={() => fileInputRef.current?.click()}
             className={`${styles.dropzone} ${dragActive ? styles.dropzoneActive : ""}`}
           >
-            <div className={styles.dropzoneIcon}>📁</div>
+            <div className={styles.dropzoneIcon}></div>
             <h3>Drag & Drop Excel File Here</h3>
             <p>or click to browse</p>
             <p className={styles.fileFormat}>Supports: .xlsx files only</p>
@@ -609,32 +609,32 @@ export default function ImportMembersPage() {
           </div>
           <div className={styles.featuresGrid}>
             <div className={styles.featureCard}>
-              <div className={styles.featureIcon}>👤</div>
+              <div className={styles.featureIcon}></div>
               <h4>Owner Details</h4>
               <p>Full contact info and PAN (Aadhaar is no longer collected)</p>
             </div>
             <div className={styles.featureCard}>
-              <div className={styles.featureIcon}>📜</div>
+              <div className={styles.featureIcon}></div>
               <h4>Owner History</h4>
               <p>Previous ownership records</p>
             </div>
             <div className={styles.featureCard}>
-              <div className={styles.featureIcon}>🏠</div>
+              <div className={styles.featureIcon}></div>
               <h4>Tenant History</h4>
               <p>Past & current tenants</p>
             </div>
             <div className={styles.featureCard}>
-              <div className={styles.featureIcon}>👨‍👩‍👧‍👦</div>
+              <div className={styles.featureIcon}>‍</div>
               <h4>Family Members</h4>
               <p>Complete family details</p>
             </div>
             <div className={styles.featureCard}>
-              <div className={styles.featureIcon}>🚗</div>
+              <div className={styles.featureIcon}></div>
               <h4>Parking Slots</h4>
               <p>Assign parking spaces</p>
             </div>
             <div className={styles.featureCard}>
-              <div className={styles.featureIcon}>✅</div>
+              <div className={styles.featureIcon}></div>
               <h4>Auto Validation</h4>
               <p>Real-time error checking</p>
             </div>

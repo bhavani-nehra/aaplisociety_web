@@ -15,6 +15,7 @@
 // hand-typing a society with no spreadsheet at all shows up, rebuild it
 // then — don't resurrect this from history speculatively.
 
+import PulseLoader from "@/components/brand/PulseLoader";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { gsap } from "gsap";
@@ -22,7 +23,6 @@ import {
   ClipboardPaste,
   AlertTriangle,
   CheckCircle2,
-  Loader2,
   X,
   Download,
   Search,
@@ -59,6 +59,10 @@ export default function BulkImportWizard({ open, onClose, onImported, BillHistor
 
   const [submitting, setSubmitting] = useState(false);
   const [serverResult, setServerResult] = useState(null);
+  // SEC-20: state for the "Repair role setup" action shown when an import
+  // committed but its RBAC seeding did not finish.
+  const [repairing, setRepairing] = useState(false);
+  const [repairError, setRepairError] = useState(null);
   const [progress, setProgress] = useState(null);
   const [showBillHistory, setShowBillHistory] = useState(false);
   const [billHistoryDone, setBillHistoryDone] = useState(false);
@@ -310,7 +314,7 @@ export default function BulkImportWizard({ open, onClose, onImported, BillHistor
 
           {stage === "previewing" && (
             <div className={styles.centerState}>
-              <Loader2 className={styles.spin} size={22} />
+              <PulseLoader size={30} />
               <p>Checking every sheet — society details, all flats, every email against the database…</p>
             </div>
           )}
@@ -468,6 +472,63 @@ export default function BulkImportWizard({ open, onClose, onImported, BillHistor
           {/* Success */}
           {serverResult?.success && (
             <div className={styles.resultStack}>
+              {/* SEC-20: the society, members and bills are real, but role
+                  seeding did not finish — which means the admin cannot sign in
+                  at all. Shown ABOVE the success card, because an unqualified
+                  "Import Successful" over a society nobody can log into is the
+                  exact failure this whole change exists to stop. */}
+              {serverResult.rbacRepairNeeded && (
+                <div className={`${styles.resultCard} ${styles.resultCardWarn}`}>
+                  <div className={styles.resultTitle}>
+                    <AlertTriangle size={16} /> Role setup did not complete
+                  </div>
+                  <div className={styles.resultRows}>
+                    <div>
+                      The society, its members and its bills were created. But the admin
+                      <strong> cannot sign in yet</strong> — this society has no role setup.
+                    </div>
+                    {serverResult.rbacRepairReason && (
+                      <div className={styles.summaryLineWarn}>{serverResult.rbacRepairReason}</div>
+                    )}
+                    <div style={{ marginTop: 8 }}>
+                      <button
+                        className={styles.linkBtn}
+                        disabled={repairing}
+                        onClick={async () => {
+                          setRepairing(true);
+                          try {
+                            const res = await fetch("/api/admin/bulk-import/repair-rbac", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              credentials: "include",
+                              body: JSON.stringify({ importRunId: serverResult.importRunId }),
+                            });
+                            const data = await res.json();
+                            if (res.ok && data.success) {
+                              // Clear the banner rather than reload — the rest
+                              // of the result is still accurate.
+                              setServerResult((r) => ({ ...r, rbacRepairNeeded: false }));
+                            } else {
+                              setRepairError(data.error || "Repair failed");
+                            }
+                          } catch (err) {
+                            setRepairError(err.message);
+                          } finally {
+                            setRepairing(false);
+                          }
+                        }}
+                      >
+                        {repairing ? "Repairing…" : "Repair role setup"}
+                      </button>
+                      {repairError && (
+                        <div className={styles.summaryLineWarn} style={{ marginTop: 6 }}>
+                          {repairError}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className={`${styles.resultCard} ${styles.resultCardOk}`}>
                 <div className={styles.resultTitle}>
                   <CheckCircle2 size={16} /> Import Successful
@@ -509,10 +570,29 @@ export default function BulkImportWizard({ open, onClose, onImported, BillHistor
                       {serverResult.admin.note || "This email already had a login — no new password was created. They sign in as before; this society now appears in their profile picker."}
                     </div>
                   ) : (
+                    // SEC-19: this used to print the generated admin password
+                    // and call it the only copy. That display WAS the delivery
+                    // mechanism, which is why the plaintext existed. The admin
+                    // now receives the same setup link every new member gets
+                    // and picks their own password; the link below is a
+                    // fallback for when email delivery fails.
                     <div className={styles.credentialLine}>
-                      <strong>Password:</strong>
-                      <code className={styles.credentialCode}>{serverResult.admin?.password}</code>
-                      <span className={styles.credentialFlag}>Not emailed — copy this now, it isn't shown again.</span>
+                      <strong>Setup link:</strong>
+                      {serverResult.admin?.setCredentialsUrl ? (
+                        <>
+                          <button
+                            className={styles.linkBtn}
+                            onClick={() => navigator.clipboard.writeText(serverResult.admin.setCredentialsUrl)}
+                          >Copy link</button>
+                          <span className={styles.credentialFlag}>
+                            Emailed to them. Valid 7 days. Single use — don&apos;t post it in a group.
+                          </span>
+                        </>
+                      ) : (
+                        <span className={styles.credentialFlag}>
+                          Emailed to them. Valid 7 days.
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>

@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import notify from "@/lib/notify";
 
 // Mismatch values are canonical JSON of whole subdocuments — a full
@@ -185,6 +186,8 @@ function VerifyReport({ report, mismatches = [], mismatchCount = 0 }) {
 //         / Delete permanently.
 export default function DeleteWizard({ society, onClose, onDone }) {
   const [step, setStep] = useState(1);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const [downloaded, setDownloaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [verifyResult, setVerifyResult] = useState(null); // { ok, mismatches, mismatchCount }
@@ -515,7 +518,8 @@ export default function DeleteWizard({ society, onClose, onDone }) {
     opacity: busy ? 0.6 : 1,
   });
 
-  return (
+  if (!mounted) return null;
+  return createPortal(
     <div
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center" }}
       onClick={onClose}
@@ -854,6 +858,7 @@ export default function DeleteWizard({ society, onClose, onDone }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

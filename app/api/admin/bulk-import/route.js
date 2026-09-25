@@ -33,6 +33,15 @@ import BulkImportRun from "@/models/BulkImportRun";
 import BulkImportPreview from "@/models/BulkImportPreview";
 import EmailOutbox from "@/models/EmailOutbox";
 import TenantRequest from "@/models/TenantRequest";
+// Plan 02 §17 - the optional commercial and amenity sheets.
+import CommercialCategory from "@/models/CommercialCategory";
+import Shop from "@/models/Shop";
+import BusinessProfile from "@/models/BusinessProfile";
+import { Amenity, AmenityCategory } from "@/models/amenities";
+// SEC-20: read back after seeding to assert the society is actually usable,
+// rather than trusting that two awaited calls not throwing means they worked.
+import Role from "@/models/Role";
+import RoleAssignment from "@/models/RoleAssignment";
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import { validateAdminRequest } from "@/lib/admin-middleware";
@@ -206,8 +215,46 @@ export async function POST(request) {
     );
   }
 
+  // SEC-26: Master Prompt 2 §19 — "if even ONE row is invalid, DO NOT IMPORT
+  // ANYTHING". 900 rows with 40 errors must import 0, not 860.
+  //
+  // That rule already holds: /preview only mints a previewId when
+  // `runPreviewChecks()` returns ok, so a failing workbook produces no token.
+  // But it held in a DIFFERENT REQUEST from the one that performs the write,
+  // and the write side never re-checked — the guarantee was "no valid token
+  // exists", not "this token is valid". A previewId lives 30 minutes.
+  //
+  // `ok === false` is the assert. `ok == null` is a preview written before this
+  // field existed: it could only have been created under the old `if
+  // (result.ok)` gate, so it is treated as passing rather than locking out an
+  // admin mid-import on a deploy boundary.
+  if (preview.ok === false) {
+    const failedRows = (preview.rowResults || []).filter((r) => r?.status === "error");
+    return fail(
+      {
+        error:
+          `This workbook has ${failedRows.length} row${failedRows.length === 1 ? "" : "s"} that failed validation. ` +
+          "Nothing was imported. Fix the rows listed below, re-upload, and review the preview again.",
+        code: "PREVIEW_HAS_ERRORS",
+        errorCount: failedRows.length,
+        rows: failedRows.slice(0, 50),
+      },
+      422,
+    );
+  }
+
   const societyPayload = preview.societyPayload;
   const validMembers = preview.validMembers;
+  // Plan 02 §17. Defaulted, so a preview taken before these sheets existed
+  // (the 30-minute TTL means one can still be in flight) commits as it always
+  // did rather than throwing on a missing field.
+  const optional = {
+    commercialCategories: [],
+    shops: [],
+    businesses: [],
+    amenities: [],
+    ...(preview.optional || {}),
+  };
   const warnings = preview.warnings || [];
   const existingMemberUsersByEmail = new Map(
     (preview.existingMemberEmailMap || []).map(([email, u]) => [
@@ -277,6 +324,22 @@ export async function POST(request) {
   const memberCredentials = [];
   const memberCreateErrors = [];
   let membersCreated = 0;
+  // Plan 02 §17 - what the optional sheets produced, reported alongside
+  // membersCreated so the final report covers everything the import wrote.
+  const counts = {
+    commercialCategories: 0,
+    shops: 0,
+    businesses: 0,
+    amenities: 0,
+    amenityCategories: 0,
+  };
+  // flatNo -> Member._id, so a shop can name the flat whose owner owns it.
+  const memberIdByFlat = new Map();
+  // shopNo -> Shop._id, so a business can name the unit it trades from.
+  const shopIdByNo = new Map();
+  // shopNo -> the Member._id of the flat whose owner owns that shop, which a
+  // BusinessProfile requires.
+  const shopOwnerMemberByNo = new Map();
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
@@ -293,10 +356,11 @@ export async function POST(request) {
             config: societyPayload.config,
             credentials: {
               adminEmail: societyPayload.email,
-              // No new password to show when reusing an existing account —
-              // their existing login already works for this society via the
-              // RoleAssignment created below.
-              plainPassword: multiSocietyAdminUser ? null : plainPassword,
+              // SEC-19: `plainPassword` is no longer written. The field is
+              // deprecated on the schema (select:false) and is being unset by
+              // scripts/security/purge-plain-passwords.js. The admin receives a
+              // setup link by email — see the onboarding outbox below — and
+              // chooses their own password; nobody stores or reads it.
             },
             subscription: { status: "Trial", startDate: new Date() },
             isDeleted: false,
@@ -489,6 +553,7 @@ export async function POST(request) {
           });
         }
         membersCreated++;
+        memberIdByFlat.set(String(memberData.flatNo).trim(), member._id);
       }
 
       const headsToCreate = societyPayload.config.charges
@@ -509,6 +574,183 @@ export async function POST(request) {
         warnings.push(
           "No billing heads created — all charge values were 0 in the Society sheet.",
         );
+      }
+
+      // ── Plan 02 §17: the optional commercial and amenity sheets ──────────
+      //
+      // Inside the same transaction as everything above. A society that
+      // imported its flats but silently lost its shops would look successful
+      // and be wrong, and the admin would not find out until somebody went
+      // looking for a shop.
+      //
+      // Order matters: categories first, because shops and businesses
+      // reference them by name.
+      const categoryIdByName = new Map();
+      if (optional.commercialCategories.length > 0) {
+        const created = await CommercialCategory.create(
+          optional.commercialCategories.map((c, i) => ({
+            scope: "SOCIETY",
+            societyId: society._id,
+            name: c.name,
+            slug: c.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+            sortOrder: c.sortOrder ?? (i + 1) * 10,
+            isActive: c.isActive,
+            createdBy: societyAdminUser?._id,
+          })),
+          { session, ordered: true },
+        );
+        created.forEach((c) => categoryIdByName.set(c.name.toLowerCase(), c._id));
+        counts.commercialCategories = created.length;
+      }
+
+      if (optional.shops.length > 0) {
+        const created = await Shop.create(
+          optional.shops.map((sh) => ({
+            societyId: society._id,
+            shopNo: sh.shopNo,
+            wing: sh.wing || null,
+            floor: sh.floor ?? 0,
+            unitKind: sh.unitKind || "Shop",
+            ownerName: sh.ownerName,
+            ownerPhone: sh.ownerPhone || null,
+            ownerEmail: sh.ownerEmail || null,
+            // A flat link is a REFERENCE, not a reclassification: models/Shop.js
+            // is explicit that setting ownerMemberId writes nothing back to
+            // that Member. A resident who also owns a shop keeps one flat
+            // record and one shop record, correctly separate.
+            ownerMemberId: sh.ownerFlatNo
+              ? memberIdByFlat.get(String(sh.ownerFlatNo).trim()) || null
+              : null,
+            areaSqft: sh.areaSqft ?? null,
+            occupancyType: sh.occupancyType || "Owner-Occupied",
+            tenantName: sh.tenantName || null,
+            tenantPhone: sh.tenantPhone || null,
+            leaseStartDate: sh.leaseStartDate,
+            leaseEndDate: sh.leaseEndDate,
+            tradeName: sh.tradeName || null,
+            categoryId: sh.categoryName
+              ? categoryIdByName.get(sh.categoryName.toLowerCase()) || null
+              : null,
+            gstin: sh.gstin || null,
+            importRunId,
+          })),
+          { session, ordered: true },
+        );
+        created.forEach((sh) => shopIdByNo.set(sh.shopNo, sh._id));
+        // BusinessProfile.memberId is required - a business belongs to the
+        // person who runs it, not only to the unit it trades from - so the
+        // owning flat is carried forward from the shop that names it.
+        created.forEach((sh) => {
+          if (sh.ownerMemberId) shopOwnerMemberByNo.set(sh.shopNo, sh.ownerMemberId);
+        });
+        counts.shops = created.length;
+      }
+
+      if (optional.businesses.length > 0) {
+        // models/BusinessProfile.js carries NO shopId and is indexed
+        // { societyId, memberId } UNIQUE - it is one profile per member, not
+        // per unit. So a member who owns two shops gets one business profile,
+        // and a second row for them would abort this whole transaction on a
+        // duplicate key. Deduped here, with the dropped row reported.
+        const claimedByMember = new Set();
+        const rows = optional.businesses
+          .map((b) => {
+            const shopId = shopIdByNo.get(b.shopNo);
+            // The sheet's fk rule already refused an unknown shop at preview,
+            // so this only skips a row that somehow reached here without one
+            // rather than throwing away the whole import.
+            if (!shopId) return null;
+            // A BusinessProfile requires the member who runs it. A shop owned
+            // by an outside party has no flat to name, so the business record
+            // cannot be created - said out loud in the report rather than
+            // dropped silently, because the admin filled that row in and will
+            // otherwise assume it landed.
+            const memberId = shopOwnerMemberByNo.get(b.shopNo);
+            if (!memberId) {
+              warnings.push(
+                `Business "${b.tradeName}" was not created: shop ${b.shopNo} is not linked to a flat, and a business record has to name the member who runs it. Set "Owner's Flat No" on the Shops sheet and add it in the app.`,
+              );
+              return null;
+            }
+            const key = String(memberId);
+            if (claimedByMember.has(key)) {
+              warnings.push(
+                `Business "${b.tradeName}" (shop ${b.shopNo}) was not created: this flat already has a business profile, and the system keeps one per member. Add the second business in the app.`,
+              );
+              return null;
+            }
+            claimedByMember.add(key);
+            return {
+              societyId: society._id,
+              memberId,
+              tradeName: b.tradeName,
+              legalName: b.legalName || undefined,
+              categoryId: b.categoryName
+                ? categoryIdByName.get(b.categoryName.toLowerCase()) || null
+                : null,
+              description: b.description || undefined,
+              phone: b.phone || undefined,
+              whatsapp: b.whatsapp || undefined,
+              email: b.email || undefined,
+              gstin: b.gstin || undefined,
+              licenseNumber: b.licenseNumber || undefined,
+              hours: b.hours,
+              importRunId,
+            };
+          })
+          .filter(Boolean);
+        if (rows.length > 0) {
+          const created = await BusinessProfile.create(rows, { session, ordered: true });
+          counts.businesses = created.length;
+        }
+      }
+
+      if (optional.amenities.length > 0) {
+        // Amenity.categoryId is required, so each distinct category name on the
+        // sheet becomes a category. Creating them here rather than asking the
+        // admin to pre-declare them keeps the amenities sheet usable on its own.
+        const amenityCatIdByName = new Map();
+        const distinct = [...new Set(optional.amenities.map((a) => a.categoryName))];
+        const createdCats = await AmenityCategory.create(
+          distinct.map((name, i) => ({
+            societyId: society._id,
+            name,
+            displayOrder: (i + 1) * 10,
+            createdBy: societyAdminUser?._id,
+          })),
+          { session, ordered: true },
+        );
+        createdCats.forEach((c) => amenityCatIdByName.set(c.name.toLowerCase(), c._id));
+
+        const created = await Amenity.create(
+          optional.amenities.map((a, i) => ({
+            societyId: society._id,
+            categoryId: amenityCatIdByName.get(a.categoryName.toLowerCase()),
+            name: a.name,
+            description: a.description || undefined,
+            location: a.location || undefined,
+            status: a.status || "OPEN",
+            openingTime: a.openingTime || "06:00",
+            closingTime: a.closingTime || "22:00",
+            displayOrder: (i + 1) * 10,
+            attendanceMode: a.attendanceMode || "NONE",
+            access: a.audience ? { audience: a.audience } : undefined,
+            // Blank max occupancy means unlimited, which is the model default;
+            // a number switches it off.
+            capacity:
+              a.maxOccupancy == null
+                ? undefined
+                : { unlimited: false, maxOccupancy: a.maxOccupancy },
+            contactPerson:
+              a.contactName || a.contactPhone
+                ? { name: a.contactName || undefined, phone: a.contactPhone || undefined }
+                : undefined,
+            importRunId,
+          })),
+          { session, ordered: true },
+        );
+        counts.amenities = created.length;
+        counts.amenityCategories = createdCats.length;
       }
     });
   } catch (err) {
@@ -531,19 +773,57 @@ export async function POST(request) {
   // just created could never log in. Deliberately AFTER the transaction
   // commits (Role/RoleAssignment aren't part of it, and reading a Role inside
   // an uncommitted session would race the write).
+  // SEC-20: this block used to be two `.catch(console.error)` calls.
+  //
+  // Running it AFTER the transaction is correct and the comment above explains
+  // why. Swallowing its failure was not. If either call threw, the import
+  // reported success and the society existed with zero roles and an Admin who
+  // could not log in — because the login route no longer accepts a bare root
+  // role string, so an account with no RoleAssignment fails at "no active
+  // society profiles". The only trace was one line in a server log.
+  //
+  // Now: the outcome is checked, asserted, and recorded on the run so it can be
+  // repaired. Both functions are idempotent, so the repair is a plain re-run.
+  let rbacRepair = null;
   if (societyAdminUser) {
-    await seedAllRoleTemplatesForSociety(society._id, { actorId: societyAdminUser._id }).catch(
-      (err) => {
-        console.error("[bulk-import] seedAllRoleTemplatesForSociety failed:", err);
-      },
-    );
-    await ensureAdminAssignment({
-      userId: societyAdminUser._id,
-      societyId: society._id,
-      legacyRole: "Admin",
-    }).catch((err) => {
-      console.error("[bulk-import] ensureAdminAssignment failed:", err);
-    });
+    try {
+      await seedAllRoleTemplatesForSociety(society._id, { actorId: societyAdminUser._id });
+      await ensureAdminAssignment({
+        userId: societyAdminUser._id,
+        societyId: society._id,
+        legacyRole: "Admin",
+      });
+
+      // Neither function throwing is not the same as the society being usable.
+      // Assert the two facts the admin's next login actually depends on.
+      const [roleCount, adminAssignment] = await Promise.all([
+        Role.countDocuments({ societyId: society._id }),
+        RoleAssignment.findOne({
+          societyId: String(society._id),
+          userId: societyAdminUser._id,
+          status: "active",
+        }).lean(),
+      ]);
+      if (roleCount === 0) {
+        rbacRepair = "Role templates were not created for this society.";
+      } else if (!adminAssignment) {
+        rbacRepair = "The society admin has no active RoleAssignment and cannot sign in.";
+      }
+    } catch (err) {
+      rbacRepair = err?.message || String(err);
+    }
+
+    if (rbacRepair) {
+      console.error("[bulk-import] RBAC setup incomplete:", rbacRepair);
+      await markRun(importRunId, {
+        status: "NEEDS_REPAIR",
+        stage: "RBAC setup incomplete — admin cannot sign in until repaired",
+        repairDetail: { step: "rbac-seeding", reason: rbacRepair, repairedAt: null },
+      });
+      warnings.push(
+        `Role setup did not complete: ${rbacRepair} The society and its members were created, but the admin cannot sign in until this is repaired. Use "Repair role setup" on this import.`,
+      );
+    }
   }
   await markRun(importRunId, {
     status: "FINALIZING",
@@ -716,6 +996,9 @@ export async function POST(request) {
   // know a new flat/society just appeared under their existing login. Same
   // outbox, a much shorter email, no setup link since they already have one.
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  // Set below when a brand-new society admin account was created, so the
+  // response can hand the wizard a link to show instead of a password.
+  let adminSetCredentialsUrl = null;
   const notifyDocs = [];
   for (const cred of memberCredentials) {
     if (cred.isNewUser || !cred.email || !cred.userId) continue;
@@ -736,6 +1019,34 @@ export async function POST(request) {
       to: societyPayload.email,
       subject: `${societyPayload.societyName} added to your account`,
       html: `<p>Hi ${societyPayload.fullName || ""},</p><p>You've been made Admin of <strong>${societyPayload.societyName}</strong> using your existing login. Sign in as usual and pick it from your profile list.</p><p><a href="${appUrl}/auth/login">${appUrl}/auth/login</a></p>`,
+    });
+  }
+
+  // SEC-19: a BRAND-NEW society admin previously received no email at all —
+  // their password was generated here and printed in the import wizard, and
+  // that display was the entire delivery mechanism. Now that the password is
+  // never returned, the admin needs the same setup link every new member
+  // already gets, or the import would create a society nobody can log into.
+  if (!multiSocietyAdminUser && societyPayload.email && societyAdminUser?._id) {
+    const adminToken = signToken(
+      { userId: String(societyAdminUser._id), purpose: "onboarding" },
+      { expiresIn: "7d" },
+    );
+    adminSetCredentialsUrl = `${appUrl}/onboarding/set-credentials?token=${adminToken}`;
+    outboxDocs.push({
+      importRunId,
+      userId: societyAdminUser._id,
+      type: "onboarding",
+      to: societyPayload.email,
+      subject: `Set up your admin account — ${societyPayload.societyName}`,
+      html: onboardingEmailHtml({
+        memberName: societyPayload.fullName || "Admin",
+        societyName: societyPayload.societyName,
+        societyAddress: societyPayload.address || "",
+        unitKind: "",
+        unitLabel: "",
+        setCredentialsUrl: adminSetCredentialsUrl,
+      }),
     });
   }
   outboxDocs.push(...notifyDocs);
@@ -776,6 +1087,11 @@ export async function POST(request) {
   const result = {
     success: true,
     importRunId,
+    // SEC-20: true when role seeding did not complete. The society, members and
+    // bills are real — but the admin cannot sign in until this is repaired, so
+    // the wizard must say so rather than showing an unqualified success.
+    rbacRepairNeeded: Boolean(rbacRepair),
+    rbacRepairReason: rbacRepair || null,
     society: {
       id: society._id,
       name: society.name,
@@ -787,7 +1103,10 @@ export async function POST(request) {
     admin: {
       name: societyPayload.fullName,
       email: societyPayload.email,
-      password: multiSocietyAdminUser ? null : plainPassword,
+      // SEC-19: the generated password is never returned. It is hashed, and the
+      // admin gets a setup link by email like every other new account. The
+      // wizard shows the link, not a password.
+      setCredentialsUrl: adminSetCredentialsUrl,
       reusedExistingAccount: !!multiSocietyAdminUser,
       note: multiSocietyAdminUser
         ? "This email already had a login. No new password was created — they sign in as before and this society now appears in their profile picker."
@@ -798,6 +1117,12 @@ export async function POST(request) {
     memberCredentials,
     onboardingEmailErrors,
     totalMemberRows: validMembers.length,
+    // Plan 02 §17
+    commercialCategoriesCreated: counts.commercialCategories,
+    shopsCreated: counts.shops,
+    businessesCreated: counts.businesses,
+    amenitiesCreated: counts.amenities,
+    amenityCategoriesCreated: counts.amenityCategories,
     billingHeadsCreated: billingHeads.length,
     billsGenerated,
     billPeriod,
@@ -805,9 +1130,14 @@ export async function POST(request) {
     warnings,
   };
   await cache.del("import:taken-emails");
+  // SEC-20: COMPLETED would overwrite the NEEDS_REPAIR set above and hide the
+  // one thing that stops this society being usable. An import whose RBAC setup
+  // did not finish is not complete, however many members it created.
   await markRun(importRunId, {
-    status: "COMPLETED",
-    stage: "Done",
+    status: rbacRepair ? "NEEDS_REPAIR" : "COMPLETED",
+    stage: rbacRepair
+      ? "RBAC setup incomplete — admin cannot sign in until repaired"
+      : "Done",
     processedCount: validMembers.length,
     result,
     finishedAt: new Date(),

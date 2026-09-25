@@ -13,6 +13,7 @@
 // the action for the thing that is blocking it.
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import notify from "@/lib/notify";
@@ -320,7 +321,10 @@ function SocietyFlow({ row, open, onToggle, onOpen, onWaive }) {
 function WaiveDialog({ society, busy, onClose, onSubmit }) {
   const [reason, setReason] = useState("");
   const enough = reason.trim().length >= 20;
-  return (
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+  return createPortal(
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 70, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "min(520px, 100%)", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 14, padding: 20 }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: "var(--fg-1)" }}>Waive the handover</div>
@@ -350,6 +354,7 @@ function WaiveDialog({ society, busy, onClose, onSubmit }) {
           </Btn>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

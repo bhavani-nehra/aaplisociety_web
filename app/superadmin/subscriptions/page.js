@@ -6,7 +6,8 @@
 // /api/admin/subscriptions/:id, which owns the multi-field consistency a
 // payment requires.
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import notify from "@/lib/notify";
@@ -28,7 +29,17 @@ const FILTERS = [
   { id: "unpriced", label: "No plan price" },
 ];
 
+// useSearchParams() below needs a Suspense boundary above it, or client-side
+// navigation to this page throws Next's missing-suspense error overlay.
 export default function SubscriptionsPage() {
+  return (
+    <Suspense fallback={null}>
+      <SubscriptionsPageInner />
+    </Suspense>
+  );
+}
+
+function SubscriptionsPageInner() {
   const router = useRouter();
   const params = useSearchParams();
   const queryClient = useQueryClient();
@@ -269,8 +280,11 @@ function ManagePanel({ society, prices, catalogue = [], busy, onClose, onAct }) 
   const [method, setMethod] = useState("");
   const [txnId, setTxnId] = useState("");
   const [days, setDays] = useState(14);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
 
-  return (
+  return createPortal(
     <div
       onClick={onClose}
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 60, display: "flex", justifyContent: "flex-end" }}
@@ -439,7 +453,8 @@ function ManagePanel({ society, prices, catalogue = [], busy, onClose, onAct }) 
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

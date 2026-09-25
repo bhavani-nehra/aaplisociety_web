@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import notify from "@/lib/notify";
 import {
@@ -44,6 +45,8 @@ export default function SuperAdminTicketsPage() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterCategory, setFilterCategory] = useState("all");
   const [selected, setSelected] = useState(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const [statusDraft, setStatusDraft] = useState("");
   const [noteDraft, setNoteDraft] = useState("");
 
@@ -155,7 +158,7 @@ export default function SuperAdminTicketsPage() {
         </div>
       )}
 
-      {selected && (
+      {selected && mounted && createPortal(
         <div
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}
           onClick={() => setSelected(null)}
@@ -181,7 +184,8 @@ export default function SuperAdminTicketsPage() {
               />
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -297,7 +301,7 @@ function TicketDetail({ ticket, statusDraft, onStatusDraft, noteDraft, onNoteDra
         <button
           onClick={onSave}
           disabled={saving || (statusDraft === ticket.status && !noteDraft.trim())}
-          style={{ padding: "0.6rem 1.5rem", background: "var(--primary)", color: "#fff", borderRadius: 6, border: "none", cursor: "pointer", fontWeight: 600 }}
+          style={{ padding: "0.6rem 1.5rem", background: "var(--primary)", color: "var(--on-solid)", borderRadius: 6, border: "none", cursor: "pointer", fontWeight: 600 }}
         >
           {saving ? "Saving…" : "Save"}
         </button>
@@ -404,7 +408,7 @@ function TakeoverControl({ ticketId }) {
             href={`/superadmin/takeover/${latest._id}`}
             target="_blank"
             rel="noreferrer"
-            style={{ padding: "0.5rem 1rem", borderRadius: 6, background: "var(--primary)", color: "#fff", fontWeight: 700, fontSize: 13, textDecoration: "none" }}
+            style={{ padding: "0.5rem 1rem", borderRadius: 6, background: "var(--primary)", color: "var(--on-solid)", fontWeight: 700, fontSize: 13, textDecoration: "none" }}
           >
             Open dashboard ↗
           </a>
@@ -431,7 +435,7 @@ function TakeoverControl({ ticketId }) {
           <button
             onClick={() => request.mutate()}
             disabled={request.isPending}
-            style={{ padding: "0.5rem 1rem", borderRadius: 6, border: "none", background: "var(--primary)", color: "#fff", fontWeight: 700, cursor: "pointer", fontSize: 13 }}
+            style={{ padding: "0.5rem 1rem", borderRadius: 6, border: "none", background: "var(--primary)", color: "var(--on-solid)", fontWeight: 700, cursor: "pointer", fontSize: 13 }}
           >
             {request.isPending ? "Requesting…" : "Request takeover"}
           </button>

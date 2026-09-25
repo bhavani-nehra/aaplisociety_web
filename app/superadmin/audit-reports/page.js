@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import notify from "@/lib/notify";
 const MONTH_NAMES = [
@@ -37,6 +38,8 @@ async function adminFetch(url, opts = {}) {
 export default function SuperAdminAuditReportsPage() {
   const qc = useQueryClient();
   const [selected, setSelected] = useState(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const [reviewNotes, setReviewNotes] = useState("");
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -266,7 +269,7 @@ export default function SuperAdminAuditReportsPage() {
         </div>
       )}
       {/* Detail modal */}
-      {selected && (
+      {selected && mounted && createPortal(
         <div
           style={{
             position: "fixed",
@@ -393,7 +396,7 @@ export default function SuperAdminAuditReportsPage() {
                 style={{
                   padding: "0.6rem 1.5rem",
                   background: "var(--success)",
-                  color: "#fff",
+                  color: "var(--on-solid)",
                   borderRadius: 6,
                   border: "none",
                   cursor: "pointer",
@@ -414,7 +417,7 @@ export default function SuperAdminAuditReportsPage() {
                 style={{
                   padding: "0.6rem 1.5rem",
                   background: "var(--danger)",
-                  color: "#fff",
+                  color: "var(--on-solid)",
                   borderRadius: 6,
                   border: "none",
                   cursor: "pointer",
@@ -454,7 +457,8 @@ export default function SuperAdminAuditReportsPage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -1,25 +1,32 @@
 "use client";
 import { useState, useEffect } from "react";
-import styles from "@/styles/MyComplaints.module.css";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  PageHeader, Card, Btn, Icon, Pill, RevampSkeleton, EmptyState, Toast,
+} from "@/components/revamp";
+
 const STATUS_CONFIG = {
-  PENDING: { label: "Pending", cls: "yellow" },
-  APPROVED: { label: "Approved", cls: "green" },
-  REJECTED: { label: "Rejected", cls: "red" },
-  CLOSED: { label: "Closed", cls: "gray" },
-  EXPIRED: { label: "Expired", cls: "gray" },
+  PENDING: { label: "Pending", tone: "warning" },
+  APPROVED: { label: "Approved", tone: "paid" },
+  REJECTED: { label: "Rejected", tone: "unpaid" },
+  CLOSED: { label: "Closed", tone: "neutral" },
+  EXPIRED: { label: "Expired", tone: "neutral" },
 };
+
 export default function MyComplaintsPage() {
+  const router = useRouter();
   const [complaints, setComplaints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [replyText, setReplyText] = useState({});
   const [replying, setReplying] = useState({});
   const [toast, setToast] = useState(null);
   const [expanded, setExpanded] = useState({});
-  const showToast = (msg, type = "success") => {
+
+  const showToast = (msg, type = "ok") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 4000);
   };
+
   const fetchMyComplaints = async () => {
     setLoading(true);
     try {
@@ -30,13 +37,15 @@ export default function MyComplaintsPage() {
       setLoading(false);
     }
   };
+
   useEffect(() => {
     fetchMyComplaints();
   }, []);
+
   const handleReply = async (complaintId) => {
     const message = replyText[complaintId]?.trim();
     if (!message || message.length < 10) {
-      return showToast("Reply must be at least 10 characters", "error");
+      return showToast("Reply must be at least 10 characters", "err");
     }
     setReplying({ ...replying, [complaintId]: true });
     try {
@@ -52,43 +61,40 @@ export default function MyComplaintsPage() {
       setReplyText({ ...replyText, [complaintId]: "" });
       fetchMyComplaints();
     } catch (err) {
-      showToast(err.message, "error");
+      showToast(err.message, "err");
     } finally {
       setReplying({ ...replying, [complaintId]: false });
     }
   };
+
   return (
-    <div className={styles.page}>
-      {toast && (
-        <div className={`${styles.toast} ${styles[toast.type]}`}>
-          {toast.msg}
-        </div>
-      )}
-      <div className={styles.topBar}>
-        <div>
-          <h1>My Complaints</h1>
-          <p>Track your submitted complaints and appeals</p>
-        </div>
-        <Link href="/member/complaints/new" className={styles.newBtn}>
-          + New
-        </Link>
-      </div>
+    <div style={{ maxWidth: 900, margin: "0 auto" }}>
+      <PageHeader
+        eyebrow={<><Icon name="message-square" size={11} /> Community</>}
+        title="My Complaints"
+        sub="Track your submitted complaints and appeals"
+        right={
+          <Btn variant="primary" icon="plus" onClick={() => router.push("/member/complaints/new")}>
+            New
+          </Btn>
+        }
+      />
+
       {loading ? (
-        <div className={styles.loading}>
-          {[1, 2, 3].map((i) => (
-            <div key={i} className={styles.skeleton} />
-          ))}
+        <div style={{ display: "grid", gap: 14 }}>
+          {[1, 2, 3].map((i) => <RevampSkeleton key={i} h={120} />)}
         </div>
       ) : complaints.length === 0 ? (
-        <div className={styles.empty}>
-          <div className={styles.emptyIcon}>📋</div>
-          <p>You have not submitted any complaints yet.</p>
-          <Link href="/member/complaints/new" className={styles.newBtn}>
-            Submit First Complaint
-          </Link>
-        </div>
+        <Card>
+          <EmptyState icon="inbox" title="No complaints yet" sub="You have not submitted any complaints yet." />
+          <div style={{ textAlign: "center", marginTop: 4 }}>
+            <Btn variant="primary" icon="plus" onClick={() => router.push("/member/complaints/new")}>
+              Submit First Complaint
+            </Btn>
+          </div>
+        </Card>
       ) : (
-        <div className={styles.list}>
+        <div style={{ display: "grid", gap: 14 }}>
           {complaints.map((c) => {
             const cfg = STATUS_CONFIG[c.status] || STATUS_CONFIG.PENDING;
             const isRejected = c.status === "REJECTED";
@@ -96,101 +102,112 @@ export default function MyComplaintsPage() {
               (r) => r.authorRole === "Member",
             );
             const canReply = isRejected && memberReplies.length < 3;
+            const isExpanded = !!expanded[c._id];
             return (
-              <div key={c._id} className={styles.card}>
-                <div className={styles.cardHeader}>
-                  <div>
-                    <span className={`${styles.badge} ${styles[cfg.cls]}`}>
-                      {cfg.label}
-                    </span>
-                    <span className={styles.category}>{c.category}</span>
+              <Card key={c._id} style={{ display: "grid", gap: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <Pill tone={cfg.tone}>{cfg.label}</Pill>
+                    <span style={{ fontSize: 12, color: "var(--r-fg-4)" }}>{c.category}</span>
                   </div>
-                  <span className={styles.date}>
+                  <span style={{ fontSize: 11.5, color: "var(--r-fg-4)", whiteSpace: "nowrap" }}>
                     {new Date(c.createdAt).toLocaleDateString("en-IN")}
                   </span>
                 </div>
-                <h3 className={styles.title}>{c.title}</h3>
-                <p className={styles.desc}>{c.description}</p>
-                <p className={styles.anonName}>
-                  Posted as: <strong>{c.anonymousName}</strong>
+
+                <div style={{ fontSize: 14.5, fontWeight: 700, color: "var(--r-fg-1)" }}>{c.title}</div>
+                <p style={{ fontSize: 13, color: "var(--r-fg-3)", lineHeight: 1.5, margin: 0 }}>{c.description}</p>
+                <p style={{ fontSize: 12, color: "var(--r-fg-4)", margin: 0 }}>
+                  Posted as: <strong style={{ color: "var(--r-fg-2)" }}>{c.anonymousName}</strong>
                 </p>
-                {/* Rejection reason */}
+
                 {isRejected && c.adminRejectionReason && (
-                  <div className={styles.rejectionBox}>
-                    <strong>Admin's Reason:</strong>
-                    <p>{c.adminRejectionReason}</p>
+                  <div style={{
+                    padding: "10px 12px", borderRadius: 8,
+                    background: "var(--r-danger-soft)", color: "var(--r-danger)", fontSize: 12.5,
+                  }}>
+                    <strong>Admin&apos;s Reason:</strong>
+                    <p style={{ margin: "4px 0 0" }}>{c.adminRejectionReason}</p>
                   </div>
                 )}
-                {/* Reply thread */}
+
                 {(c.replies?.length > 0 || isRejected) && (
-                  <div className={styles.thread}>
+                  <div style={{ borderTop: "1px solid var(--r-hairline)", paddingTop: 10 }}>
                     <button
-                      className={styles.toggleThread}
-                      onClick={() =>
-                        setExpanded({ ...expanded, [c._id]: !expanded[c._id] })
-                      }
+                      type="button"
+                      onClick={() => setExpanded({ ...expanded, [c._id]: !expanded[c._id] })}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 6, border: "none",
+                        background: "none", cursor: "pointer", color: "var(--r-fg-3)",
+                        fontSize: 12.5, fontWeight: 600, padding: 0, fontFamily: "inherit",
+                      }}
                     >
-                      {expanded[c._id] ? "▲ Hide" : "▼ Show"} Thread (
-                      {c.replies?.length || 0} replies)
+                      <Icon name={isExpanded ? "chevron-up" : "chevron-down"} size={13} />
+                      {isExpanded ? "Hide" : "Show"} Thread ({c.replies?.length || 0} replies)
                     </button>
-                    {expanded[c._id] && (
-                      <>
-                        {c.replies.map((r) => (
-                          <div
-                            key={r._id}
-                            className={`${styles.reply} ${styles[r.authorRole.toLowerCase()]}`}
-                          >
-                            <span className={styles.replyAuthor}>
-                              {r.displayName}
-                            </span>
-                            <p>{r.message}</p>
-                            <span className={styles.replyTime}>
-                              {new Date(r.createdAt).toLocaleDateString(
-                                "en-IN",
-                              )}
-                            </span>
-                          </div>
-                        ))}
+
+                    {isExpanded && (
+                      <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+                        {c.replies.map((r) => {
+                          const isAdmin = r.authorRole !== "Member";
+                          return (
+                            <div key={r._id} style={{
+                              padding: "8px 10px", borderRadius: 8,
+                              background: isAdmin ? "var(--r-brand-soft)" : "var(--r-surface-2)",
+                            }}>
+                              <div style={{
+                                fontSize: 11.5, fontWeight: 700,
+                                color: isAdmin ? "var(--r-brand)" : "var(--r-fg-3)",
+                              }}>{r.displayName}</div>
+                              <p style={{ fontSize: 13, color: "var(--r-fg-2)", margin: "3px 0" }}>{r.message}</p>
+                              <span style={{ fontSize: 11, color: "var(--r-fg-5)" }}>
+                                {new Date(r.createdAt).toLocaleDateString("en-IN")}
+                              </span>
+                            </div>
+                          );
+                        })}
+
                         {canReply && (
-                          <div className={styles.replyForm}>
+                          <div style={{ display: "grid", gap: 8, marginTop: 4 }}>
                             <textarea
+                              className="input"
                               placeholder="Write your appeal reply... (min 10 chars)"
                               rows={3}
                               value={replyText[c._id] || ""}
-                              onChange={(e) =>
-                                setReplyText({
-                                  ...replyText,
-                                  [c._id]: e.target.value,
-                                })
-                              }
+                              onChange={(e) => setReplyText({ ...replyText, [c._id]: e.target.value })}
+                              style={{ resize: "vertical", fontFamily: "inherit" }}
                             />
-                            <div className={styles.replyMeta}>
-                              <span>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ fontSize: 11.5, color: "var(--r-fg-4)" }}>
                                 {3 - memberReplies.length} reply(ies) left
                               </span>
-                              <button
-                                onClick={() => handleReply(c._id)}
+                              <Btn
+                                variant="primary"
+                                size="sm"
                                 disabled={replying[c._id]}
+                                onClick={() => handleReply(c._id)}
                               >
-                                {replying[c._id] ? "Sending..." : "Send Reply"}
-                              </button>
+                                {replying[c._id] ? "Sending…" : "Send Reply"}
+                              </Btn>
                             </div>
                           </div>
                         )}
                         {!canReply && isRejected && (
-                          <p className={styles.maxReplies}>
+                          <p style={{ fontSize: 12, color: "var(--r-fg-4)", margin: 0 }}>
                             Maximum replies reached for this complaint.
                           </p>
                         )}
-                      </>
+                      </div>
                     )}
                   </div>
                 )}
-              </div>
+              </Card>
             );
           })}
         </div>
       )}
+
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

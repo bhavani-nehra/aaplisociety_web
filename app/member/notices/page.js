@@ -1,23 +1,89 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import styles from "@/styles/MemberNotices.module.css";
+import {
+  PageHeader, Card, Btn, Pill, Icon, Segmented, SectionLabel,
+  EmptyState, RevampSkeleton, Toast,
+} from "@/components/revamp";
+
 const TYPE_ICONS = {
-  maintenance: "🔧",
-  meeting: "📅",
-  water: "💧",
-  electricity: "⚡",
-  parking: "🚗",
-  security: "🔒",
-  event: "🎉",
-  billing: "💰",
-  custom: "📋",
+  maintenance: "wrench",
+  meeting: "calendar",
+  water: "droplet",
+  electricity: "zap",
+  parking: "car",
+  security: "lock",
+  event: "party-popper",
+  billing: "wallet",
+  custom: "clipboard-list",
 };
-const PRIORITY_COLORS = {
-  low: { bg: "var(--bg-muted)", color: "var(--fg-3)", border: "var(--border)" },
-  medium: { bg: "var(--primary-tint)", color: "var(--primary-hover)", border: "var(--accent)" },
-  high: { bg: "var(--warning-bg)", color: "var(--warning-fg)", border: "#fcd34d" },
-  urgent: { bg: "var(--danger-bg)", color: "var(--danger-fg)", border: "#fca5a5" },
+const PRIORITY_TONE = {
+  low: "neutral",
+  medium: "info",
+  high: "warning",
+  urgent: "overdue",
 };
+const TYPES = [
+  "maintenance", "meeting", "water", "electricity", "parking",
+  "security", "event", "billing", "custom",
+];
+
+function NoticeCard({ n, acknowledged, onAcknowledge }) {
+  const tone = PRIORITY_TONE[n.priority] || "neutral";
+  const isUrgent = n.priority === "urgent";
+  const isAcknowledged = acknowledged.has(n._id);
+  return (
+    <div data-id={n._id}>
+    <Card
+      style={{ display: "grid", gap: 10 }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          {n.pinned && <Icon name="pin" size={13} color="var(--r-brand)" />}
+          <Pill tone="neutral" dot={false}>
+            <Icon name={TYPE_ICONS[n.type] || "clipboard-list"} size={11} />
+            {n.type}
+          </Pill>
+          <Pill tone={tone}>{n.priority}</Pill>
+        </div>
+        <span style={{ fontSize: 11.5, color: "var(--r-fg-4)" }}>
+          {new Date(n.createdAt).toLocaleDateString("en-IN", {
+            day: "2-digit", month: "short", year: "numeric",
+          })}
+        </span>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--r-fg-1)" }}>{n.title}</div>
+        <p style={{ fontSize: 13, color: "var(--r-fg-3)", marginTop: 5, lineHeight: 1.55 }}>{n.description}</p>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+        <span style={{ fontSize: 12, color: "var(--r-fg-4)" }}>— {n.createdByName}</span>
+        {n.expiresAt && (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, color: "var(--r-fg-4)" }}>
+            <Icon name="hourglass" size={11} /> Expires {new Date(n.expiresAt).toLocaleDateString("en-IN")}
+          </span>
+        )}
+      </div>
+
+      {isUrgent && (
+        <div style={{ paddingTop: 10, borderTop: "1px solid var(--r-hairline)" }}>
+          {isAcknowledged ? (
+            <Pill tone="paid">
+              <Icon name="check-circle-2" size={12} /> You acknowledged this notice
+            </Pill>
+          ) : (
+            <Btn variant="primary" size="sm" icon="hand" onClick={() => onAcknowledge(n._id)}>
+              Acknowledge this notice
+            </Btn>
+          )}
+        </div>
+      )}
+    </Card>
+    </div>
+  );
+}
+
 export default function MemberNoticesPage() {
   const [notices, setNotices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,10 +93,12 @@ export default function MemberNoticesPage() {
   const [toast, setToast] = useState(null);
   const [acknowledged, setAcknowledged] = useState(new Set());
   const viewedRef = useRef(new Set());
+
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
   };
+
   const fetchNotices = async () => {
     setLoading(true);
     try {
@@ -48,9 +116,12 @@ export default function MemberNoticesPage() {
       setLoading(false);
     }
   };
+
   useEffect(() => {
     fetchNotices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterType, page]);
+
   // Auto mark-viewed using IntersectionObserver
   useEffect(() => {
     if (!notices.length) return;
@@ -76,6 +147,7 @@ export default function MemberNoticesPage() {
       .forEach((el) => observer.observe(el));
     return () => observer.disconnect();
   }, [notices]);
+
   const handleAcknowledge = async (id) => {
     try {
       const res = await fetch(`/api/notices/${id}/acknowledge`, {
@@ -90,6 +162,7 @@ export default function MemberNoticesPage() {
       showToast(err.message, "error");
     }
   };
+
   const urgentNotices = notices.filter((n) => n.priority === "urgent");
   const pinnedNotices = notices.filter(
     (n) => n.pinned && n.priority !== "urgent",
@@ -97,182 +170,87 @@ export default function MemberNoticesPage() {
   const restNotices = notices.filter(
     (n) => !n.pinned && n.priority !== "urgent",
   );
-  const TYPES = [
-    "maintenance",
-    "meeting",
-    "water",
-    "electricity",
-    "parking",
-    "security",
-    "event",
-    "billing",
-    "custom",
+  const showGroupLabels = urgentNotices.length > 0 || pinnedNotices.length > 0;
+
+  const filterOptions = [
+    { value: "all", label: "All" },
+    ...TYPES.map((t) => ({ value: t, label: t, icon: TYPE_ICONS[t] })),
   ];
-  const NoticeCard = ({ n }) => {
-    const pc = PRIORITY_COLORS[n.priority];
-    const isAcknowledged = acknowledged.has(n._id);
-    return (
-      <div
-        key={n._id}
-        data-id={n._id}
-        className={`${styles.card} ${n.priority === "urgent" ? styles.urgentCard : ""}`}
-        style={{ borderLeftColor: pc.border }}
-      >
-        <div className={styles.cardTop}>
-          <div className={styles.badges}>
-            {n.pinned && <span className={styles.pinnedBadge}>📌</span>}
-            <span className={styles.typeBadge}>
-              {TYPE_ICONS[n.type]} {n.type}
-            </span>
-            <span
-              className={styles.priorityBadge}
-              style={{ background: pc.bg, color: pc.color }}
-            >
-              {n.priority}
-            </span>
-          </div>
-          <span className={styles.time}>
-            {new Date(n.createdAt).toLocaleDateString("en-IN", {
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-            })}
-          </span>
-        </div>
-        <h3 className={styles.cardTitle}>{n.title}</h3>
-        <p className={styles.cardDesc}>{n.description}</p>
-        <div className={styles.cardFooter}>
-          <span className={styles.author}>— {n.createdByName}</span>
-          {n.expiresAt && (
-            <span className={styles.expiry}>
-              ⏳ Expires {new Date(n.expiresAt).toLocaleDateString("en-IN")}
-            </span>
-          )}
-        </div>
-        {/* Acknowledge button for urgent */}
-        {n.priority === "urgent" && (
-          <div className={styles.ackSection}>
-            {isAcknowledged ? (
-              <span className={styles.ackDone}>
-                ✅ You acknowledged this notice
-              </span>
-            ) : (
-              <button
-                className={styles.ackBtn}
-                onClick={() => handleAcknowledge(n._id)}
-              >
-                ✋ Acknowledge this Notice
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
+
   return (
-    <div className={styles.page}>
-      {toast && (
-        <div className={`${styles.toast} ${styles[toast.type]}`}>
-          {toast.msg}
-        </div>
-      )}
-      <div className={styles.pageHeader}>
-        <h1>Notice Board</h1>
-        <p>Stay updated with society announcements</p>
+    <div style={{ maxWidth: 860, margin: "0 auto" }}>
+      <PageHeader
+        eyebrow={<><Icon name="megaphone" size={11} /> Notice Board</>}
+        title="Society Notices"
+        sub="Stay updated with announcements from your society"
+      />
+
+      <div style={{ marginBottom: 18, overflowX: "auto" }}>
+        <Segmented
+          value={filterType}
+          onChange={(v) => { setFilterType(v); setPage(1); }}
+          options={filterOptions}
+        />
       </div>
-      {/* Type filters */}
-      <div className={styles.filters}>
-        {["all", ...TYPES].map((t) => (
-          <button
-            key={t}
-            onClick={() => {
-              setFilterType(t);
-              setPage(1);
-            }}
-            className={`${styles.filterBtn} ${filterType === t ? styles.filterActive : ""}`}
-          >
-            {t !== "all" && TYPE_ICONS[t]} {t}
-          </button>
-        ))}
-      </div>
+
       {loading ? (
-        <div className={styles.loading}>
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className={styles.skeleton} />
-          ))}
+        <div style={{ display: "grid", gap: 12 }}>
+          {[1, 2, 3, 4].map((i) => <RevampSkeleton key={i} h={120} />)}
         </div>
       ) : notices.length === 0 ? (
-        <div className={styles.empty}>
-          <div className={styles.emptyIcon}>📭</div>
-          <p>No notices yet. Check back soon!</p>
-        </div>
+        <Card><EmptyState icon="inbox" title="No notices yet" sub="Check back soon!" /></Card>
       ) : (
         <>
-          {/* Urgent section */}
           {urgentNotices.length > 0 && (
-            <div className={styles.section}>
-              <div className={styles.sectionHeader}>
-                <span
-                  className={styles.sectionDot}
-                  style={{ background: "var(--danger)" }}
-                />
-                🚨 Urgent Notices
+            <div style={{ marginBottom: 22 }}>
+              <SectionLabel icon="alert-triangle">Urgent Notices</SectionLabel>
+              <div style={{ display: "grid", gap: 12 }}>
+                {urgentNotices.map((n) => (
+                  <NoticeCard key={n._id} n={n} acknowledged={acknowledged} onAcknowledge={handleAcknowledge} />
+                ))}
               </div>
-              {urgentNotices.map((n) => (
-                <NoticeCard key={n._id} n={n} />
-              ))}
             </div>
           )}
-          {/* Pinned section */}
+
           {pinnedNotices.length > 0 && (
-            <div className={styles.section}>
-              <div className={styles.sectionHeader}>
-                <span
-                  className={styles.sectionDot}
-                  style={{ background: "#4f46e5" }}
-                />
-                📌 Pinned
+            <div style={{ marginBottom: 22 }}>
+              <SectionLabel icon="pin">Pinned</SectionLabel>
+              <div style={{ display: "grid", gap: 12 }}>
+                {pinnedNotices.map((n) => (
+                  <NoticeCard key={n._id} n={n} acknowledged={acknowledged} onAcknowledge={handleAcknowledge} />
+                ))}
               </div>
-              {pinnedNotices.map((n) => (
-                <NoticeCard key={n._id} n={n} />
-              ))}
             </div>
           )}
-          {/* All other notices */}
+
           {restNotices.length > 0 && (
-            <div className={styles.section}>
-              {(urgentNotices.length > 0 || pinnedNotices.length > 0) && (
-                <div className={styles.sectionHeader}>
-                  <span
-                    className={styles.sectionDot}
-                    style={{ background: "var(--fg-5)" }}
-                  />
-                  All Notices
-                </div>
-              )}
-              {restNotices.map((n) => (
-                <NoticeCard key={n._id} n={n} />
-              ))}
+            <div style={{ marginBottom: 22 }}>
+              {showGroupLabels && <SectionLabel icon="list">All Notices</SectionLabel>}
+              <div style={{ display: "grid", gap: 12 }}>
+                {restNotices.map((n) => (
+                  <NoticeCard key={n._id} n={n} acknowledged={acknowledged} onAcknowledge={handleAcknowledge} />
+                ))}
+              </div>
             </div>
           )}
         </>
       )}
+
       {pagination.pages > 1 && (
-        <div className={styles.pagination}>
-          <button disabled={page <= 1} onClick={() => setPage(page - 1)}>
-            ← Prev
-          </button>
-          <span>
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginTop: 20 }}>
+          <Btn variant="secondary" size="sm" icon="chevron-left" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+            Prev
+          </Btn>
+          <span style={{ fontSize: 12.5, color: "var(--r-fg-4)" }}>
             Page {page} of {pagination.pages}
           </span>
-          <button
-            disabled={page >= pagination.pages}
-            onClick={() => setPage(page + 1)}
-          >
-            Next →
-          </button>
+          <Btn variant="secondary" size="sm" iconR="chevron-right" disabled={page >= pagination.pages} onClick={() => setPage(page + 1)}>
+            Next
+          </Btn>
         </div>
       )}
+
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

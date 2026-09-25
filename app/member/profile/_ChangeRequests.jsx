@@ -11,21 +11,13 @@
 
 import { useState } from "react";
 import { apiClient } from "@/lib/api-client";
+import { Btn, Pill } from "@/components/revamp";
 
 const PARKING_TYPES = ["Stilt", "Open", "Covered"];
 const VEHICLE_TYPES = ["Two-Wheeler", "Four-Wheeler"];
 
-const box = { padding: "10px 0", borderBottom: "1px solid var(--border)" };
-const label = { fontSize: 13, color: "var(--fg-4)", display: "block", marginBottom: 6 };
-const btn = {
-  fontSize: 13,
-  fontWeight: 600,
-  color: "var(--info)",
-  background: "none",
-  border: "none",
-  cursor: "pointer",
-  padding: 0,
-};
+const box = { padding: "10px 0", borderBottom: "1px solid var(--r-border)" };
+const label = { fontSize: 13, color: "var(--r-fg-4)", display: "block", marginBottom: 6 };
 
 function PendingNote({ requests, section, familyMemberId }) {
   const pending = (requests || []).filter(
@@ -36,10 +28,12 @@ function PendingNote({ requests, section, familyMemberId }) {
   );
   if (!pending.length) return null;
   return (
-    <div style={{ fontSize: 12.5, color: "var(--warning-fg)", marginTop: 6 }}>
-      {pending.length === 1
-        ? `A ${pending[0].action.toLowerCase()} request is waiting for admin approval.`
-        : `${pending.length} requests for this are waiting for admin approval.`}
+    <div style={{ marginTop: 6 }}>
+      <Pill tone="warning">
+        {pending.length === 1
+          ? `A ${pending[0].action.toLowerCase()} request is waiting for admin approval.`
+          : `${pending.length} requests for this are waiting for admin approval.`}
+      </Pill>
     </div>
   );
 }
@@ -80,16 +74,16 @@ export function RequestFamilyMember({ requests, onSent }) {
   if (!open)
     return (
       <div style={box}>
-        <button style={btn} onClick={() => setOpen(true)}>
-          + Request to add a family member
-        </button>
+        <Btn variant="ghost" size="sm" icon="plus" onClick={() => setOpen(true)}>
+          Request to add a family member
+        </Btn>
         <PendingNote requests={requests} section="FamilyMember" />
       </div>
     );
 
   return (
     <div style={box}>
-      {err && <div style={{ color: "var(--danger-fg)", fontSize: 13, marginBottom: 8 }}>{err}</div>}
+      {err && <div style={{ color: "var(--r-danger)", fontSize: 13, marginBottom: 8 }}>{err}</div>}
       <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))" }}>
         <div>
           <label style={label}>Name</label>
@@ -123,16 +117,12 @@ export function RequestFamilyMember({ requests, onSent }) {
         </div>
       </div>
       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-        <button className="btn btn-secondary" onClick={() => setOpen(false)} disabled={busy}>
+        <Btn variant="secondary" size="sm" onClick={() => setOpen(false)} disabled={busy}>
           Cancel
-        </button>
-        <button
-          className="btn btn-primary"
-          onClick={submit}
-          disabled={busy || !draft.name.trim()}
-        >
-          {busy ? "Sending..." : "Send to admin for approval"}
-        </button>
+        </Btn>
+        <Btn variant="primary" size="sm" onClick={submit} disabled={busy || !draft.name.trim()}>
+          {busy ? "Sending…" : "Send to admin for approval"}
+        </Btn>
       </div>
     </div>
   );
@@ -162,13 +152,13 @@ export function RequestRemoveFamilyMember({ familyMemberId, requests, onSent }) 
     }
   };
 
-  if (already) return <span style={{ fontSize: 12, color: "var(--warning-fg)" }}>Removal pending approval</span>;
+  if (already) return <Pill tone="warning">Removal pending approval</Pill>;
   return (
     <>
-      <button style={{ ...btn, color: "var(--danger-fg)" }} onClick={submit} disabled={busy}>
-        {busy ? "Sending..." : "Request removal"}
-      </button>
-      {err && <div style={{ color: "var(--danger-fg)", fontSize: 12 }}>{err}</div>}
+      <Btn variant="danger" size="sm" onClick={submit} disabled={busy}>
+        {busy ? "Sending…" : "Request removal"}
+      </Btn>
+      {err && <div style={{ color: "var(--r-danger)", fontSize: 12, marginTop: 4 }}>{err}</div>}
     </>
   );
 }
@@ -201,16 +191,16 @@ export function RequestParkingSlot({ requests, onSent }) {
   if (!open)
     return (
       <div style={box}>
-        <button style={btn} onClick={() => setOpen(true)}>
-          + Request to add a parking slot
-        </button>
+        <Btn variant="ghost" size="sm" icon="plus" onClick={() => setOpen(true)}>
+          Request to add a parking slot
+        </Btn>
         <PendingNote requests={requests} section="Parking" />
       </div>
     );
 
   return (
     <div style={box}>
-      {err && <div style={{ color: "var(--danger-fg)", fontSize: 13, marginBottom: 8 }}>{err}</div>}
+      {err && <div style={{ color: "var(--r-danger)", fontSize: 13, marginBottom: 8 }}>{err}</div>}
       <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))" }}>
         <div>
           <label style={label}>Slot number</label>
@@ -246,16 +236,16 @@ export function RequestParkingSlot({ requests, onSent }) {
           </select>
         </div>
       </div>
-      <div style={{ fontSize: 12, color: "var(--fg-4)", marginTop: 6 }}>
+      <div style={{ fontSize: 12, color: "var(--r-fg-4)", marginTop: 6 }}>
         {draft.type === "Stilt" ? "Stilt slots are not billed monthly." : "Non-Stilt slots are billed monthly once approved."}
       </div>
       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-        <button className="btn btn-secondary" onClick={() => setOpen(false)} disabled={busy}>
+        <Btn variant="secondary" size="sm" onClick={() => setOpen(false)} disabled={busy}>
           Cancel
-        </button>
-        <button className="btn btn-primary" onClick={submit} disabled={busy || !draft.slotNumber.trim()}>
-          {busy ? "Sending..." : "Send to admin for approval"}
-        </button>
+        </Btn>
+        <Btn variant="primary" size="sm" onClick={submit} disabled={busy || !draft.slotNumber.trim()}>
+          {busy ? "Sending…" : "Send to admin for approval"}
+        </Btn>
       </div>
     </div>
   );
@@ -289,13 +279,13 @@ export function RequestRemoveParkingSlot({ slotNumber, requests, onSent }) {
     }
   };
 
-  if (already) return <span style={{ fontSize: 12, color: "var(--warning-fg)" }}>Removal pending approval</span>;
+  if (already) return <Pill tone="warning">Removal pending approval</Pill>;
   return (
     <>
-      <button style={{ ...btn, color: "var(--danger-fg)" }} onClick={submit} disabled={busy}>
-        {busy ? "Sending..." : "Request removal"}
-      </button>
-      {err && <div style={{ color: "var(--danger-fg)", fontSize: 12 }}>{err}</div>}
+      <Btn variant="danger" size="sm" onClick={submit} disabled={busy}>
+        {busy ? "Sending…" : "Request removal"}
+      </Btn>
+      {err && <div style={{ color: "var(--r-danger)", fontSize: 12, marginTop: 4 }}>{err}</div>}
     </>
   );
 }

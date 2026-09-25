@@ -2,13 +2,62 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
-import styles from "@/styles/Dashboard.module.css";
+import {
+  PageHeader, Card, Btn, Icon, Pill, Avatar, SectionLabel, RevampSkeleton,
+  EmptyState, Toast,
+} from "@/components/revamp";
 import {
   RequestFamilyMember,
   RequestRemoveFamilyMember,
   RequestParkingSlot,
   RequestRemoveParkingSlot,
 } from "./_ChangeRequests";
+
+const statusTone = (s) =>
+  s === "Active" ? "active" : s === "Inactive" ? "expired" : s === "Suspended" ? "suspended" : "neutral";
+
+/** One label/value line. Renders nothing when there is no value, same as
+ * the plain-JS `value ? (...) : null` this replaces. */
+function InfoRow({ label, value, highlight }) {
+  if (!value) return null;
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 12,
+        flexWrap: "wrap",
+        padding: "10px 0",
+        borderBottom: "1px solid var(--r-hairline)",
+        fontSize: 13,
+      }}
+    >
+      <span style={{ color: "var(--r-fg-4)" }}>{label}</span>
+      <span
+        style={{
+          fontWeight: highlight ? 700 : 600,
+          color: highlight ? "var(--r-brand)" : "var(--r-fg-1)",
+          textAlign: "right",
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/** One profile section — a Card with an icon+label header, same grouping
+ * as the page had before (Flat Details, Contact Information, ...). */
+function Section({ icon, title, children }) {
+  return (
+    <Card style={{ marginBottom: 16 }}>
+      <SectionLabel icon={icon}>{title}</SectionLabel>
+      {children}
+    </Card>
+  );
+}
+
 export default function MemberProfilePage() {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
@@ -55,12 +104,17 @@ export default function MemberProfilePage() {
     setBanner(null);
     setEditing(true);
   };
+
   if (isLoading)
     return (
-      <div style={{ padding: "3rem", textAlign: "center" }}>
-        <div className="loading-spinner" style={{ margin: "0 auto" }}></div>
+      <div style={{ maxWidth: 880, margin: "0 auto" }}>
+        <RevampSkeleton h={64} style={{ marginBottom: 16 }} />
+        <RevampSkeleton h={140} style={{ marginBottom: 16 }} />
+        <RevampSkeleton h={220} style={{ marginBottom: 16 }} />
+        <RevampSkeleton h={180} />
       </div>
     );
+
   const member = data?.member;
   const society = data?.society;
   // A tenant viewing this page must see THEIR OWN identity/contact, not the
@@ -71,69 +125,34 @@ export default function MemberProfilePage() {
   const displayName = tenantSelf?.name || member?.ownerName;
   const displayContact = tenantSelf?.contactNumber || member?.contactNumber;
   const displayEmail = tenantSelf?.email || member?.emailPrimary;
+
   if (!member)
     return (
-      <div style={{ padding: "2rem", color: "var(--fg-4)", lineHeight: 1.6 }}>
-        {loadError
-          ? // The real reason, so "my profile is blank" is answerable.
-            `Your profile could not be loaded: ${loadError.message}`
-          : "Your profile has not been set up yet. Please contact your society office."}
+      <div style={{ maxWidth: 880, margin: "0 auto" }}>
+        <EmptyState
+          icon={loadError ? "alert-circle" : "user-x"}
+          title={loadError ? "Your profile could not be loaded" : "Your profile is not set up yet"}
+          sub={
+            loadError
+              ? // The real reason, so "my profile is blank" is answerable.
+                `Your profile could not be loaded: ${loadError.message}`
+              : "Your profile has not been set up yet. Please contact your society office."
+          }
+        />
       </div>
     );
-  const InfoRow = ({ label, value, highlight }) =>
-    value ? (
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          padding: "10px 0",
-          borderBottom: "1px solid var(--border)",
-          fontSize: "14px",
-        }}
-      >
-        <span style={{ color: "var(--fg-4)", minWidth: "160px" }}>{label}</span>
-        <span
-          style={{
-            fontWeight: highlight ? "700" : "600",
-            color: highlight ? "var(--info)" : "var(--fg-2)",
-            textAlign: "right",
-          }}
-        >
-          {value}
-        </span>
-      </div>
-    ) : null;
-  const Section = ({ title, icon, children }) => (
-    <div className={styles.contentCard} style={{ marginBottom: "1.5rem" }}>
-      <div className={styles.cardHeader}>
-        <h2 className={styles.cardTitle}>
-          {icon} {title}
-        </h2>
-      </div>
-      <div style={{ padding: "0 1.5rem 1.5rem" }}>{children}</div>
-    </div>
-  );
+
   return (
-    <div>
-      <div
-        className={styles.pageHeader}
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-        }}
-      >
-        <div>
-          <h1 className={styles.pageTitle}>My Profile</h1>
-          <p className={styles.pageSubtitle}>
-            {society?.name} — Member Information
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: "0.75rem" }}>
-          {editing ? (
-            <>
-              <button
-                className="btn btn-secondary"
+    <div style={{ maxWidth: 880, margin: "0 auto" }}>
+      <PageHeader
+        eyebrow={<><Icon name="user" size={11} /> My Profile</>}
+        title="My Profile"
+        sub={`${society?.name || ""} — Member Information`}
+        right={
+          editing ? (
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn
+                variant="ghost"
                 onClick={() => {
                   setEditing(false);
                   setBanner(null);
@@ -141,86 +160,66 @@ export default function MemberProfilePage() {
                 disabled={saveMutation.isPending}
               >
                 Cancel
-              </button>
-              <button
-                className="btn btn-primary"
+              </Btn>
+              <Btn
+                variant="primary"
+                icon={saveMutation.isPending ? undefined : "save"}
                 onClick={() => saveMutation.mutate(form)}
                 disabled={saveMutation.isPending}
               >
-                {saveMutation.isPending ? "Saving..." : "Save changes"}
-              </button>
-            </>
+                {saveMutation.isPending ? "Saving…" : "Save changes"}
+              </Btn>
+            </div>
           ) : (
-            <button className="btn btn-secondary" onClick={startEditing}>
-              ✏️ Edit contact info
-            </button>
-          )}
-        </div>
-      </div>
-      {banner && (
-        <div
-          role={banner.tone === "error" ? "alert" : "status"}
-          style={{
-            marginBottom: "1rem",
-            padding: "0.7rem 0.9rem",
-            borderRadius: 8,
-            fontSize: 14,
-            lineHeight: 1.55,
-            background: banner.tone === "error" ? "var(--danger-bg)" : "var(--success-bg)",
-            border: `1px solid ${banner.tone === "error" ? "var(--danger-bg)" : "var(--success-bg)"}`,
-            color: banner.tone === "error" ? "var(--danger-fg)" : "var(--success-fg)",
-          }}
-        >
-          {banner.text}
-        </div>
+            <Btn variant="secondary" icon="pencil" onClick={startEditing}>
+              Edit contact info
+            </Btn>
+          )
+        }
+      />
+
+      {banner?.tone === "error" && (
+        <Card style={{ marginBottom: 16, borderColor: "var(--r-danger)" }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <Icon name="alert-circle" size={16} color="var(--r-danger)" />
+            <div role="alert" style={{ fontSize: 13, color: "var(--r-fg-2)", lineHeight: 1.55 }}>
+              {banner.text}
+            </div>
+          </div>
+        </Card>
       )}
+
       {/* Identity Card */}
-      <div
-        style={{
-          background: "linear-gradient(135deg, var(--primary), var(--accent))",
-          color: "white",
-          borderRadius: "12px",
-          padding: "28px 32px",
-          marginBottom: "1.5rem",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: "16px",
-        }}
-      >
-        <div>
-          <div
-            style={{ fontSize: "24px", fontWeight: "700", marginBottom: "6px" }}
-          >
-            {displayName}
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <Avatar name={displayName} size={48} />
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "var(--r-fg-1)" }}>{displayName}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12.5, color: "var(--r-fg-4)" }}>{member.membershipNumber}</span>
+                <Pill tone={statusTone(member.membershipStatus)}>{member.membershipStatus}</Pill>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--r-fg-4)", marginTop: 4 }}>{society?.name}</div>
+            </div>
           </div>
-          <div style={{ fontSize: "14px", opacity: 0.85 }}>
-            {member.membershipNumber} • {member.membershipStatus}
-          </div>
-          <div style={{ fontSize: "13px", opacity: 0.75, marginTop: "4px" }}>
-            {society?.name}
+          <div style={{ textAlign: "right" }}>
+            <div className="revamp-num" style={{ fontSize: 28, fontWeight: 700, color: "var(--r-brand)", letterSpacing: "-0.02em" }}>
+              {member.wing}-{member.flatNo}
+            </div>
+            <div style={{ fontSize: 12.5, color: "var(--r-fg-3)", marginTop: 2 }}>
+              {member.flatType} • {member.carpetAreaSqft} sq ft
+            </div>
+            <div style={{ marginTop: 6, display: "flex", justifyContent: "flex-end" }}>
+              <Pill tone="neutral" dot={false}>{member.ownershipType}</Pill>
+            </div>
           </div>
         </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: "32px", fontWeight: "700" }}>
-            {member.wing}-{member.flatNo}
-          </div>
-          <div style={{ fontSize: "13px", opacity: 0.85 }}>
-            {member.flatType} • {member.carpetAreaSqft} sq ft
-          </div>
-          <div style={{ fontSize: "12px", opacity: 0.7, marginTop: "4px" }}>
-            {member.ownershipType}
-          </div>
-        </div>
-      </div>
+      </Card>
+
       {/* Basic Info */}
-      <Section title="Flat Details" icon="🏠">
-        <InfoRow
-          label="Flat No."
-          value={`${member.wing}-${member.flatNo}`}
-          highlight
-        />
+      <Section icon="home" title="Flat Details">
+        <InfoRow label="Flat No." value={`${member.wing}-${member.flatNo}`} highlight />
         <InfoRow
           label="Floor"
           value={member.floor !== undefined ? `Floor ${member.floor}` : null}
@@ -229,15 +228,10 @@ export default function MemberProfilePage() {
         <InfoRow label="Ownership Type" value={member.ownershipType} />
         <InfoRow
           label="Carpet Area"
-          value={
-            member.carpetAreaSqft ? `${member.carpetAreaSqft} sq ft` : null
-          }
+          value={member.carpetAreaSqft ? `${member.carpetAreaSqft} sq ft` : null}
         />
         {member.builtUpAreaSqft && (
-          <InfoRow
-            label="Built-up Area"
-            value={`${member.builtUpAreaSqft} sq ft`}
-          />
+          <InfoRow label="Built-up Area" value={`${member.builtUpAreaSqft} sq ft`} />
         )}
         {member.possessionDate && (
           <InfoRow
@@ -247,80 +241,39 @@ export default function MemberProfilePage() {
         )}
         <InfoRow label="Membership No." value={member.membershipNumber} />
         <InfoRow label="Status" value={member.membershipStatus} />
-        <InfoRow
-          label="Voting Rights"
-          value={member.hasVotingRights ? "Yes" : "No"}
-        />
+        <InfoRow label="Voting Rights" value={member.hasVotingRights ? "Yes" : "No"} />
       </Section>
+
       {/* Contact Info */}
-      <Section title="Contact Information" icon="📞">
+      <Section icon="phone" title="Contact Information">
         <InfoRow label="Primary Contact" value={displayContact} />
         <InfoRow label="Primary Email" value={displayEmail} />
         {editing ? (
           <>
-            <div
-              style={{ padding: "10px 0", borderBottom: "1px solid var(--border)" }}
-            >
-              <label
-                style={{
-                  fontSize: "13px",
-                  color: "var(--fg-4)",
-                  display: "block",
-                  marginBottom: "6px",
-                }}
-              >
-                WhatsApp Number
-              </label>
+            <div style={{ padding: "10px 0" }}>
+              <label className="label">WhatsApp Number</label>
               <input
                 className="input"
                 value={form.whatsappNumber}
-                onChange={(e) =>
-                  setForm({ ...form, whatsappNumber: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, whatsappNumber: e.target.value })}
                 placeholder="WhatsApp number"
               />
             </div>
-            <div
-              style={{ padding: "10px 0", borderBottom: "1px solid var(--border)" }}
-            >
-              <label
-                style={{
-                  fontSize: "13px",
-                  color: "var(--fg-4)",
-                  display: "block",
-                  marginBottom: "6px",
-                }}
-              >
-                Alternate Contact
-              </label>
+            <div style={{ padding: "10px 0" }}>
+              <label className="label">Alternate Contact</label>
               <input
                 className="input"
                 value={form.alternateContact}
-                onChange={(e) =>
-                  setForm({ ...form, alternateContact: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, alternateContact: e.target.value })}
                 placeholder="Alternate phone"
               />
             </div>
-            <div
-              style={{ padding: "10px 0", borderBottom: "1px solid var(--border)" }}
-            >
-              <label
-                style={{
-                  fontSize: "13px",
-                  color: "var(--fg-4)",
-                  display: "block",
-                  marginBottom: "6px",
-                }}
-              >
-                Secondary Email
-              </label>
+            <div style={{ padding: "10px 0" }}>
+              <label className="label">Secondary Email</label>
               <input
                 className="input"
                 value={form.emailSecondary}
-                onChange={(e) =>
-                  setForm({ ...form, emailSecondary: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, emailSecondary: e.target.value })}
                 placeholder="Secondary email"
               />
             </div>
@@ -328,36 +281,30 @@ export default function MemberProfilePage() {
         ) : (
           <>
             <InfoRow label="WhatsApp" value={member.whatsappNumber} />
-            <InfoRow
-              label="Alternate Contact"
-              value={member.alternateContact}
-            />
+            <InfoRow label="Alternate Contact" value={member.alternateContact} />
             <InfoRow label="Secondary Email" value={member.emailSecondary} />
           </>
         )}
       </Section>
+
       {/* Identity Documents — show only if data exists */}
       {(member.panCard || member.aadhaar) && (
-        <Section title="Identity Documents" icon="🪪">
-          {member.panCard && (
-            <InfoRow label="PAN Card" value={member.panCard} />
-          )}
+        <Section icon="credit-card" title="Identity Documents">
+          {member.panCard && <InfoRow label="PAN Card" value={member.panCard} />}
           {member.aadhaar && (
-            <InfoRow
-              label="Aadhaar"
-              value={`XXXX XXXX ${member.aadhaar.slice(-4)}`}
-            />
+            <InfoRow label="Aadhaar" value={`XXXX XXXX ${member.aadhaar.slice(-4)}`} />
           )}
         </Section>
       )}
+
       {/* Parking Slots — a wrong slot changes a bill, so add/remove goes
           through admin approval rather than a direct edit here. Always
           rendered (with a real empty state) rather than vanishing when
           the flat has none, per "serve everything" — a resident with no
           slots still needs to see how to request one. */}
-      <Section title="Parking Slots" icon="🚗">
+      <Section icon="car" title="Parking Slots">
         {(member.parkingSlots?.length ?? 0) === 0 && (
-          <div style={{ padding: "10px 0", fontSize: 14, color: "var(--fg-4)" }}>
+          <div style={{ padding: "10px 0", fontSize: 13, color: "var(--r-fg-4)" }}>
             No parking slots recorded for this flat yet.
           </div>
         )}
@@ -366,45 +313,19 @@ export default function MemberProfilePage() {
             key={i}
             style={{
               display: "flex",
-              gap: "16px",
+              gap: 12,
               alignItems: "center",
               padding: "10px 0",
-              borderBottom: "1px solid var(--border)",
-              fontSize: "14px",
+              borderBottom: "1px solid var(--r-hairline)",
+              fontSize: 13,
               flexWrap: "wrap",
             }}
           >
-            <span
-              style={{
-                fontWeight: "600",
-                color: "var(--fg-2)",
-                minWidth: "100px",
-              }}
-            >
+            <span style={{ fontWeight: 600, color: "var(--r-fg-1)", minWidth: 100 }}>
               {slot.slotNumber}
             </span>
-            <span
-              style={{
-                background: "var(--primary-tint)",
-                color: "var(--info)",
-                padding: "2px 10px",
-                borderRadius: "12px",
-                fontSize: "12px",
-              }}
-            >
-              {slot.type}
-            </span>
-            <span
-              style={{
-                background: "var(--bg-muted)",
-                color: "var(--fg-3)",
-                padding: "2px 10px",
-                borderRadius: "12px",
-                fontSize: "12px",
-              }}
-            >
-              {slot.vehicleType}
-            </span>
+            <Pill tone="info" dot={false}>{slot.type}</Pill>
+            <Pill tone="neutral" dot={false}>{slot.vehicleType}</Pill>
             <span style={{ marginLeft: "auto" }}>
               <RequestRemoveParkingSlot
                 slotNumber={slot.slotNumber}
@@ -416,11 +337,12 @@ export default function MemberProfilePage() {
         ))}
         <RequestParkingSlot requests={pendingRequests} onSent={refetchRequests} />
       </Section>
+
       {/* Family Members — same reasoning as Parking: always rendered with a
           real empty state, add/remove goes through admin approval. */}
-      <Section title="Family Members" icon="👨‍👩‍👧‍👦">
+      <Section icon="users" title="Family Members">
         {(member.familyMembers?.length ?? 0) === 0 && (
-          <div style={{ padding: "10px 0", fontSize: 14, color: "var(--fg-4)" }}>
+          <div style={{ padding: "10px 0", fontSize: 13, color: "var(--r-fg-4)" }}>
             No family members recorded for this flat yet.
           </div>
         )}
@@ -432,37 +354,21 @@ export default function MemberProfilePage() {
               justifyContent: "space-between",
               alignItems: "center",
               padding: "10px 0",
-              borderBottom: "1px solid var(--border)",
-              fontSize: "14px",
+              borderBottom: "1px solid var(--r-hairline)",
+              fontSize: 13,
               flexWrap: "wrap",
-              gap: "8px",
+              gap: 8,
             }}
           >
             <div>
-              <span style={{ fontWeight: "600", color: "var(--fg-2)" }}>
-                {fm.name}
-              </span>
+              <span style={{ fontWeight: 600, color: "var(--r-fg-1)" }}>{fm.name}</span>
               {fm.relation && (
-                <span
-                  style={{
-                    color: "var(--fg-4)",
-                    marginLeft: "8px",
-                    fontSize: "13px",
-                  }}
-                >
+                <span style={{ color: "var(--r-fg-4)", marginLeft: 8, fontSize: 12.5 }}>
                   ({fm.relation})
                 </span>
               )}
             </div>
-            <div
-              style={{
-                display: "flex",
-                gap: "12px",
-                fontSize: "13px",
-                color: "var(--fg-4)",
-                alignItems: "center",
-              }}
-            >
+            <div style={{ display: "flex", gap: 12, fontSize: 12.5, color: "var(--r-fg-4)", alignItems: "center", flexWrap: "wrap" }}>
               {fm.age && <span>Age: {fm.age}</span>}
               {fm.occupation && <span>{fm.occupation}</span>}
               {fm.contactNumber && <span>{fm.contactNumber}</span>}
@@ -476,18 +382,17 @@ export default function MemberProfilePage() {
         ))}
         <RequestFamilyMember requests={pendingRequests} onSent={refetchRequests} />
       </Section>
+
       {/* Current Tenant */}
       {member.ownershipType === "Rented" && member.currentTenant && (
-        <Section title="Current Tenant" icon="🏠">
+        <Section icon="key" title="Current Tenant">
           <InfoRow label="Tenant Name" value={member.currentTenant.name} />
           <InfoRow label="Contact" value={member.currentTenant.contactNumber} />
           <InfoRow
             label="Start Date"
             value={
               member.currentTenant.startDate
-                ? new Date(member.currentTenant.startDate).toLocaleDateString(
-                    "en-IN",
-                  )
+                ? new Date(member.currentTenant.startDate).toLocaleDateString("en-IN")
                 : null
             }
           />
@@ -509,51 +414,42 @@ export default function MemberProfilePage() {
           />
         </Section>
       )}
+
       {/* Emergency Contact */}
       {member.emergencyContact?.name && (
-        <Section title="Emergency Contact" icon="🆘">
+        <Section icon="life-buoy" title="Emergency Contact">
           <InfoRow label="Name" value={member.emergencyContact.name} />
           <InfoRow label="Relation" value={member.emergencyContact.relation} />
           <InfoRow label="Phone" value={member.emergencyContact.phoneNumber} />
         </Section>
       )}
+
       {/* Society Info */}
-      <Section title="Society Information" icon="🏢">
+      <Section icon="building-2" title="Society Information">
         <InfoRow label="Society Name" value={society?.name} />
         <InfoRow label="Address" value={society?.address} />
         <InfoRow
           label="Maintenance Rate"
-          value={
-            society?.config?.maintenanceRate
-              ? `₹${society.config.maintenanceRate}/sq.ft`
-              : null
-          }
+          value={society?.config?.maintenanceRate ? `₹${society.config.maintenanceRate}/sq.ft` : null}
         />
         <InfoRow
           label="Interest Rate"
-          value={
-            society?.config?.interestRate
-              ? `${society.config.interestRate}% p.a.`
-              : null
-          }
+          value={society?.config?.interestRate ? `${society.config.interestRate}% p.a.` : null}
         />
         <InfoRow
           label="Grace Period"
-          value={
-            society?.config?.gracePeriodDays
-              ? `${society.config.gracePeriodDays} days`
-              : null
-          }
+          value={society?.config?.gracePeriodDays ? `${society.config.gracePeriodDays} days` : null}
         />
         <InfoRow
           label="Bill Due Day"
-          value={
-            society?.config?.billDueDay
-              ? `${society.config.billDueDay}th of every month`
-              : null
-          }
+          value={society?.config?.billDueDay ? `${society.config.billDueDay}th of every month` : null}
         />
       </Section>
+
+      <Toast
+        toast={banner?.tone === "ok" ? { message: banner.text, type: "success" } : null}
+        onClose={() => setBanner(null)}
+      />
     </div>
   );
 }

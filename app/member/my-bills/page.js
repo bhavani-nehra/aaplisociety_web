@@ -2,8 +2,20 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
-import styles from "@/styles/Dashboard.module.css";
 import notify from "@/lib/notify";
+import {
+  PageHeader, Btn, Icon, Pill, Segmented, DataTable, SmallStat, RevampSkeleton,
+} from "@/components/revamp";
+
+const STATUS_TONE = { Paid: "paid", Unpaid: "unpaid", Partial: "partial", Overdue: "overdue" };
+
+const STATUS_TABS = [
+  { value: "all", label: "All" },
+  { value: "Unpaid", label: "Unpaid" },
+  { value: "Overdue", label: "Overdue" },
+  { value: "Paid", label: "Paid" },
+];
+
 export default function MyBillsPage() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [page, setPage] = useState(1);
@@ -17,6 +29,7 @@ export default function MyBillsPage() {
   const bills = data?.bills || [];
   const summary = data?.summary || {};
   const pagination = data?.pagination || {};
+
   const downloadBill = async (bill) => {
     try {
       const res = await fetch(`/api/bills/download?id=${bill._id}`, {
@@ -40,255 +53,120 @@ export default function MyBillsPage() {
       notify.error("Download failed: " + e.message);
     }
   };
-  const statusColors = {
-    Paid: { bg: "var(--success-bg)", color: "var(--success-fg)" },
-    Unpaid: { bg: "var(--danger-bg)", color: "var(--danger-fg)" },
-    Partial: { bg: "var(--warning-bg)", color: "var(--warning-fg)" },
-    Overdue: { bg: "var(--danger-bg)", color: "var(--danger-fg)" },
-  };
-  return (
-    <div>
-      <div className={styles.pageHeader}>
+
+  // rowKey needs a stable field; some legacy records only carry `id`.
+  const rows = bills.map((b) => ({ ...b, _id: b._id || b.id }));
+
+  const cols = [
+    {
+      key: "period",
+      label: "Bill period",
+      render: (bill) => (
         <div>
-          <h1 className={styles.pageTitle}>📄 My Bills</h1>
-          <p className={styles.pageSubtitle}>
-            View your maintenance bills
-          </p>
+          <div style={{ fontWeight: 700, color: "var(--r-fg-1)" }}>{bill.billPeriodId}</div>
+          <div style={{ fontSize: 12, color: "var(--r-fg-4)", marginTop: 2 }}>
+            Due: {new Date(bill.dueDate).toLocaleDateString("en-IN", {
+              day: "2-digit", month: "short", year: "numeric",
+            })}
+          </div>
+          {bill.previousBalance > 0 && (
+            <div style={{ fontSize: 11.5, color: "var(--r-danger)", marginTop: 2 }}>
+              Includes prev balance: ₹{bill.previousBalance.toLocaleString("en-IN")}
+            </div>
+          )}
         </div>
+      ),
+    },
+    {
+      key: "amount",
+      label: "Amount",
+      align: "right",
+      render: (bill) => (
+        <div>
+          <div className="revamp-num" style={{ fontWeight: 700, fontSize: 14, color: "var(--r-fg-1)" }}>
+            ₹{bill.totalAmount?.toLocaleString("en-IN")}
+          </div>
+          {bill.amountPaid > 0 && (
+            <div className="revamp-num" style={{ fontSize: 11.5, color: "var(--r-success)" }}>
+              Paid: ₹{bill.amountPaid.toLocaleString("en-IN")}
+            </div>
+          )}
+          {bill.totalAmount > 0 && bill.status !== "Paid" && (
+            <div className="revamp-num" style={{ fontSize: 11.5, color: "var(--r-danger)" }}>
+              Due: ₹{bill.balanceAmount.toLocaleString("en-IN")}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (bill) => (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+          <Pill tone={STATUS_TONE[bill.status] || "unpaid"}>{bill.status}</Pill>
+          {bill.isHistoricalArchive === true && (
+            <Pill tone="neutral" dot={false}>Historical</Pill>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "actions",
+      label: "",
+      align: "right",
+      render: (bill) => (
+        !bill.isHistoricalArchive ? (
+          <Btn size="sm" variant="secondary" icon="download" onClick={() => downloadBill(bill)}>Bill</Btn>
+        ) : null
+      ),
+    },
+  ];
+
+  return (
+    <div style={{ maxWidth: 1160, margin: "0 auto" }}>
+      <PageHeader
+        eyebrow={<><Icon name="file-text" size={11} /> Billing</>}
+        title="My Bills"
+        sub="View your maintenance bills"
+      />
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 16 }}>
+        <SmallStat icon="list" label="Total Bills" value={pagination.total || 0} />
+        <SmallStat icon="alert-circle" label="Outstanding" value={`₹${(summary.totalOutstanding || 0).toLocaleString("en-IN")}`} tone="danger" />
+        <SmallStat icon="check-circle-2" label="Total Paid" value={`₹${(summary.totalPaid || 0).toLocaleString("en-IN")}`} tone="success" />
       </div>
-      {/* Summary */}
-      <div className={styles.statsGrid} style={{ marginBottom: "1.5rem" }}>
-        <div
-          className={styles.statCard}
-          style={{ borderLeft: "4px solid var(--accent)" }}
-        >
-          <div className={styles.statLabel}>Total Bills</div>
-          <h2 className={styles.statValue}>{pagination.total || 0}</h2>
-        </div>
-        <div
-          className={styles.statCard}
-          style={{ borderLeft: "4px solid var(--danger)" }}
-        >
-          <div className={styles.statLabel}>Outstanding</div>
-          <h2 className={styles.statValue} style={{ color: "var(--danger)" }}>
-            ₹{(summary.totalOutstanding || 0).toLocaleString("en-IN")}
-          </h2>
-        </div>
-        <div
-          className={styles.statCard}
-          style={{ borderLeft: "4px solid var(--success)" }}
-        >
-          <div className={styles.statLabel}>Total Paid</div>
-          <h2 className={styles.statValue} style={{ color: "var(--success)" }}>
-            ₹{(summary.totalPaid || 0).toLocaleString("en-IN")}
-          </h2>
-        </div>
+
+      {/* Partial isn't a separate tab — "Unpaid" already covers it
+          server-side (see api/member/bills/route.js); each bill still
+          shows its own Partial badge with the remaining amount. */}
+      <div style={{ marginBottom: 16 }}>
+        <Segmented
+          value={filterStatus}
+          onChange={(v) => { setFilterStatus(v); setPage(1); }}
+          options={STATUS_TABS}
+        />
       </div>
-      {/* Filters + Select All */}
-      <div className={styles.contentCard} style={{ marginBottom: "1.5rem" }}>
-        <div
-          style={{
-            padding: "1rem",
-            display: "flex",
-            gap: "1rem",
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          {/* Partial isn't a separate tab — "Unpaid" already covers it
-              server-side (see api/member/bills/route.js); each bill still
-              shows its own Partial badge with the remaining amount. */}
-          {["all", "Unpaid", "Overdue", "Paid"].map((s) => (
-            <button
-              key={s}
-              onClick={() => {
-                setFilterStatus(s);
-                setPage(1);
-              }}
-              className={
-                filterStatus === s ? "btn btn-primary" : "btn btn-secondary"
-              }
-              style={{ fontSize: "0.875rem" }}
-            >
-              {s === "all" ? "All" : s}
-            </button>
-          ))}
-          <div style={{ marginLeft: "auto" }}></div>
-        </div>
-      </div>
-      {/* Bills List */}
+
       {isLoading ? (
-        <div style={{ padding: "3rem", textAlign: "center" }}>
-          <div className="loading-spinner" style={{ margin: "0 auto" }}></div>
-        </div>
-      ) : bills.length === 0 ? (
-        <div style={{ padding: "3rem", textAlign: "center", color: "var(--fg-5)" }}>
-          <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📭</div>
-          <p>No bills found</p>
-        </div>
+        <RevampSkeleton h={320} />
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          {bills.map((bill) => {
-            const id = bill._id || bill.id;
-            const sc = statusColors[bill.status] || statusColors.Unpaid;
-            return (
-              <div
-                key={id}
-                style={{
-                  background: "white",
-                  borderRadius: "10px",
-                  padding: "20px 24px",
-                  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-                  border: "1px solid var(--border)",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                  gap: "12px",
-                }}
-              >
-                <div
-                  style={{ display: "flex", alignItems: "center", gap: "14px" }}
-                >
-                  <div>
-                    <div
-                      style={{
-                        fontWeight: "700",
-                        fontSize: "1rem",
-                        color: "var(--fg-2)",
-                      }}
-                    >
-                      {bill.billPeriodId}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "0.8rem",
-                        color: "var(--fg-4)",
-                        marginTop: "3px",
-                      }}
-                    >
-                      Due:{" "}
-                      {new Date(bill.dueDate).toLocaleDateString("en-IN", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </div>
-                    {bill.previousBalance > 0 && (
-                      <div
-                        style={{
-                          fontSize: "0.75rem",
-                          color: "var(--danger)",
-                          marginTop: "2px",
-                        }}
-                      >
-                        Includes prev balance: ₹
-                        {bill.previousBalance.toLocaleString("en-IN")}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "16px",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <div style={{ textAlign: "right" }}>
-                    <div
-                      style={{
-                        fontSize: "1.25rem",
-                        fontWeight: "700",
-                        color: "var(--fg-2)",
-                      }}
-                    >
-                      ₹{bill.totalAmount?.toLocaleString("en-IN")}
-                    </div>
-                    {bill.amountPaid > 0 && (
-                      <div style={{ fontSize: "0.75rem", color: "var(--success)" }}>
-                        Paid: ₹{bill.amountPaid.toLocaleString("en-IN")}
-                      </div>
-                    )}
-                    {bill.totalAmount > 0 && bill.status !== "Paid" && (
-                      <div style={{ fontSize: "0.75rem", color: "var(--danger)" }}>
-                        Due: ₹{bill.balanceAmount.toLocaleString("en-IN")}
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
-                    <span
-                      style={{
-                        background: sc.bg,
-                        color: sc.color,
-                        padding: "4px 12px",
-                        borderRadius: "12px",
-                        fontSize: "12px",
-                        fontWeight: "700",
-                      }}
-                    >
-                      {bill.status}
-                    </span>
-                    {(bill.isHistoricalArchive === true) && (
-                      <span style={{ background: "var(--bg-muted)", color: "var(--fg-4)", padding: "2px 8px", borderRadius: "10px", fontSize: "11px", fontWeight: "600" }}>
-                        📜 Historical
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ display: "flex", gap: "8px" }}>
-                    {!bill.isHistoricalArchive && (
-                      <button
-                        className="btn btn-secondary"
-                        style={{ fontSize: "0.8rem", padding: "6px 12px" }}
-                        onClick={() => downloadBill(bill)}
-                      >
-                        ⬇️ Bill
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <DataTable
+          cols={cols}
+          rows={rows}
+          rowKey="_id"
+          emptyIcon="inbox"
+          emptyTitle="No bills found"
+        />
       )}
-      {/* Pagination */}
+
       {pagination.pages > 1 && (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            gap: "1rem",
-            marginTop: "1.5rem",
-          }}
-        >
-          <button
-            className="btn btn-secondary"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-          >
-            ← Prev
-          </button>
-          <span
-            style={{
-              padding: "0.5rem 1rem",
-              background: "white",
-              borderRadius: "6px",
-            }}
-          >
-            Page {page} of {pagination.pages}
-          </span>
-          <button
-            className="btn btn-secondary"
-            onClick={() => setPage((p) => p + 1)}
-            disabled={page >= pagination.pages}
-          >
-            Next →
-          </button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end", marginTop: 16 }}>
+          <Btn size="sm" variant="ghost" icon="chevron-left" disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Previous</Btn>
+          <span style={{ fontSize: 12, color: "var(--r-fg-4)" }}>Page {page} of {pagination.pages}</span>
+          <Btn size="sm" variant="ghost" iconR="chevron-right" disabled={page >= pagination.pages} onClick={() => setPage((p) => p + 1)}>Next</Btn>
         </div>
       )}
-      {/* Payment Confirm Modal */}
     </div>
   );
 }

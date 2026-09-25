@@ -86,8 +86,17 @@ export default function TakeoverSessionPanel({ user }) {
     // Only the real admin needs to discover a request — the impersonated
     // session already knows everything it needs from `user.takeover`.
     enabled: !isImpersonated,
-    refetchInterval: 5000,
-    retry: 2,
+    // No idle polling. A request is looked for when the panel opens and when
+    // the tab is focused again; only while one is actually in progress (OTP
+    // step, active grant) does it refresh every 5s so the admin sees the state
+    // change. Idle admins cost zero requests.
+    refetchInterval: (query) => {
+      const d = query?.state?.data;
+      return d?.grant || d?.activeGrant ? 5000 : false;
+    },
+    refetchOnWindowFocus: true,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
   });
 
   const pending = data?.grant;
@@ -187,7 +196,7 @@ export default function TakeoverSessionPanel({ user }) {
     return (
       <div style={{ ...barStyle, background: "var(--warning-bg, #fff7e6)", color: "var(--warning, #b45309)", borderBottom: "1px solid var(--warning, #b45309)" }}>
         <span>
-          🔒 Support session — {user.takeover.ticketTitle ? `"${user.takeover.ticketTitle}" · ` : ""}
+          Support session — {user.takeover.ticketTitle ? `"${user.takeover.ticketTitle}" · ` : ""}
           {user.takeover.mode === "write" ? "view + edit" : "view only"} · expires {fmtTime(user.takeover.expiresAt)}
         </span>
         <button
@@ -219,7 +228,7 @@ export default function TakeoverSessionPanel({ user }) {
       {activeGrant && (
         <div style={{ ...barStyle, background: "var(--info-bg)", color: "var(--info)", borderBottom: "1px solid var(--info)" }}>
           <span>
-            🔒 Support is currently {activeGrant.scope === "write" ? "viewing + editing" : "viewing"} your dashboard
+            Support is currently {activeGrant.scope === "write" ? "viewing + editing" : "viewing"} your dashboard
             {activeTicket ? ` (ticket: ${activeTicket.title})` : ""} · expires {fmtTime(activeGrant.expiresAt)}
           </span>
           <button
@@ -261,7 +270,7 @@ export default function TakeoverSessionPanel({ user }) {
                   <button
                     onClick={() => approve.mutate()}
                     disabled={approve.isPending}
-                    style={{ flex: 1, padding: "0.6rem", borderRadius: 6, border: "none", background: "var(--primary)", color: "#fff", fontWeight: 700, cursor: "pointer" }}
+                    style={{ flex: 1, padding: "0.6rem", borderRadius: 6, border: "none", background: "var(--primary)", color: "var(--on-solid)", fontWeight: 700, cursor: "pointer" }}
                   >
                     {approve.isPending ? "Sending code…" : "Approve"}
                   </button>
@@ -298,7 +307,7 @@ export default function TakeoverSessionPanel({ user }) {
                   <button
                     onClick={() => verify.mutate()}
                     disabled={verify.isPending || otp.length !== 6}
-                    style={{ flex: 1, padding: "0.6rem", borderRadius: 6, border: "none", background: "var(--primary)", color: "#fff", fontWeight: 700, cursor: "pointer" }}
+                    style={{ flex: 1, padding: "0.6rem", borderRadius: 6, border: "none", background: "var(--primary)", color: "var(--on-solid)", fontWeight: 700, cursor: "pointer" }}
                   >
                     {verify.isPending ? "Confirming…" : "Confirm"}
                   </button>

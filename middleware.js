@@ -2,7 +2,8 @@
 import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import cache from "@/lib/cache";
-import { getSessionEpochFloor } from "@/lib/session-epoch";
+import { readSessionEpochFloor } from "@/lib/session-epoch";
+import { readOwnerGrace } from "@/lib/ownership-grace";
 import { moduleForPath, isNeverGated } from "@/lib/entitlements/modules";
 import { readEntitlementSnapshot } from "@/lib/entitlements/snapshot";
 import { recordDenial } from "@/lib/entitlements/denials";
@@ -40,13 +41,44 @@ async function isRevoked(payload) {
 // even on the 123 routes still guarded by the legacy lib/authz.js (which
 // never re-checks role/status per request). Sourced from the Redis floor
 // lib/rbac/session.js.bumpSessionEpoch writes — no Mongo access needed here.
+// SEC-18: opt-in kill switch for the fail-closed behaviour below.
+//
+// Set SESSION_EPOCH_FAIL_CLOSED=1 to enforce. Left OFF by default on purpose:
+// this check runs on every authenticated request, and flipping it straight to
+// "deny when Redis is unreachable" would mean an Upstash blip stops billing
+// writes for every society at once. Run it off first, watch for the
+// [sec18] line below in the logs for a week, then turn it on.
+const SESSION_EPOCH_FAIL_CLOSED =
+  process.env.SESSION_EPOCH_FAIL_CLOSED === "1" ||
+  process.env.SESSION_EPOCH_FAIL_CLOSED === "true";
+
 async function isStaleSession(payload) {
   const userId = payload?.userId || payload?.sub || payload?.id;
   if (!userId) return false;
-  const floor = await getSessionEpochFloor(userId);
-  if (floor === null) return false; // nothing ever bumped for this user — nothing to enforce
+
+  const res = await readSessionEpochFloor(userId);
+
+  if (!res.ok) {
+    // The floor could not be read. We cannot prove this token is fresh, and we
+    // cannot prove it is stale either. Previously this returned false — i.e.
+    // every revoked-by-privilege-change token silently worked again for the
+    // duration of the outage, which is precisely what role handover (Plan 01
+    // §10) and old-owner sunset (Plan 02 §7) exist to prevent.
+    //
+    // This is the one line that decides it, so it is a flag and it is logged
+    // either way. Grep [sec18] to size the blast radius before enabling.
+    console.warn(
+      `[sec18] session-epoch floor lookup failed userId=${userId} enforcing=${SESSION_EPOCH_FAIL_CLOSED} err=${res.error}`,
+    );
+    return SESSION_EPOCH_FAIL_CLOSED;
+  }
+
+  // Genuinely nothing recorded for this user — no bump has ever happened, so
+  // their token is exactly as fresh as it was at issuance. Nothing to enforce.
+  if (res.floor === null) return false;
+
   const tokenEpoch = payload.sessionEpoch || 0;
-  return tokenEpoch < floor;
+  return tokenEpoch < res.floor;
 }
 // LOOP-05: written by the lifecycle route (pause / pause-until / delete-
 // until), TTL'd to match, and cleared on resume / delete-permanently.
@@ -313,6 +345,25 @@ export async function middleware(request) {
         return withCsp(NextResponse.json({ error: "Forbidden" }, { status: 403 }), nonce);
       }
     }
+    // SEC-22: the superadmin token is revocable too, and is checked first.
+    //
+    // It is signed with a DIFFERENT secret (ADMIN_JWT_SECRET), so it never
+    // parsed as a regular token and fell through every check below — meaning
+    // the highest-privilege credential in the product was the one credential
+    // that could not be invalidated. `app/api/admin/auth/login` now mints it
+    // with a jti and `app/api/auth/logout` denylists that jti; this is the
+    // half that enforces it.
+    const adminApiToken = request.cookies.get("admin_token")?.value;
+    if (adminApiToken) {
+      const adminPayload = await parseJwt(adminApiToken, "ADMIN_JWT_SECRET");
+      if (await isRevoked(adminPayload)) {
+        return withCsp(
+          NextResponse.json({ error: "Token revoked" }, { status: 401 }),
+          nonce,
+        );
+      }
+    }
+
     // Revocation check: only runs when a "token" (regular JWT_SECRET) is
     // actually presented, via cookie (web) or Bearer header (mobile/API
     // clients). No token / an already-invalid token is left for the route's
@@ -325,9 +376,14 @@ export async function middleware(request) {
         return withCsp(NextResponse.json({ error: "Token revoked" }, { status: 401 }), nonce);
       }
       if (await isStaleSession(payload)) {
+        // Plan 05 §A6 (05-session-lifetime-and-rbac-default.md): the same
+        // reason code role handover (Plan 01 §10-11) and old-owner sunset
+        // (Plan 02 §7) already produce via this exact epoch check, so the
+        // session-expired dialog shows one consistent message for all three
+        // causes instead of a generic "unauthenticated".
         return withCsp(
           NextResponse.json(
-            { error: "Your access changed. Please sign in again.", code: "UNAUTHENTICATED", reauth: true },
+            { error: "Your access changed. Please sign in again.", code: "SESSION_REVOKED", reauth: true },
             { status: 401 },
           ),
           nonce,
@@ -378,6 +434,31 @@ export async function middleware(request) {
           ),
           nonce,
         );
+      }
+      // SEC-28 / Plan 02 §7: a former owner inside their grace window can READ
+      // their own records and nothing else.
+      //
+      // Enforced by HTTP method for the same reason takeover read-only above
+      // is: method is the one property every write shares, and several hundred
+      // per-handler checks would work until one was forgotten — and the
+      // forgotten one is a former owner still acting on a flat they sold.
+      if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+        const graceUserId = payload?.userId || payload?.sub || payload?.id;
+        const grace = await readOwnerGrace(graceUserId);
+        if (grace) {
+          return withCsp(
+            NextResponse.json(
+              {
+                error:
+                  "This flat has been transferred to its new owner. You can still view and download your records until your access ends, but you can no longer make changes.",
+                code: "OWNER_EXIT_READ_ONLY",
+                accessEndsAt: grace.endsAt,
+              },
+              { status: 403 },
+            ),
+            nonce,
+          );
+        }
       }
       // Superadmins operate across societies and are never gated by one
       // society's plan.
@@ -462,6 +543,12 @@ export async function middleware(request) {
     }
     const adminPayload = await parseJwt(adminToken, "ADMIN_JWT_SECRET");
     if (!adminPayload || adminPayload.role !== "SuperAdmin") {
+      return withCsp(NextResponse.redirect(new URL("/superadmin/login", request.url)), nonce);
+    }
+    // SEC-22: a logged-out superadmin token must not still open superadmin
+    // PAGES either — revoking it only for /api/* would leave every superadmin
+    // screen reachable with a token its owner had already signed out.
+    if (await isRevoked(adminPayload)) {
       return withCsp(NextResponse.redirect(new URL("/superadmin/login", request.url)), nonce);
     }
     return withCsp(NextResponse.next(nextArgs), nonce);
@@ -558,12 +645,28 @@ export const config = {
     // anything else outside admin/member/security/superadmin/api), so every
     // page now actually gets the CSP header instead of falling back to
     // next.config.js's old static, un-nonced one.
-    {
-      source: "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff|woff2|ttf|map)$).*)",
-      missing: [
-        { type: "header", key: "next-router-prefetch" },
-        { type: "header", key: "purpose", value: "prefetch" },
-      ],
-    },
+    // SEC-14: the `missing: [next-router-prefetch, purpose=prefetch]` clause that
+    // used to live here — copied from Next's CSP-nonce recipe — was a complete
+    // bypass of this file. `missing` tells Next to SKIP middleware when those
+    // headers are present, and both are ordinary request headers under full
+    // client control:
+    //
+    //     curl -H 'purpose: prefetch' -b 'token=<revoked>' /api/bills
+    //
+    // ran with middleware disabled, which meant no CSRF/Origin check, no JTI
+    // revocation, no session-epoch staleness, no society-paused lockout, no
+    // takeover read-only gate, no module entitlement, no subscription
+    // lifecycle, and no CSP — on every route this matcher covers. Route
+    // handlers still ran their own guards, so it was never an anonymous-access
+    // bypass; it was an opt-out from every control that lives ONLY here.
+    //
+    // The recipe's own concern is nonce churn on prefetches, and the cost of
+    // ignoring it is one extra nonce plus the Redis reads below per prefetch.
+    // Nothing is special-cased for prefetch inside middleware() either: a
+    // first attempt here skipped minting the nonce on a prefetch, which meant
+    // RootLayout read `x-nonce` as undefined and rendered its inline theme
+    // bootstrap un-nonced. Trading a known-good header for a saved UUID is not
+    // a trade worth making — middleware now simply always runs, in full.
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff|woff2|ttf|map)$).*)",
   ],
 };

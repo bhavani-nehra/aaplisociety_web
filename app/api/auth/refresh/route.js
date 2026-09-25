@@ -11,16 +11,30 @@ import { loginBlockFor } from "@/lib/auth/login-block";
 // it, and re-derives claims from the user's *current* profile state (so a
 // role/profile change since last login takes effect on refresh, not only on
 // next full login).
+// Plan 05 Part A, step 4 — the four reasons a refresh can fail, each reading
+// as a different situation rather than one generic "session expired"
+// string. SESSION_REVOKED is deliberately also what Plan 01 §10-11 (role
+// handover) and Plan 02 §7 (old-owner sunset) produce, via the session-epoch
+// path elsewhere — one message covers all three causes.
+const REFRESH_FAILURE_MESSAGES = {
+  SESSION_IDLE_EXPIRED: "Signed out after 2 hours of inactivity.",
+  SESSION_MAX_AGE: "Daily sign-in required.",
+  SESSION_REVOKED: "Your access changed. Please sign in again.",
+};
+
 export async function POST(request) {
   try {
     await connectDB();
     const refreshCookie = request.cookies.get("refreshToken")?.value;
     if (!refreshCookie) {
-      return NextResponse.json({ error: "No refresh token" }, { status: 401 });
+      return NextResponse.json({ error: "No refresh token", code: "SESSION_REVOKED" }, { status: 401 });
     }
     const rotated = await rotateRefreshToken(refreshCookie);
-    if (!rotated) {
-      const res = NextResponse.json({ error: "Invalid or expired refresh token" }, { status: 401 });
+    if (!rotated.ok) {
+      const res = NextResponse.json(
+        { error: REFRESH_FAILURE_MESSAGES[rotated.reason] || "Invalid or expired refresh token", code: rotated.reason },
+        { status: 401 },
+      );
       clearRefreshCookie(res);
       return res;
     }
@@ -58,7 +72,7 @@ export async function POST(request) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
       path: "/",
-      maxAge: 60 * 60 * 8,
+      maxAge: 60 * 15, // Plan 05 Part A — matches lib/jwt.js's 15m access-token default
     });
     setRefreshCookie(response, rotated.refreshToken);
     return response;

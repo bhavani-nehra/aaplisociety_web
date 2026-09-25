@@ -59,13 +59,24 @@ export async function POST(request) {
     }
     // On success: clear lockout
     await cache.del(rlKey);
-    const token = signToken({
-      userId: guard._id.toString(),
-      name: guard.name,
-      role: "Security",
-      societyId: guard.societyId.toString(),
-      gateLabel: guard.gateLabel || "Main Gate",
-    });
+    // Deliberately NOT the shared 15m default (Plan 05 Part A): this route's
+    // own cookie below is a 12-hour shift, not an office session, and an
+    // access token that silently expired at 15m while the cookie claimed 12h
+    // would have been a worse mismatch than the pre-existing 8h/12h one this
+    // replaces. The 2h-idle/24h-cap refresh-token rule still applies via the
+    // shared issueRefreshToken/rotateRefreshToken below — see
+    // 07-execution-log.md's Run 18 note on the tradeoff that creates for a
+    // guard silent for 2h+ mid-shift.
+    const token = signToken(
+      {
+        userId: guard._id.toString(),
+        name: guard.name,
+        role: "Security",
+        societyId: guard.societyId.toString(),
+        gateLabel: guard.gateLabel || "Main Gate",
+      },
+      { expiresIn: "12h" },
+    );
     const response = NextResponse.json({
       success: true,
       user: {

@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import connectDB from "@/lib/mongodb";
 import User from "@/models/User";
 import { signToken } from "@/lib/jwt";
-import { issueRefreshToken, setRefreshCookie } from "@/lib/refresh-token";
+import { issueRefreshToken, setRefreshCookie, peekSessionStartedAt } from "@/lib/refresh-token";
 import {
   isStaffProfileId,
   assignmentIdFromProfileId,
@@ -52,6 +52,14 @@ export async function POST(request) {
       return NextResponse.json({ error: block.message, code: block.code }, { status: 403 });
     }
 
+    // Plan 05 Part A: switching profiles/hats mid-session is not a new
+    // login — the 24h absolute cap must keep counting from when the user
+    // actually signed in, not reset every time they switch flats/hats.
+    // Best-effort: a genuinely new session (profileSelectToken path, no
+    // refreshToken cookie yet) has nothing to carry forward, which is
+    // correct — that IS a new session.
+    const sessionStartedAt = peekSessionStartedAt(request.cookies.get("refreshToken")?.value);
+
     // Staff/management profile (backed by a RoleAssignment, not user.profiles[]).
     if (isStaffProfileId(profileId)) {
       const assignmentId = assignmentIdFromProfileId(profileId);
@@ -91,9 +99,9 @@ export async function POST(request) {
         secure: process.env.NODE_ENV === "production",
         sameSite: "strict",
         path: "/",
-        maxAge: 60 * 60 * 8,
+        maxAge: 60 * 15, // Plan 05 Part A — matches lib/jwt.js's 15m access-token default
       });
-      setRefreshCookie(response, await issueRefreshToken(user._id));
+      setRefreshCookie(response, await issueRefreshToken(user._id, { sessionStartedAt }));
       return response;
     }
 
@@ -143,9 +151,9 @@ export async function POST(request) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
       path: "/",
-      maxAge: 60 * 60 * 8,
+      maxAge: 60 * 15, // Plan 05 Part A — matches lib/jwt.js's 15m access-token default
     });
-    setRefreshCookie(response, await issueRefreshToken(user._id));
+    setRefreshCookie(response, await issueRefreshToken(user._id, { sessionStartedAt }));
     return response;
   } catch (error) {
     console.error("switch-profile error:", error);

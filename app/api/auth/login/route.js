@@ -7,6 +7,13 @@ import AuditLog from "@/models/AuditLog";
 import { signToken } from "@/lib/jwt";
 import { issueRefreshToken, setRefreshCookie } from "@/lib/refresh-token";
 import { getStaffProfiles } from "@/lib/rbac/staff-profiles";
+// SEC-20: used only by the self-heal below — see the comment there.
+import { ensureAdminAssignment } from "@/lib/rbac/ensure-admin-assignment";
+
+// The root role strings that ensureAdminAssignment knows how to map onto an
+// RBAC role key (its own LEGACY_ROLE_TO_KEY table). Anything else self-heals to
+// nothing, so there is no point calling it.
+const LEGACY_ROOT_ROLES = ["Admin", "SOCIETY_ADMIN", "Secretary", "Accountant", "Security"];
 import { legacyRoleForKey } from "@/lib/rbac/legacy-role-bridge";
 import { loginBlockFor, pauseHasExpired } from "@/lib/auth/login-block";
 import { enforceRateLimit } from "@/lib/v1/ratelimit";
@@ -145,7 +152,49 @@ export async function POST(request) {
     // A member can ALSO hold a staff RoleAssignment (e.g. "Auditor" on top of
     // their own flat) — those need to appear as selectable entries too, or
     // granting the role gives them no way to ever use it.
-    const staffProfiles = await getStaffProfiles(user._id);
+    let staffProfiles = await getStaffProfiles(user._id);
+
+    // ── SEC-20: self-heal a society whose RBAC seeding never completed ──────
+    //
+    // Bulk import seeds role templates and the admin's RoleAssignment after its
+    // transaction commits. That step used to swallow its own failure, so a
+    // society could exist with zero roles and an admin who lands here with no
+    // staff profile at all and is told "no active society profiles" — locked
+    // out of the society they just created, by an error nobody saw.
+    //
+    // The import now records NEEDS_REPAIR and offers a repair action, but that
+    // only helps societies imported from here on, and only if someone looks. An
+    // admin signing in should never be the one to discover it.
+    //
+    // Narrow on purpose: only for an account that still carries a legacy root
+    // role, only when it has no profiles of any kind, and only when its society
+    // exists. ensureAdminAssignment is idempotent and creates the Role template
+    // inline if missing, so this is a no-op for every healthy account. A
+    // failure here must never block the login path — it falls through to the
+    // same honest CASE C error as before.
+    if (
+      activeProfiles.length === 0 &&
+      staffProfiles.length === 0 &&
+      user.societyId &&
+      LEGACY_ROOT_ROLES.includes(user.role)
+    ) {
+      try {
+        const healed = await ensureAdminAssignment({
+          userId: user._id,
+          societyId: user.societyId,
+          legacyRole: user.role,
+        });
+        if (healed) {
+          console.warn(
+            `[sec20] self-healed missing RoleAssignment userId=${user._id} societyId=${user.societyId} role=${user.role}`,
+          );
+          staffProfiles = await getStaffProfiles(user._id);
+        }
+      } catch (err) {
+        console.error("[sec20] self-heal failed:", err?.message);
+      }
+    }
+
     const totalProfileCount = activeProfiles.length + staffProfiles.length;
     // CASE A: exactly one profile total (member OR staff, never both) → auto-login
     if (totalProfileCount === 1 && staffProfiles.length === 1) {
@@ -210,7 +259,7 @@ export async function POST(request) {
         secure: process.env.NODE_ENV === "production",
         sameSite: "strict",
         path: "/",
-        maxAge: 60 * 60 * 8,
+        maxAge: 60 * 15, // Plan 05 Part A — matches lib/jwt.js's 15m access-token default
       });
       setRefreshCookie(response, await issueRefreshToken(user._id));
       return response;
@@ -253,7 +302,7 @@ export async function POST(request) {
         secure: process.env.NODE_ENV === "production",
         sameSite: "strict",
         path: "/",
-        maxAge: 60 * 60 * 8,
+        maxAge: 60 * 15, // Plan 05 Part A — matches lib/jwt.js's 15m access-token default
       });
       setRefreshCookie(response, await issueRefreshToken(user._id));
       return response;

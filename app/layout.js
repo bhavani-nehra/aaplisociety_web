@@ -1,3 +1,4 @@
+import { ReticleDev } from './reticle-dev';
 //app/layout.js
 import { headers } from "next/headers";
 import QueryProvider from "./providers/QueryProvider";
@@ -5,6 +6,9 @@ import "../styles/globals.css";
 import { Inter } from "next/font/google";
 import ToastProvider from "@/components/ui/ToastProvider";
 import ConfirmDialogHost from "@/components/ui/ConfirmDialogHost";
+import ActionLoader from "@/components/brand/ActionLoader";
+import ScatterIntro from "@/components/brand/ScatterIntro";
+import SessionGuard from "@/components/session/SessionGuard";
 const inter = Inter({ subsets: ["latin"] });
 export const metadata = {
   title: "AapliSociety",
@@ -26,9 +30,9 @@ export default async function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
+        <script suppressHydrationWarning nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
       </head>
-      <body className={inter.className}>
+      <body className={inter.className}>{process.env.NODE_ENV === 'development' ? <ReticleDev /> : null}
         {/* Global Aurora background — one mount for every route (was
             admin-dashboard-only; see styles/globals.css for the 4-layer
             stack and public/bg.svg + public/bg-dark.svg for the art).
@@ -38,7 +42,15 @@ export default async function RootLayout({ children }) {
         <div aria-hidden className="appBgDarkDepth" />
         <div aria-hidden className="appBgDarkRightFade" />
         <div aria-hidden className="appBgScrim" />
+        {/* Patches window.fetch so every /api/* call in the app — including
+            the 85 files that call fetch() directly rather than going through
+            lib/api-client.js — gets one silent refresh-and-retry on a 401
+            instead of surfacing it as a dead error mid-task. Renders nothing;
+            mounted before children so the patch is in place first. */}
+        <SessionGuard />
         <QueryProvider>{children}</QueryProvider>
+        <ScatterIntro />
+        <ActionLoader />
         <ToastProvider />
         <ConfirmDialogHost />
       </body>

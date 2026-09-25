@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { getAdminModels } from "@/lib/admin-models";
 import jwt from "jsonwebtoken";
+import crypto from "node:crypto";
 import { checkRateLimit, clearRateLimit } from "@/lib/admin-middleware";
 import { verifyTurnstileToken } from "@/lib/turnstile";
 export async function POST(request) {
@@ -102,6 +103,16 @@ export async function POST(request) {
         userId: admin._id,
         email: admin.email,
         role: admin.role, // 🔥 dynamic
+        // SEC-22: a unique id so this token can be revoked.
+        //
+        // Until now the superadmin token — the single highest-privilege
+        // credential in the product — carried no jti, which meant there was
+        // nothing for the logout denylist to key on and NO way to invalidate
+        // one. A leaked superadmin token stayed valid for its full 8 hours and
+        // nothing could be done about it. Ordinary user tokens have had a jti
+        // since lib/jwt.js:signToken; this is the same mechanism, applied to
+        // the account that needs it most.
+        jti: crypto.randomUUID(),
       },
       process.env.ADMIN_JWT_SECRET,
       { expiresIn: "8h" },

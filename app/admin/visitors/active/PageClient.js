@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { installIdleTracking, isPageIdleForPolling } from "@/lib/idle-tracker";
 import {
   Card,
   PageHeader,
@@ -48,7 +49,7 @@ function Column({ title, icon, rows, action }) {
         <span>{icon}</span> {title} <span style={S.count}>{rows.length}</span>
       </div>
       {rows.length === 0 ? (
-        <EmptyState icon="—" title="None" />
+        <EmptyState icon="door-open" title="Nobody inside right now" />
       ) : (
         rows.map((v) => (
           <div key={v._id} style={S.item}>
@@ -82,6 +83,11 @@ export default function AdminActiveVisitors() {
   // `silent` polls do NOT toggle the full-page spinner, so background
   // refreshes no longer visibly flash/reload the tiles.
   const load = useCallback(async (silent = false) => {
+    // Plan 05 §A3: a background poll (silent=true) must not keep a
+    // visible-but-abandoned tab's session alive forever — see
+    // lib/idle-tracker.js. A non-silent call is always a real user action
+    // (or the initial mount) and is never skipped.
+    if (silent && isPageIdleForPolling()) return;
     if (!silent) setLoading(true);
     try {
       const [p, a, e] = await Promise.all([
@@ -101,6 +107,7 @@ export default function AdminActiveVisitors() {
     }
   }, []);
   useEffect(() => {
+    installIdleTracking();
     load();
     // Poll every 45s and ONLY while the tab is visible: slashes Vercel function
     // invocations (was every 10s, even in background tabs) and stops the tiles
@@ -157,11 +164,11 @@ export default function AdminActiveVisitors() {
         </div>
       ) : (
         <div style={S.colWrap}>
-          <Column title="Awaiting approval" icon="⏳" rows={data.Pending} />
-          <Column title="Approved · at gate" icon="✅" rows={data.Approved} />
+          <Column title="Awaiting approval" icon="" rows={data.Pending} />
+          <Column title="Approved · at gate" icon="" rows={data.Approved} />
           <Column
             title="Inside premises"
-            icon="🟢"
+            icon=""
             rows={data.Entered}
             action={(v) => (
               <Button variant="subtle" size="sm" disabled={busy === v._id} onClick={() => markExit(v._id)}>

@@ -21,9 +21,9 @@ async function api(url) {
   return data;
 }
 const ACTION_META = {
-  VISITOR_OFFLINE_ENTRY: { label: "📴 Offline entry", color: "var(--warning)" },
-  VISITOR_ENTRY_CONFIRMED: { label: "✅ Confirmed", color: "var(--success)" },
-  VISITOR_ENTRY_FLAGGED: { label: "🚨 Flagged", color: "var(--danger)" },
+  VISITOR_OFFLINE_ENTRY: { label: "Offline entry", color: "var(--warning)" },
+  VISITOR_ENTRY_CONFIRMED: { label: "Confirmed", color: "var(--success)" },
+  VISITOR_ENTRY_FLAGGED: { label: "Flagged", color: "var(--danger)" },
 };
 const S = {
   filters: {
@@ -151,7 +151,7 @@ export default function AdminVisitorAudit() {
           </div>
         ) : rows.length === 0 ? (
           <EmptyState
-            icon="🗂️"
+            icon="clipboard-list"
             title="No offline events"
             subtitle="Offline entries and resident confirmations will appear here."
           />
@@ -203,7 +203,7 @@ export default function AdminVisitorAudit() {
                       <td style={S.td}>
                         {l.action === "VISITOR_OFFLINE_ENTRY"
                           ? d.note
-                            ? `📝 ${d.note}`
+                            ? `${d.note}`
                             : "—"
                           : d.decision
                             ? `Decision: ${d.decision}`

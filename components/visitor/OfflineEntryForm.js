@@ -30,7 +30,7 @@ const S = {
   hidden: { display: "none" },
   err: { color: "var(--danger-fg)", fontSize: 12.5, marginTop: 8 },
   actions: { display: "flex", gap: 10, marginTop: 16 },
-  submit: { flex: 1, padding: "12px", borderRadius: 10, border: "none", background: "var(--danger)", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer" },
+  submit: { flex: 1, padding: "12px", borderRadius: 10, border: "none", background: "var(--danger)", color: "var(--on-solid)", fontSize: 15, fontWeight: 700, cursor: "pointer" },
   cancel: { padding: "12px 16px", borderRadius: 10, border: "1px solid var(--border-strong)", background: "var(--bg-surface)", color: "var(--fg-3)", fontSize: 14, fontWeight: 600, cursor: "pointer" },
   hint: { fontSize: 12, color: "var(--fg-4)", marginTop: 6, lineHeight: 1.4 },
 };
@@ -147,7 +147,7 @@ export default function OfflineEntryForm({ onDone }) {
         <label style={S.label}>Flat / resident *</label>
         {flat ? (
           <div style={S.picked}>
-            <span>🏠 {flatName(flat)}</span>
+            <span>{flatName(flat)}</span>
             <span style={S.link} onClick={() => setFlat(null)}>
               Change
             </span>
@@ -192,7 +192,7 @@ export default function OfflineEntryForm({ onDone }) {
                     style={S.resultRow}
                     onClick={() => pick(f)}
                   >
-                    🏠 {flatName(f)}
+                    {flatName(f)}
                   </div>
                 ))}
               </div>
@@ -276,7 +276,7 @@ export default function OfflineEntryForm({ onDone }) {
           {busy
             ? "Saving\u2026"
             : online
-              ? "✅ Log entry & notify resident"
+              ? "Log entry & notify resident"
               : "\uD83D\uDCBE Save offline — will notify when online"}
         </button>
         {onDone ? (

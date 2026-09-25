@@ -363,7 +363,7 @@ export default function SecurityDashboardPage() {
               </p>
               {pending.length === 0 ? (
                 <EmptyState
-                  icon="⏳"
+                  icon="hourglass"
                   title="No one waiting"
                   subtitle="All visitor requests have been actioned."
                 />
@@ -380,7 +380,7 @@ export default function SecurityDashboardPage() {
               </p>
               {approved.length === 0 ? (
                 <EmptyState
-                  icon="✅"
+                  icon="circle-check"
                   title="Nothing to action"
                   subtitle="No approved visitors waiting at the gate."
                 />

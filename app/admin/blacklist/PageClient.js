@@ -1,24 +1,12 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import notify from "@/lib/notify";
+import { PhotoCapture } from "@/components/visitor/ui";
 import {
-  Card,
-  PageHeader,
-  Button,
-  Field,
-  Input,
-  Select,
-  Textarea,
-  Avatar,
-  Badge,
-  Spinner,
-  Toast,
-  EmptyState,
-  PhotoCapture,
-  grid,
-  tokens,
-  fmtTime,
-} from "@/components/visitor/ui";
+  PageHeader, Card, CardHead, Btn, Pill, Icon, Avatar, EmptyState,
+  RevampSkeleton, Toast,
+} from "@/components/revamp";
+
 async function api(url, opts) {
   const res = await fetch(url, {
     credentials: "include",
@@ -26,42 +14,24 @@ async function api(url, opts) {
     ...opts,
   });
   let data = null;
-  try {
-    data = await res.json();
-  } catch (_) {}
+  try { data = await res.json(); } catch (_) {}
   if (!res.ok) throw new Error((data && data.error) || "Request failed");
   return data;
 }
+
 const BLANK = { name: "", phone: "", reason: "", severity: "block", photo: "" };
-const S = {
-  layout: { display: "grid", gridTemplateColumns: "360px 1fr", gap: 20, alignItems: "start" },
-  formGrid: { display: "grid", gap: 14 },
-  hint: { fontSize: 12.5, color: tokens.sub, marginTop: -4, marginBottom: 4 },
-  toggleRow: { display: "flex", gap: 8 },
-  sevBtn: (active, color) => ({
-    flex: 1,
-    padding: "10px 12px",
-    borderRadius: tokens.radiusSm,
-    border: active ? `1.5px solid ${color}` : tokens.border,
-    background: active ? `${color}14` : "var(--bg-surface)",
-    color: active ? color : tokens.sub,
-    fontWeight: 700,
-    fontSize: 13,
-    cursor: "pointer",
-  }),
-  listHead: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 12 },
-  listTitle: { fontSize: 16, fontWeight: 700, color: tokens.text },
-  filterRow: { display: "flex", gap: 8, alignItems: "center" },
-  row: { display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: "1px solid var(--bg-muted)" },
-  rowMain: { flex: 1, minWidth: 0 },
-  rowName: { fontWeight: 600, color: tokens.text, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  rowMeta: { fontSize: 12.5, color: tokens.sub, marginTop: 3 },
-  rowReason: { fontSize: 13, color: tokens.text, marginTop: 4 },
-  dim: { opacity: 0.5 },
-  center: { display: "flex", justifyContent: "center", padding: 48 },
-  spacer: { height: 14 },
-  switchRow: { display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: tokens.sub, cursor: "pointer" },
-};
+const fmtTime = (v) => (v ? new Date(v).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "numeric", minute: "2-digit" }) : "—");
+
+function Field({ label, hint, required, children }) {
+  return (
+    <div>
+      <div className="label" style={{ marginBottom: 4 }}>{label}{required ? " *" : ""}</div>
+      {children}
+      {hint ? <div style={{ fontSize: 11.5, color: "var(--r-fg-4)", marginTop: 4 }}>{hint}</div> : null}
+    </div>
+  );
+}
+
 export default function BlacklistPage() {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -70,6 +40,7 @@ export default function BlacklistPage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -81,9 +52,9 @@ export default function BlacklistPage() {
       setLoading(false);
     }
   }, [showInactive]);
-  useEffect(() => {
-    load();
-  }, [load]);
+
+  useEffect(() => { load(); }, [load]);
+
   async function submit(e) {
     e.preventDefault();
     if (!form.reason.trim()) {
@@ -115,6 +86,7 @@ export default function BlacklistPage() {
       setSaving(false);
     }
   }
+
   function remove(id) {
     const index = entries.findIndex((en) => en._id === id);
     if (index === -1) return;
@@ -143,48 +115,45 @@ export default function BlacklistPage() {
       },
     });
   }
+
   return (
-    <div>
+    <div style={{ maxWidth: 1200, margin: "0 auto" }}>
       <PageHeader
+        eyebrow={<><Icon name="shield-alert" size={11} /> Operations · Watchlist</>}
         title="Watchlist"
-        subtitle="Flag or block visitors by name or phone. Blocked entries are denied at the gate automatically."
+        sub="Flag or block visitors by name or phone. Blocked entries are denied at the gate automatically."
       />
-      <div style={S.layout}>
-        {/* Add form */}
+
+      <div style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: 20, alignItems: "start" }}>
         <Card>
-          <div style={S.listTitle}>Add to watchlist</div>
-          <div style={S.spacer} />
-          <form onSubmit={submit} style={S.formGrid}>
+          <CardHead title="Add to watchlist" />
+          <form onSubmit={submit} style={{ display: "grid", gap: 14, marginTop: 4 }}>
             <Field label="Name" hint="Matched on visitor name at entry">
-              <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. John Doe" />
+              <input className="input" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. John Doe" />
             </Field>
             <Field label="Phone" hint="Strongest match — normalised automatically">
-              <Input value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="e.g. 9876543210" />
+              <input className="input" value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="e.g. 9876543210" />
             </Field>
             <Field label="Severity" required>
-              <div style={S.toggleRow}>
-                <button
-                  type="button"
-                  style={S.sevBtn(form.severity === "flag", "var(--warning)")}
+              <div style={{ display: "flex", gap: 8 }}>
+                <Btn
+                  type="button" variant={form.severity === "flag" ? "secondary" : "ghost"} icon="alert-triangle"
+                  style={form.severity === "flag" ? { borderColor: "var(--r-warning)", color: "var(--r-warning)" } : undefined}
                   onClick={() => set("severity", "flag")}
                 >
-                  ⚠️ Flag (warn guard)
-                </button>
-                <button
-                  type="button"
-                  style={S.sevBtn(form.severity === "block", tokens.danger)}
+                  Flag (warn guard)
+                </Btn>
+                <Btn
+                  type="button" variant={form.severity === "block" ? "secondary" : "ghost"} icon="shield-x"
+                  style={form.severity === "block" ? { borderColor: "var(--r-danger)", color: "var(--r-danger)" } : undefined}
                   onClick={() => set("severity", "block")}
                 >
-                  ⛔ Block (deny entry)
-                </button>
+                  Block (deny entry)
+                </Btn>
               </div>
             </Field>
             <Field label="Reason" required>
-              <Textarea
-                value={form.reason}
-                onChange={(e) => set("reason", e.target.value)}
-                placeholder="Why is this person on the watchlist?"
-              />
+              <textarea rows={3} className="input" value={form.reason} onChange={(e) => set("reason", e.target.value)} placeholder="Why is this person on the watchlist?" />
             </Field>
             <PhotoCapture
               label="Photo (optional)"
@@ -192,70 +161,51 @@ export default function BlacklistPage() {
               value={form.photo}
               onChange={(url) => set("photo", url)}
             />
-            <Button type="submit" full disabled={saving}>
+            <Btn type="submit" variant="primary" disabled={saving} style={{ width: "100%" }}>
               {saving ? "Saving…" : "Add to watchlist"}
-            </Button>
+            </Btn>
           </form>
         </Card>
-        {/* List */}
-        <Card>
-          <div style={S.listHead}>
-            <div style={S.listTitle}>
-              {showInactive ? "All entries" : "Active entries"}
-              {!loading ? ` (${entries.length})` : ""}
+
+        <Card padded={false}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "14px 18px 4px" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--r-fg-1)" }}>
+              {showInactive ? "All entries" : "Active entries"}{!loading ? ` (${entries.length})` : ""}
             </div>
-            <label style={S.switchRow}>
-              <input
-                type="checkbox"
-                checked={showInactive}
-                onChange={(e) => setShowInactive(e.target.checked)}
-              />
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--r-fg-3)", cursor: "pointer" }}>
+              <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
               Show deactivated
             </label>
           </div>
           {loading ? (
-            <div style={S.center}>
-              <Spinner />
-            </div>
+            <div style={{ padding: 18 }}><RevampSkeleton h={200} /></div>
           ) : entries.length === 0 ? (
-            <EmptyState
-              icon="✅"
-              title="No one on the watchlist"
-              subtitle="Add a name or phone above to flag or block a visitor."
-            />
+            <EmptyState icon="shield-check" title="No one on the watchlist" sub="Add a name or phone above to flag or block a visitor." />
           ) : (
-            entries.map((en) => {
-              const sevColor = en.severity === "block" ? tokens.danger : "var(--warning)";
-              const sevLabel = en.severity === "block" ? "Blocked" : "Flagged";
-              const rowStyle = en.active === false ? Object.assign({}, S.row, S.dim) : S.row;
-              return (
-                <div key={en._id} style={rowStyle}>
-                  <Avatar src={en.photo} name={en.name || "?"} size={44} />
-                  <div style={S.rowMain}>
-                    <div style={S.rowName}>
-                      {en.name || "(no name)"}
-                      <Badge color={sevColor}>{sevLabel}</Badge>
-                      {en.active === false ? <Badge color={tokens.sub}>Deactivated</Badge> : null}
-                    </div>
-                    <div style={S.rowMeta}>
-                      {en.phone ? `📞 ${en.phone}  ·  ` : ""}
-                      Added by {en.addedBy && en.addedBy.name ? en.addedBy.name : "admin"}
-                      {en.createdAt ? `  ·  ${fmtTime(en.createdAt)}` : ""}
-                    </div>
-                    <div style={S.rowReason}>{en.reason}</div>
+            entries.map((en, i) => (
+              <div key={en._id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", borderTop: i > 0 ? "1px solid var(--r-hairline)" : "none", opacity: en.active === false ? 0.5 : 1 }}>
+                <Avatar src={en.photo} name={en.name || "?"} size={44} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, color: "var(--r-fg-1)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    {en.name || "(no name)"}
+                    <Pill tone={en.severity === "block" ? "unpaid" : "warning"} dot={false}>{en.severity === "block" ? "Blocked" : "Flagged"}</Pill>
+                    {en.active === false ? <Pill tone="neutral" dot={false}>Deactivated</Pill> : null}
                   </div>
-                  {en.active !== false ? (
-                    <Button variant="ghost" size="sm" onClick={() => remove(en._id)}>
-                      Deactivate
-                    </Button>
-                  ) : null}
+                  <div style={{ fontSize: 12, color: "var(--r-fg-4)", marginTop: 3 }}>
+                    {en.phone ? `${en.phone} · ` : ""}Added by {en.addedBy?.name || "admin"}{en.createdAt ? ` · ${fmtTime(en.createdAt)}` : ""}
+                  </div>
+                  <div style={{ fontSize: 13, color: "var(--r-fg-2)", marginTop: 4 }}>{en.reason}</div>
                 </div>
-              );
-            })
+                {en.active !== false ? (
+                  <Btn variant="ghost" size="sm" icon="trash-2" onClick={() => remove(en._id)}>Deactivate</Btn>
+                ) : null}
+              </div>
+            ))
           )}
         </Card>
       </div>
-      {toast ? <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} /> : null}
+
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

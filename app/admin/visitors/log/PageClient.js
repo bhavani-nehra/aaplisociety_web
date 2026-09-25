@@ -1,20 +1,11 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import {
-  Card,
-  PageHeader,
-  Button,
-  Input,
-  Select,
-  Avatar,
-  StatusBadge,
-  PurposeTag,
-  Spinner,
-  EmptyState,
-  tokens,
-  fmtTime,
-} from "@/components/visitor/ui";
+  PageHeader, Card, Btn, Icon, Avatar, Pill, SearchInput, Select,
+  DataTable, RevampSkeleton,
+} from "@/components/revamp";
 import { VISITOR_STATUSES, VISITOR_PURPOSES } from "@/lib/visitor-config";
+
 async function api(url) {
   const res = await fetch(url, { credentials: "include" });
   let data = null;
@@ -24,50 +15,32 @@ async function api(url) {
   if (!res.ok) throw new Error((data && data.error) || "Request failed");
   return data;
 }
+
 const STATUSES = Array.isArray(VISITOR_STATUSES)
   ? VISITOR_STATUSES
   : ["Pending", "Approved", "Rejected", "Entered", "Exited", "Expired"];
 const PURPOSES = Array.isArray(VISITOR_PURPOSES)
   ? VISITOR_PURPOSES
   : ["Guest", "Delivery", "Domestic Help", "Vendor", "Cab", "Other"];
-const S = {
-  filters: {
-    display: "grid",
-    gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr",
-    gap: 10,
-    marginBottom: 16,
-  },
-  filterItem: { display: "flex", flexDirection: "column", gap: 4 },
-  filterLabel: { fontSize: 12, fontWeight: 600, color: tokens.sub },
-  tableWrap: { overflowX: "auto" },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: 14 },
-  th: {
-    textAlign: "left",
-    padding: "10px 12px",
-    fontSize: 12,
-    color: tokens.sub,
-    borderBottom: tokens.border,
-    whiteSpace: "nowrap",
-  },
-  td: {
-    padding: "10px 12px",
-    borderBottom: "1px solid var(--bg-muted)",
-    verticalAlign: "middle",
-  },
-  visitorCell: { display: "flex", alignItems: "center", gap: 10 },
-  vname: { fontWeight: 600, color: tokens.text },
-  vphone: { fontSize: 12, color: tokens.sub },
-  center: { display: "flex", justifyContent: "center", padding: 48 },
-  pager: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 10,
-    marginTop: 14,
-  },
-  pageInfo: { fontSize: 13, color: tokens.sub },
-  resultMeta: { fontSize: 13, color: tokens.sub, marginBottom: 10 },
+
+// Same status -> tone mapping as the sibling overview page
+// (app/admin/visitors/PageClient.js), plus Expired, which the overview
+// dashboard never renders but the full log does.
+const STATUS_TONE = {
+  Pending: "warning", Approved: "info", Entered: "paid",
+  Exited: "neutral", Rejected: "unpaid", Expired: "neutral",
 };
+const fmtTime = (v) => (v ? new Date(v).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "numeric", minute: "2-digit" }) : "—");
+
+function Field({ label, children }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+      <label style={{ fontSize: 11.5, fontWeight: 700, color: "var(--r-fg-4)" }}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
 export default function AdminVisitorLog() {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
@@ -110,174 +83,120 @@ export default function AdminVisitorLog() {
     const t = setTimeout(load, 250);
     return () => clearTimeout(t);
   }, [load]);
-  return (
-    <div>
-      <PageHeader
-        title="Visitor Log"
-        subtitle="Complete, searchable history of every visitor"
-      />
-      <Card>
-        <div style={S.filters}>
-          <div style={S.filterItem}>
-            <label style={S.filterLabel}>Search</label>
-            <Input
-              placeholder="Name, phone or vehicle"
-              value={f.q}
-              onChange={(e) => set("q", e.target.value)}
-            />
+
+  const cols = [
+    {
+      key: "visitor", label: "Visitor",
+      render: (v) => (
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Avatar name={v.name} size={32} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 600, color: "var(--r-fg-1)" }}>{v.name}</div>
+            {v.phone && <div style={{ fontSize: 11.5, color: "var(--r-fg-4)" }}>{v.phone}</div>}
           </div>
-          <div style={S.filterItem}>
-            <label style={S.filterLabel}>Status</label>
-            <Select
-              value={f.status}
-              onChange={(e) => set("status", e.target.value)}
-            >
+        </div>
+      ),
+    },
+    { key: "purpose", label: "Purpose", render: (v) => <span style={{ color: "var(--r-fg-2)" }}>{v.purpose}</span> },
+    {
+      key: "flat", label: "Flat",
+      render: (v) => (v.memberId && v.memberId.wing ? `${v.memberId.wing}-` : "") + ((v.memberId && v.memberId.flatNo) || "—"),
+    },
+    { key: "vehicle", label: "Vehicle", render: (v) => v.vehicleNumber || "—" },
+    { key: "loggedBy", label: "Logged by", render: (v) => (v.enteredBy && v.enteredBy.name) || "—" },
+    { key: "time", label: "Time", render: (v) => fmtTime(v.entryTime || v.createdAt) },
+    { key: "status", label: "Status", render: (v) => <Pill tone={STATUS_TONE[v.status] || "neutral"}>{v.status}</Pill> },
+    {
+      key: "entry", label: "Entry",
+      render: (v) =>
+        v.entryMethod === "OfflineEntry" ? (
+          <span
+            title={(v.offlineMeta && v.offlineMeta.note) || ""}
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: "var(--r-fg-3)" }}
+          >
+            <Icon name="wifi-off" size={12} color="var(--r-fg-4)" />
+            Offline
+            {v.offlineMeta && v.offlineMeta.confirmation ? ` · ${v.offlineMeta.confirmation.status}` : ""}
+          </span>
+        ) : (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: "var(--r-fg-3)" }}>
+            <Icon name="wifi" size={12} color="var(--r-fg-4)" />
+            Online
+          </span>
+        ),
+    },
+  ];
+
+  return (
+    <div style={{ maxWidth: 1300, margin: "0 auto" }}>
+      <PageHeader
+        eyebrow={<><Icon name="scroll-text" size={11} /> Operations · Visitors</>}
+        title="Visitor Log"
+        sub="Complete, searchable history of every visitor"
+      />
+
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+          <Field label="Search">
+            <SearchInput placeholder="Name, phone or vehicle" value={f.q} onChange={(v) => set("q", v)} />
+          </Field>
+          <Field label="Status">
+            <Select value={f.status} onChange={(v) => set("status", v)} style={{ width: "100%" }}>
               <option value="">All</option>
               {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
+                <option key={s} value={s}>{s}</option>
               ))}
             </Select>
-          </div>
-          <div style={S.filterItem}>
-            <label style={S.filterLabel}>Purpose</label>
-            <Select
-              value={f.purpose}
-              onChange={(e) => set("purpose", e.target.value)}
-            >
+          </Field>
+          <Field label="Purpose">
+            <Select value={f.purpose} onChange={(v) => set("purpose", v)} style={{ width: "100%" }}>
               <option value="">All</option>
               {PURPOSES.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
+                <option key={p} value={p}>{p}</option>
               ))}
             </Select>
-          </div>
-          <div style={S.filterItem}>
-            <label style={S.filterLabel}>From</label>
-            <Input
-              type="date"
-              value={f.from}
-              onChange={(e) => set("from", e.target.value)}
-            />
-          </div>
-          <div style={S.filterItem}>
-            <label style={S.filterLabel}>To</label>
-            <Input
-              type="date"
-              value={f.to}
-              onChange={(e) => set("to", e.target.value)}
-            />
-          </div>
-          <div style={S.filterItem}>
-            <label style={S.filterLabel}>Entry</label>
-            <Select
-              value={f.entry}
-              onChange={(e) => set("entry", e.target.value)}
-            >
+          </Field>
+          <Field label="From">
+            <input type="date" className="input" value={f.from} onChange={(e) => set("from", e.target.value)} />
+          </Field>
+          <Field label="To">
+            <input type="date" className="input" value={f.to} onChange={(e) => set("to", e.target.value)} />
+          </Field>
+          <Field label="Entry">
+            <Select value={f.entry} onChange={(v) => set("entry", v)} style={{ width: "100%" }}>
               <option value="">All</option>
               <option value="offline">Offline only</option>
             </Select>
-          </div>
-        </div>
-        <div style={S.resultMeta}>
-          {total} result{total === 1 ? "" : "s"}
-        </div>
-        {loading ? (
-          <div style={S.center}>
-            <Spinner size={28} />
-          </div>
-        ) : rows.length === 0 ? (
-          <EmptyState
-            icon="🔍"
-            title="No matching visitors"
-            subtitle="Try adjusting the filters."
-          />
-        ) : (
-          <div style={S.tableWrap}>
-            <table style={S.table}>
-              <thead>
-                <tr>
-                  <th style={S.th}>Visitor</th>
-                  <th style={S.th}>Purpose</th>
-                  <th style={S.th}>Flat</th>
-                  <th style={S.th}>Vehicle</th>
-                  <th style={S.th}>Logged by</th>
-                  <th style={S.th}>Time</th>
-                  <th style={S.th}>Status</th>
-                  <th style={S.th}>Entry</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((v) => (
-                  <tr key={v._id}>
-                    <td style={S.td}>
-                      <div style={S.visitorCell}>
-                        <Avatar src={v.photo} name={v.name} size={34} />
-                        <div>
-                          <div style={S.vname}>{v.name}</div>
-                          {v.phone && <div style={S.vphone}>{v.phone}</div>}
-                        </div>
-                      </div>
-                    </td>
-                    <td style={S.td}>
-                      <PurposeTag purpose={v.purpose} />
-                    </td>
-                    <td style={S.td}>
-                      {v.memberId && v.memberId.wing
-                        ? v.memberId.wing + "-"
-                        : ""}
-                      {(v.memberId && v.memberId.flatNo) || "—"}
-                    </td>
-                    <td style={S.td}>{v.vehicleNumber || "—"}</td>
-                    <td style={S.td}>
-                      {(v.enteredBy && v.enteredBy.name) || "—"}
-                    </td>
-                    <td style={S.td}>{fmtTime(v.entryTime || v.createdAt)}</td>
-                    <td style={S.td}>
-                      <StatusBadge status={v.status} />
-                    </td>
-                    <td style={S.td}>
-                      {v.entryMethod === "OfflineEntry" ? (
-                        <span
-                          title={(v.offlineMeta && v.offlineMeta.note) || ""}
-                        >
-                          📴 Offline
-                          {v.offlineMeta && v.offlineMeta.confirmation
-                            ? ` · ${v.offlineMeta.confirmation.status}`
-                            : ""}
-                        </span>
-                      ) : (
-                        "Online"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <div style={S.pager}>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            ← Prev
-          </Button>
-          <span style={S.pageInfo}>Page {page}</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={!hasMore}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next →
-          </Button>
+          </Field>
         </div>
       </Card>
+
+      <div style={{ fontSize: 13, color: "var(--r-fg-4)", marginBottom: 10 }}>
+        {total} result{total === 1 ? "" : "s"}
+      </div>
+
+      {loading ? (
+        <RevampSkeleton h={360} />
+      ) : (
+        <DataTable
+          cols={cols}
+          rows={rows}
+          rowKey="_id"
+          emptyIcon="search"
+          emptyTitle="No matching visitors"
+          emptySub="Try adjusting the filters."
+        />
+      )}
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, marginTop: 14 }}>
+        <Btn variant="ghost" size="sm" icon="chevron-left" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+          Prev
+        </Btn>
+        <span style={{ fontSize: 13, color: "var(--r-fg-4)" }}>Page {page}</span>
+        <Btn variant="ghost" size="sm" iconR="chevron-right" disabled={!hasMore} onClick={() => setPage((p) => p + 1)}>
+          Next
+        </Btn>
+      </div>
     </div>
   );
 }

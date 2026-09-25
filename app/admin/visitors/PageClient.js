@@ -1,208 +1,118 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
-  Card,
-  PageHeader,
-  Button,
-  StatCard,
-  StatusBadge,
-  PurposeTag,
-  Spinner,
-  EmptyState,
-  grid,
-  tokens,
-  fmtTime,
-} from "@/components/visitor/ui";
+  PageHeader, Card, CardHead, Btn, Pill, Icon, Segmented, SmallStat,
+  EmptyState, RevampSkeleton,
+} from "@/components/revamp";
+
 async function api(url) {
   const res = await fetch(url, { credentials: "include" });
   let data = null;
-  try {
-    data = await res.json();
-  } catch (_) {}
+  try { data = await res.json(); } catch (_) {}
   if (!res.ok) throw new Error((data && data.error) || "Request failed");
   return data;
 }
-const S = {
-  section: { marginTop: 22 },
-  sectionHead: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
-  sectionTitle: { fontSize: 16, fontWeight: 700, color: tokens.text },
-  barRow: { display: "flex", alignItems: "center", gap: 10, marginBottom: 8 },
-  barLabel: { width: 120, fontSize: 13, color: tokens.sub },
-  barTrack: { flex: 1, height: 10, background: "var(--bg-muted)", borderRadius: 999, overflow: "hidden" },
-  barFill: { height: "100%", background: tokens.primary, borderRadius: 999 },
-  barWrap: { marginTop: 12 },
-  barVal: { width: 40, textAlign: "right", fontSize: 13, fontWeight: 600, color: tokens.text },
-  hourGrid: { display: "grid", gridTemplateColumns: "repeat(24, 1fr)", gap: 3, alignItems: "end", height: 120, marginTop: 8 },
-  hourBar: { background: tokens.primary, borderRadius: 3, minHeight: 2 },
-  hourLabels: { display: "grid", gridTemplateColumns: "repeat(24, 1fr)", gap: 3, marginTop: 4 },
-  hourLabel: { fontSize: 8, color: tokens.sub, textAlign: "center" },
-  center: { display: "flex", justifyContent: "center", padding: 48 },
-  rangeRow: { display: "flex", gap: 8 },
-  row: { display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--bg-muted)" },
-  rowMain: { flex: 1, minWidth: 0 },
-  rowName: { fontWeight: 600, color: tokens.text },
-  rowMeta: { fontSize: 12, color: tokens.sub, marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" },
-};
-function rangeBtn(active) {
-  return {
-    padding: "6px 12px",
-    borderRadius: 8,
-    border: active ? "1px solid " + tokens.primary : "1px solid var(--border)",
-    background: active ? "var(--accent-tint)" : "var(--bg-surface)",
-    color: active ? tokens.primary : tokens.sub,
-    fontWeight: 600,
-    fontSize: 13,
-    cursor: "pointer",
-  };
-}
+
+const STATUS_TONE = { Pending: "warning", Approved: "info", Entered: "paid", Exited: "neutral", Rejected: "unpaid" };
+const fmtTime = (v) => (v ? new Date(v).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "numeric", minute: "2-digit" }) : "—");
+
 export default function AdminVisitorsOverview() {
+  const router = useRouter();
   const [summary, setSummary] = useState({});
   const [recent, setRecent] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const [list, an] = await Promise.all([
         api("/api/admin/visitors?limit=8"),
-        api("/api/admin/visitors/analytics?days=" + days),
+        api(`/api/admin/visitors/analytics?days=${days}`),
       ]);
       setSummary((list && list.summary) || {});
       setRecent((list && list.visitors) || []);
       setAnalytics(an);
     } catch (_) {
+      // best-effort — an empty dashboard is still a valid render
     } finally {
       setLoading(false);
     }
   }, [days]);
-  useEffect(() => {
-    load();
-  }, [load]);
+
+  useEffect(() => { load(); }, [load]);
+
   const total = Object.values(summary).reduce((a, b) => a + b, 0);
   const maxPurpose = analytics ? Math.max(1, ...analytics.byPurpose.map((p) => p.count)) : 1;
-  const maxHour = analytics ? Math.max(1, ...analytics.byHour.map((h) => h.count)) : 1;
-  const hourMap = {};
-  if (analytics) analytics.byHour.forEach((h) => (hourMap[h._id] = h.count));
+
   return (
-    <div>
+    <div style={{ maxWidth: 1300, margin: "0 auto" }}>
       <PageHeader
-        title="Visitor Management"
-        subtitle="Society-wide overview, trends and quick access"
-        actions={
-          <Link href="/admin/visitors/log">
-            <Button variant="ghost">Open full log</Button>
-          </Link>
-        }
+        eyebrow={<><Icon name="door-open" size={11} /> Operations · Visitors</>}
+        title="Visitor management"
+        sub="Live gate activity, approvals and visitor trends."
+        right={<Btn variant="secondary" icon="list" onClick={() => router.push("/admin/visitors/log")}>Open full log</Btn>}
       />
-      <div style={grid(170)}>
-        <StatCard label="Total visitors" value={total} icon="👥" />
-        <StatCard label="Inside now" value={summary.Entered || 0} color={tokens.success} icon="🟢" />
-        <StatCard label="Awaiting approval" value={summary.Pending || 0} color="var(--warning)" icon="⏳" />
-        <StatCard label="Approved" value={summary.Approved || 0} color="var(--accent)" icon="✅" />
-        <StatCard label="Rejected" value={summary.Rejected || 0} color={tokens.danger} icon="⛔" />
-        <StatCard
-          label="Avg approval"
-          value={analytics && analytics.avgApprovalMinutes != null ? analytics.avgApprovalMinutes + "m" : "—"}
-          /* TODO: unmapped color, needs design review (no purple token in canonical palette) */
-          color="var(--accent)"
-          icon="⚡"
-        />
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 20 }}>
+        <SmallStat label="Inside now" value={summary.Entered || 0} />
+        <SmallStat label="Awaiting approval" value={summary.Pending || 0} />
+        <SmallStat label="Approved" value={summary.Approved || 0} />
+        <SmallStat label="Rejected" value={summary.Rejected || 0} />
+        <SmallStat label="Logged all time" value={total} />
       </div>
+
       {loading ? (
-        <div style={S.center}>
-          <Spinner size={28} />
-        </div>
+        <RevampSkeleton h={400} />
       ) : (
         <>
-          <div style={S.section}>
-            <div style={S.sectionHead}>
-              <div style={S.sectionTitle}>Trends</div>
-              <div style={S.rangeRow}>
-                {[7, 30, 90].map((d) => (
-                  <button key={d} style={rangeBtn(days === d)} onClick={() => setDays(d)}>
-                    {d}d
-                  </button>
-                ))}
-              </div>
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--r-fg-1)" }}>Trends</div>
+              <Segmented value={days} onChange={setDays} options={[{ value: 7, label: "7d" }, { value: 30, label: "30d" }, { value: 90, label: "90d" }]} />
             </div>
-            <div style={grid(320)}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 14, marginBottom: 20 }}>
               <Card>
-                <div style={S.sectionTitle}>By purpose</div>
-                <div style={S.barWrap}>
-                  {analytics && analytics.byPurpose.length ? (
-                    analytics.byPurpose.map((p) => {
-                      const fill = Object.assign({}, S.barFill, {
-                        width: Math.round((p.count / maxPurpose) * 100) + "%",
-                      });
-                      return (
-                        <div key={p._id || "none"} style={S.barRow}>
-                          <span style={S.barLabel}>
-                            <PurposeTag purpose={p._id || "Other"} />
-                          </span>
-                          <span style={S.barTrack}>
-                            <span style={fill} />
-                          </span>
-                          <span style={S.barVal}>{p.count}</span>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <EmptyState icon="📊" title="No data yet" />
-                  )}
-                </div>
-              </Card>
-              <Card>
-                <div style={S.sectionTitle}>Peak hours</div>
-                <div style={S.hourGrid}>
-                  {Array.from({ length: 24 }).map((_, h) => {
-                    const hb = Object.assign({}, S.hourBar, {
-                      height: Math.max(2, Math.round(((hourMap[h] || 0) / maxHour) * 110)),
-                    });
-                    return (
-                      <div
-                        key={h}
-                        title={h + ":00 — " + (hourMap[h] || 0) + " visitors"}
-                        style={hb}
-                      />
-                    );
-                  })}
-                </div>
-                <div style={S.hourLabels}>
-                  {Array.from({ length: 24 }).map((_, h) => (
-                    <div key={h} style={S.hourLabel}>
-                      {h % 6 === 0 ? h : ""}
-                    </div>
-                  ))}
-                </div>
+                <CardHead title="By purpose" />
+                {analytics && analytics.byPurpose.length ? (
+                  <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+                    {analytics.byPurpose.map((p) => (
+                      <div key={p._id || "none"} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ width: 110, fontSize: 12.5, color: "var(--r-fg-3)" }}>{p._id || "Other"}</span>
+                        <span style={{ flex: 1, height: 8, background: "var(--r-surface-3)", borderRadius: 999, overflow: "hidden" }}>
+                          <span style={{ display: "block", height: "100%", width: `${Math.round((p.count / maxPurpose) * 100)}%`, background: "var(--r-brand)", borderRadius: 999 }} />
+                        </span>
+                        <span style={{ width: 32, textAlign: "right", fontSize: 12.5, fontWeight: 600, color: "var(--r-fg-1)" }}>{p.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState icon="bar-chart-3" title="No data yet" />
+                )}
               </Card>
             </div>
           </div>
-          <div style={S.section}>
-            <div style={S.sectionHead}>
-              <div style={S.sectionTitle}>Recent activity</div>
-              <Link href="/admin/visitors/log">
-                <Button variant="subtle" size="sm">
-                  View all
-                </Button>
-              </Link>
+
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--r-fg-1)" }}>Recent activity</div>
+              <Btn variant="ghost" size="sm" onClick={() => router.push("/admin/visitors/log")}>Open visitor log</Btn>
             </div>
-            <Card>
+            <Card padded={recent.length === 0}>
               {recent.length === 0 ? (
-                <EmptyState icon="🚪" title="No visitors yet" />
+                <EmptyState icon="door-open" title="No visitors yet" />
               ) : (
-                recent.map((v) => (
-                  <div key={v._id} style={S.row}>
-                    <div style={S.rowMain}>
-                      <div style={S.rowName}>{v.name}</div>
-                      <div style={S.rowMeta}>
-                        <PurposeTag purpose={v.purpose} /> · Flat{" "}
-                        {v.memberId && v.memberId.wing ? v.memberId.wing + "-" : ""}
-                        {(v.memberId && v.memberId.flatNo) || "—"} · {fmtTime(v.createdAt)}
+                recent.map((v, i) => (
+                  <div key={v._id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 18px", borderTop: i > 0 ? "1px solid var(--r-hairline)" : "none" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, color: "var(--r-fg-1)" }}>{v.name}</div>
+                      <div style={{ fontSize: 11.5, color: "var(--r-fg-4)", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <span>{v.purpose}</span> · Flat {v.memberId?.wing ? `${v.memberId.wing}-` : ""}{v.memberId?.flatNo || "—"} · {fmtTime(v.createdAt)}
                       </div>
                     </div>
-                    <StatusBadge status={v.status} />
+                    <Pill tone={STATUS_TONE[v.status] || "neutral"} dot={false}>{v.status}</Pill>
                   </div>
                 ))
               )}

@@ -70,7 +70,7 @@ export default function OutboxStatus() {
   };
   const fixNote = needFix ? " · " + needFix + " need a flat fix" : "";
   const word = pending === 1 ? "entry" : "entries";
-  const onlineMsg = "⏳ " + pending + " offline " + word + " waiting to sync" + fixNote + ".";
+  const onlineMsg = "" + pending + " offline " + word + " waiting to sync" + fixNote + ".";
   const offlineMsg =
     "\uD83D\uDCF4 You’re offline — entries are saved on this device and will send automatically when the network returns.";
   return (

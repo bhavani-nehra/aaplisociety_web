@@ -1,6 +1,22 @@
 "use client";
 import { useEffect, useState } from "react";
 import notify from "@/lib/notify";
+import {
+  PageHeader, Card, Btn, Icon, EmptyState,
+  RevampSkeleton, Modal, SmallStat,
+} from "@/components/revamp";
+
+function Field({ label, required, children }) {
+  return (
+    <div>
+      <label className="label" style={{ marginBottom: 4, display: "block" }}>
+        {label}{required ? " *" : ""}
+      </label>
+      {children}
+    </div>
+  );
+}
+
 export default function SecurityGuardsPage() {
   const [guards, setGuards] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -18,6 +34,7 @@ export default function SecurityGuardsPage() {
   const [edit, setEdit] = useState(null);
   const [editSaving, setEditSaving] = useState(false);
   const [editErr, setEditErr] = useState("");
+
   async function loadGuards() {
     setLoading(true);
     try {
@@ -30,9 +47,11 @@ export default function SecurityGuardsPage() {
       setLoading(false);
     }
   }
+
   useEffect(() => {
     loadGuards();
   }, []);
+
   async function handleCreate(e) {
     e.preventDefault();
     setMsg("");
@@ -57,6 +76,7 @@ export default function SecurityGuardsPage() {
       setSaving(false);
     }
   }
+
   async function toggleActive(guardId, current) {
     const res = await fetch(`/api/admin/security-guards/${guardId}`, {
       method: "PATCH",
@@ -66,6 +86,7 @@ export default function SecurityGuardsPage() {
     });
     if (res.ok) loadGuards();
   }
+
   async function saveEdit(e) {
     e.preventDefault();
     setEditErr("");
@@ -92,6 +113,7 @@ export default function SecurityGuardsPage() {
       setEditSaving(false);
     }
   }
+
   async function removeGuard(guardId, name) {
     if (!(await notify.confirm(`Delete the guard account for ${name}? This cannot be undone.`, { tone: "danger" }))) return;
     const res = await fetch(`/api/admin/security-guards/${guardId}`, {
@@ -104,369 +126,194 @@ export default function SecurityGuardsPage() {
       setMsg(data.error || "Failed to delete guard");
     }
   }
+
+  const activeCount = guards.filter((g) => g.isActive).length;
+
   return (
-    <div style={{ padding: 24, display: "grid", gap: 24 }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <div>
-          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>
-            Security Guards
-          </h1>
-          <p style={{ margin: "6px 0 0", color: "var(--fg-4)" }}>
-            Manage gate guard accounts for this society.
-          </p>
-        </div>
-        <button
-          onClick={() => {
-            setShowForm((f) => !f);
-            setMsg("");
-          }}
-          style={{
-            padding: "10px 18px",
-            background: "var(--fg-1)",
-            color: "#fff",
-            border: "none",
-            borderRadius: 8,
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-        >
-          {showForm ? "Cancel" : "+ Add Guard"}
-        </button>
-      </div>
-      {msg && (
-        <div
-          style={{
-            padding: "10px 14px",
-            background: "var(--success-bg)",
-            border: "1px solid var(--success)",
-            borderRadius: 8,
-            color: "var(--success-fg)",
-            fontSize: 14,
-          }}
-        >
-          {msg}
-        </div>
-      )}
-      {showForm && (
-        <form
-          onSubmit={handleCreate}
-          style={{
-            background: "var(--bg-surface)",
-            border: "1px solid var(--border)",
-            borderRadius: 12,
-            padding: 20,
-            display: "grid",
-            gap: 14,
-          }}
-        >
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
-            New Guard Account
-          </h2>
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}
-          >
-            <div>
-              <label
-                style={{ display: "block", marginBottom: 6, fontWeight: 600 }}
-              >
-                Full Name
-              </label>
-              <input
-                value={form.name}
-                onChange={(e) =>
-                  setForm((s) => ({ ...s, name: e.target.value }))
-                }
-                placeholder="Guard name"
-                required
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: 8,
-                  border: "1px solid var(--border-strong)",
-                }}
-              />
-            </div>
-            <div>
-              <label
-                style={{ display: "block", marginBottom: 6, fontWeight: 600 }}
-              >
-                Username
-              </label>
-              <input
-                value={form.username}
-                onChange={(e) =>
-                  setForm((s) => ({ ...s, username: e.target.value }))
-                }
-                placeholder="e.g. guard01"
-                required
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: 8,
-                  border: "1px solid var(--border-strong)",
-                }}
-              />
-            </div>
-            <div>
-              <label
-                style={{ display: "block", marginBottom: 6, fontWeight: 600 }}
-              >
-                Password
-              </label>
-              <input
-                type="password"
-                value={form.password}
-                onChange={(e) =>
-                  setForm((s) => ({ ...s, password: e.target.value }))
-                }
-                placeholder="Min 6 characters"
-                required
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: 8,
-                  border: "1px solid var(--border-strong)",
-                }}
-              />
-            </div>
-            <div>
-              <label
-                style={{ display: "block", marginBottom: 6, fontWeight: 600 }}
-              >
-                Gate Label
-              </label>
-              <input
-                value={form.gateLabel}
-                onChange={(e) =>
-                  setForm((s) => ({ ...s, gateLabel: e.target.value }))
-                }
-                placeholder="e.g. Main Gate, Rear Gate"
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: 8,
-                  border: "1px solid var(--border-strong)",
-                }}
-              />
-            </div>
-          </div>
-          <button
-            type="submit"
-            disabled={saving}
-            style={{
-              padding: "11px 0",
-              background: "var(--fg-1)",
-              color: "#fff",
-              border: "none",
-              borderRadius: 8,
-              fontWeight: 600,
-              cursor: saving ? "not-allowed" : "pointer",
+    <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+      <PageHeader
+        eyebrow={<><Icon name="shield" size={11} /> Operations · Security</>}
+        title="Security guards"
+        sub="Manage gate guard accounts for this society."
+        right={
+          <Btn
+            variant="primary"
+            icon={showForm ? "x" : "plus"}
+            onClick={() => {
+              setShowForm((f) => !f);
+              setMsg("");
             }}
           >
-            {saving ? "Creating..." : "Create Guard Account"}
-          </button>
-        </form>
+            {showForm ? "Cancel" : "Add guard"}
+          </Btn>
+        }
+      />
+
+      {!loading && guards.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 16 }}>
+          <SmallStat icon="users" label="Total guards" value={guards.length} />
+          <SmallStat icon="check-circle-2" label="Active" value={activeCount} tone="success" />
+          <SmallStat icon="pause-circle" label="Inactive" value={guards.length - activeCount} tone={guards.length - activeCount > 0 ? "danger" : undefined} />
+        </div>
       )}
-      <div
-        style={{
-          background: "var(--bg-surface)",
-          border: "1px solid var(--border)",
-          borderRadius: 12,
-          padding: 20,
-        }}
-      >
-        {loading ? (
-          <div style={{ color: "var(--fg-4)" }}>Loading...</div>
-        ) : guards.length === 0 ? (
-          <div style={{ color: "var(--fg-4)" }}>
-            No security guards yet. Add one above.
+
+      {msg && (
+        <Card style={{ marginBottom: 16, background: "var(--r-success-soft)", border: "none" }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <Icon name="check-circle-2" size={16} color="var(--r-success)" />
+            <span style={{ fontSize: 13, color: "var(--r-fg-2)" }}>{msg}</span>
           </div>
-        ) : (
-          <div style={{ display: "grid", gap: 10 }}>
-            {guards.map((g) => (
-              <div
-                key={g._id}
-                style={{
-                  border: "1px solid var(--border)",
-                  borderRadius: 10,
-                  padding: 14,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <div style={{ display: "grid", gap: 3 }}>
-                  <div style={{ fontWeight: 700 }}>{g.name}</div>
-                  <div style={{ color: "var(--fg-4)", fontSize: 14 }}>
-                    @{g.username} · {g.gateLabel || "Main Gate"}
-                    {g.phone ? ` · ${g.phone}` : " · no phone on file"}
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <button
-                    onClick={() =>
-                      setEdit({
-                        _id: g._id,
-                        name: g.name || "",
-                        phone: g.phone || "",
-                        gateLabel: g.gateLabel || "Main Gate",
-                        username: g.username,
-                      })
-                    }
-                    style={{
-                      padding: "6px 14px",
-                      borderRadius: 20,
-                      border: "1px solid var(--border-strong)",
-                      background: "var(--bg-surface)",
-                      color: "var(--fg-3)",
-                      fontWeight: 600,
-                      fontSize: 13,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => removeGuard(g._id, g.name)}
-                    style={{
-                      padding: "6px 14px",
-                      borderRadius: 20,
-                      border: "1px solid var(--danger)",
-                      background: "var(--bg-surface)",
-                      color: "var(--danger-fg)",
-                      fontWeight: 600,
-                      fontSize: 13,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Delete
-                  </button>
-                  <button
-                    onClick={() => toggleActive(g._id, g.isActive)}
-                    style={{
-                      padding: "6px 14px",
-                      borderRadius: 20,
-                      border: "none",
-                      fontWeight: 600,
-                      fontSize: 13,
-                      cursor: "pointer",
-                      background: g.isActive ? "var(--success-bg)" : "var(--danger-bg)",
-                      color: g.isActive ? "var(--success-fg)" : "var(--danger-fg)",
-                    }}
-                  >
-                    {g.isActive ? "Active" : "Inactive"}
-                  </button>
+        </Card>
+      )}
+
+      {showForm && (
+        <Card style={{ marginBottom: 16 }}>
+          <form onSubmit={handleCreate} style={{ display: "grid", gap: 14 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--r-fg-1)" }}>New guard account</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <Field label="Full name" required>
+                <input
+                  className="input"
+                  value={form.name}
+                  onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))}
+                  placeholder="Guard name"
+                  required
+                />
+              </Field>
+              <Field label="Username" required>
+                <input
+                  className="input"
+                  value={form.username}
+                  onChange={(e) => setForm((s) => ({ ...s, username: e.target.value }))}
+                  placeholder="e.g. guard01"
+                  required
+                />
+              </Field>
+              <Field label="Password" required>
+                <input
+                  type="password"
+                  className="input"
+                  value={form.password}
+                  onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))}
+                  placeholder="Min 6 characters"
+                  required
+                />
+              </Field>
+              <Field label="Gate label">
+                <input
+                  className="input"
+                  value={form.gateLabel}
+                  onChange={(e) => setForm((s) => ({ ...s, gateLabel: e.target.value }))}
+                  placeholder="e.g. Main Gate, Rear Gate"
+                />
+              </Field>
+            </div>
+            <Btn type="submit" variant="primary" disabled={saving} style={{ width: "100%" }}>
+              {saving ? "Creating…" : "Create guard account"}
+            </Btn>
+          </form>
+        </Card>
+      )}
+
+      {loading ? (
+        <RevampSkeleton h={220} />
+      ) : guards.length === 0 ? (
+        <Card>
+          <EmptyState icon="shield" title="No security guards yet" sub="Add one above to get started." />
+        </Card>
+      ) : (
+        <div style={{ display: "grid", gap: 10 }}>
+          {guards.map((g) => (
+            <Card key={g._id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ display: "grid", gap: 3, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, color: "var(--r-fg-1)" }}>{g.name}</div>
+                <div style={{ color: "var(--r-fg-4)", fontSize: 12.5 }}>
+                  @{g.username} · {g.gateLabel || "Main Gate"}
+                  {g.phone ? ` · ${g.phone}` : " · no phone on file"}
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
-      {edit && (
-        <div
-          onClick={() => setEdit(null)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(17,24,39,0.45)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 50,
-            padding: 20,
-          }}
-        >
-          <form
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={saveEdit}
-            style={{
-              background: "var(--bg-surface)",
-              borderRadius: 14,
-              padding: 22,
-              width: "100%",
-              maxWidth: 420,
-              display: "grid",
-              gap: 14,
-            }}
-          >
-            <div style={{ fontWeight: 800, fontSize: 17 }}>Edit guard</div>
-            <div style={{ color: "var(--fg-4)", fontSize: 13, marginTop: -8 }}>
-              @{edit.username} · username and password cannot be changed here
-            </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <Btn
+                  size="sm"
+                  variant="secondary"
+                  icon="pencil"
+                  onClick={() =>
+                    setEdit({
+                      _id: g._id,
+                      name: g.name || "",
+                      phone: g.phone || "",
+                      gateLabel: g.gateLabel || "Main Gate",
+                      username: g.username,
+                    })
+                  }
+                >
+                  Edit
+                </Btn>
+                <Btn size="sm" variant="danger" icon="trash-2" onClick={() => removeGuard(g._id, g.name)}>
+                  Delete
+                </Btn>
+                <button
+                  type="button"
+                  onClick={() => toggleActive(g._id, g.isActive)}
+                  title="Click to toggle"
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 5,
+                    padding: "5px 12px", borderRadius: 999, border: "none",
+                    fontSize: 12, fontWeight: 600, fontFamily: "inherit", cursor: "pointer",
+                    background: g.isActive ? "var(--r-success-soft)" : "var(--r-danger-soft)",
+                    color: g.isActive ? "var(--r-success)" : "var(--r-danger)",
+                  }}
+                >
+                  <Icon name={g.isActive ? "check-circle-2" : "circle-slash"} size={12} />
+                  {g.isActive ? "Active" : "Inactive"}
+                </button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Modal open={Boolean(edit)} onClose={() => setEdit(null)} title="Edit guard" sub={edit ? `@${edit.username} · username and password cannot be changed here` : ""} width={440}>
+        {edit && (
+          <form onSubmit={saveEdit} style={{ display: "grid", gap: 14 }}>
             {editErr && (
-              <div style={{ color: "var(--danger-fg)", fontSize: 13, fontWeight: 600 }}>{editErr}</div>
+              <div style={{ color: "var(--r-danger)", fontSize: 13, fontWeight: 600 }}>{editErr}</div>
             )}
-            <div>
-              <label style={{ display: "block", marginBottom: 6, fontWeight: 600 }}>Name</label>
+            <Field label="Name" required>
               <input
+                className="input"
                 value={edit.name}
                 onChange={(e) => setEdit((s) => ({ ...s, name: e.target.value }))}
                 required
-                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-strong)" }}
               />
-            </div>
-            <div>
-              <label style={{ display: "block", marginBottom: 6, fontWeight: 600 }}>
-                Phone
-              </label>
+            </Field>
+            <Field label="Phone">
               <input
+                className="input"
                 value={edit.phone}
                 onChange={(e) => setEdit((s) => ({ ...s, phone: e.target.value }))}
                 placeholder="Used by the Call guard button in the resident app"
-                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-strong)" }}
               />
-            </div>
-            <div>
-              <label style={{ display: "block", marginBottom: 6, fontWeight: 600 }}>Gate label</label>
+            </Field>
+            <Field label="Gate label">
               <input
+                className="input"
                 value={edit.gateLabel}
                 onChange={(e) => setEdit((s) => ({ ...s, gateLabel: e.target.value }))}
                 placeholder="e.g. Main Gate, Rear Gate"
-                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-strong)" }}
               />
-            </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button
-                type="submit"
-                disabled={editSaving}
-                style={{
-                  flex: 1,
-                  padding: "11px 0",
-                  background: "var(--fg-1)",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 8,
-                  fontWeight: 600,
-                  cursor: editSaving ? "not-allowed" : "pointer",
-                }}
-              >
-                {editSaving ? "Saving..." : "Save changes"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setEdit(null)}
-                style={{
-                  padding: "11px 18px",
-                  background: "var(--bg-surface)",
-                  color: "var(--fg-3)",
-                  border: "1px solid var(--border-strong)",
-                  borderRadius: 8,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
+            </Field>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn type="submit" variant="primary" disabled={editSaving} style={{ flex: 1 }}>
+                {editSaving ? "Saving…" : "Save changes"}
+              </Btn>
+              <Btn type="button" variant="ghost" onClick={() => setEdit(null)}>
                 Cancel
-              </button>
+              </Btn>
             </div>
           </form>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   );
 }

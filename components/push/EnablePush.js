@@ -15,7 +15,7 @@ const S = {
     borderRadius: 10,
     border: "none",
     cursor: "pointer",
-    color: "#fff",
+    color: "var(--on-solid)",
     background: "var(--primary)",
   },
   btnOn: {
@@ -27,7 +27,7 @@ const S = {
     fontWeight: 600,
     borderRadius: 10,
     border: "none",
-    color: "#fff",
+    color: "var(--on-solid)",
     background: "var(--success)",
     cursor: "default",
   },
@@ -94,7 +94,7 @@ export default function EnablePush({ label = "\uD83D\uDD14 Turn on visitor alert
   if (state === "unsupported") {
     return (
       <span style={S.hint}>
-        📱 To get gate alerts on iPhone, open this site in Safari and tap Share →
+        To get gate alerts on iPhone, open this site in Safari and tap Share →
         “Add to Home Screen”, then open it from the home screen.
       </span>
     );
@@ -103,7 +103,7 @@ export default function EnablePush({ label = "\uD83D\uDD14 Turn on visitor alert
     return (
       <div style={S.wrap}>
         <button style={S.btnOn} disabled>
-          ✅ Alerts are on
+          Alerts are on
         </button>
         <span style={S.hint}>You’ll get a notification the moment someone’s at your gate.</span>
       </div>
@@ -112,7 +112,7 @@ export default function EnablePush({ label = "\uD83D\uDD14 Turn on visitor alert
   if (state === "denied") {
     return (
       <span style={S.hint}>
-        🔕 Notifications are blocked. Enable them for this site in your browser
+        Notifications are blocked. Enable them for this site in your browser
         settings, then reload.
       </span>
     );

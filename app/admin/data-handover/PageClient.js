@@ -238,7 +238,7 @@ export default function PageClient() {
       {!handover ? (
         <Card>
           <EmptyState
-            icon="📦"
+            icon="package"
             title="Nothing to collect right now"
             subtitle="When a copy of your society's records is prepared for you, it will appear here and we will email you."
           />

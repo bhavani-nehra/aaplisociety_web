@@ -1,9 +1,8 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Card, PageHeader, Button, Badge, Spinner, Toast, EmptyState,
-  Modal, StatCard, tokens, fmtTime, grid,
-} from "@/components/visitor/ui";
+  PageHeader, Card, Btn, Pill, Icon, Tabs, SearchInput, RevampSkeleton, EmptyState, Modal, Toast, SmallStat,
+} from "@/components/revamp";
 import notify from "@/lib/notify";
 
 async function api(url, opts) {
@@ -24,10 +23,21 @@ const SECTION_LABELS = {
   EmergencyContact: "Emergency contact",
   Parking: "Parking",
 };
-const STATUS_COLOR = { Pending: "var(--warning-fg)", Approved: "var(--success-fg)", Rejected: "var(--danger-fg)" };
+const STATUS_TONE = { Pending: "warning", Approved: "paid", Rejected: "unpaid" };
 const TABS = ["Pending", "Approved", "Rejected", "All"];
-const DASH = "\u2014";
+const DASH = "—";
 
+function fmtTime(d) {
+  if (!d) return "";
+  return new Date(d).toLocaleString("en-IN", {
+    day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit",
+  });
+}
+
+// Business logic — unchanged from the pre-revamp page. Sections not covered
+// here (TenantContact, OwnershipInfo, TenantInfo — added to the backend
+// later than this page's display logic) fall through to the family-member
+// shape below, same as before this rewrite; not something this pass adds.
 function describePayload(item) {
   const { section, action, payload = {} } = item;
   if (section === "Contact") {
@@ -45,23 +55,19 @@ function describePayload(item) {
 }
 
 const S = {
-  card: { border: `1px solid ${tokens.border}`, borderRadius: 12, padding: 16, display: "grid", gap: 10, background: "var(--bg-surface)" },
-  head: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 },
-  name: { fontWeight: 800, fontSize: 14.5, color: tokens.text },
-  meta: { fontSize: 12.5, color: tokens.sub, marginTop: 3 },
-  body: { fontSize: 13, color: tokens.text },
-  actions: { display: "flex", gap: 8, flexWrap: "wrap" },
-  tabs: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" },
-  tab: (on) => ({
-    padding: "7px 14px", borderRadius: 20,
-    border: `1px solid ${on ? tokens.primary : tokens.border}`,
-    background: on ? tokens.primary : "var(--bg-surface)",
-    color: on ? "var(--bg-surface)" : tokens.sub,
-    fontWeight: 600, fontSize: 13, cursor: "pointer",
-  }),
-  search: { marginLeft: "auto", padding: "7px 12px", borderRadius: 8, border: `1px solid ${tokens.border}`, fontSize: 13, minWidth: 220 },
+  statGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 18 },
+  filterRow: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 },
+  cardGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 },
+  head: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 8 },
+  name: { fontSize: 14.5, fontWeight: 700, color: "var(--r-fg-1)" },
+  meta: { fontSize: 12, color: "var(--r-fg-4)", marginTop: 3 },
+  body: { fontSize: 13, color: "var(--r-fg-2)", lineHeight: 1.5 },
+  actions: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 },
   center: { display: "flex", justifyContent: "center", padding: 48 },
-  pre: { background: "var(--bg-sunken)", border: `1px solid ${tokens.border}`, borderRadius: 8, padding: 12, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" },
+  pre: {
+    background: "var(--r-surface-2)", border: "1px solid var(--r-hairline)", borderRadius: 8,
+    padding: 12, fontSize: 12, color: "var(--r-fg-2)", whiteSpace: "pre-wrap", wordBreak: "break-word",
+  },
 };
 
 export default function ProfileChangesPage() {
@@ -73,6 +79,11 @@ export default function ProfileChangesPage() {
   const [detail, setDetail] = useState(null);
   const [q, setQ] = useState("");
 
+  const showToast = (msg, type = "success") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 4000);
+  };
+
   // Pull every status so the tabs filter client-side and counters stay honest.
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,7 +91,7 @@ export default function ProfileChangesPage() {
       const data = await api("/api/admin/profile-edit-requests?status=all");
       setItems(data.items || []);
     } catch (err) {
-      setToast({ type: "error", message: err.message });
+      showToast(err.message, "error");
     } finally {
       setLoading(false);
     }
@@ -109,9 +120,9 @@ export default function ProfileChangesPage() {
     setBusyId(id);
     try {
       await api(`/api/admin/profile-edit-requests/${id}/approve`, { method: "POST" });
-      setToast({ type: "success", message: "Change approved" });
+      showToast("Change approved");
       setDetail(null); load();
-    } catch (err) { setToast({ type: "error", message: err.message }); }
+    } catch (err) { showToast(err.message, "error"); }
     finally { setBusyId(null); }
   }
 
@@ -121,43 +132,47 @@ export default function ProfileChangesPage() {
     setBusyId(id);
     try {
       await api(`/api/admin/profile-edit-requests/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) });
-      setToast({ type: "success", message: "Request rejected" });
+      showToast("Request rejected");
       setDetail(null); load();
-    } catch (err) { setToast({ type: "error", message: err.message }); }
+    } catch (err) { showToast(err.message, "error"); }
     finally { setBusyId(null); }
   }
 
   return (
-    <div>
+    <div style={{ maxWidth: 1000, margin: "0 auto" }}>
       <PageHeader
-        title="Profile Changes"
-        subtitle="Contact, family, emergency contact and parking changes submitted from the mobile app."
-        actions={<Button variant="ghost" onClick={load}>Refresh</Button>}
+        eyebrow={<><Icon name="users" size={11} /> People · Profile Changes</>}
+        title="Profile Edit Requests"
+        sub="Contact, family, emergency contact and parking changes submitted from the mobile app."
+        right={<Btn variant="ghost" icon="refresh-cw" onClick={load}>Refresh</Btn>}
       />
 
-      <div style={{ ...grid(200), marginBottom: 18 }}>
-        <StatCard label="Pending" value={counts.Pending} color="var(--warning)" />
-        <StatCard label="Approved" value={counts.Approved} color="var(--success)" />
-        <StatCard label="Rejected" value={counts.Rejected} color="var(--danger)" />
+      <div style={S.statGrid}>
+        <SmallStat icon="clock" label="Pending" value={counts.Pending} />
+        <SmallStat icon="check-circle" label="Approved" value={counts.Approved} tone="success" />
+        <SmallStat icon="x-circle" label="Rejected" value={counts.Rejected} tone="danger" />
       </div>
 
-      <div style={S.tabs}>
-        {TABS.map((t) => (
-          <button key={t} style={S.tab(tab === t)} onClick={() => setTab(t)}>
-            {t}{t !== "All" ? ` (${counts[t] || 0})` : ""}
-          </button>
-        ))}
-        <input style={S.search} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search flat or owner..." />
+      <div style={S.filterRow}>
+        <Tabs
+          value={tab}
+          onChange={setTab}
+          style={{ marginBottom: 0, flex: 1, minWidth: 220 }}
+          tabs={TABS.map((t) => ({ key: t, label: t, badge: t !== "All" ? (counts[t] || 0) : undefined }))}
+        />
+        <SearchInput value={q} onChange={setQ} placeholder="Search flat or owner…" style={{ maxWidth: 240 }} />
       </div>
 
       {loading ? (
-        <Card><div style={S.center}><Spinner /></div></Card>
+        <div style={{ display: "grid", gap: 12 }}>
+          {[1, 2, 3].map((i) => <RevampSkeleton key={i} h={120} />)}
+        </div>
       ) : visible.length === 0 ? (
-        <Card><EmptyState title="Nothing here" subtitle="No requests match this filter." /></Card>
+        <Card><EmptyState icon="inbox" title="Nothing here" sub="No requests match this filter." /></Card>
       ) : (
-        <div style={grid(320)}>
+        <div style={S.cardGrid}>
           {visible.map((item) => (
-            <div key={item._id} style={S.card}>
+            <Card key={item._id} hover>
               <div style={S.head}>
                 <div>
                   <div style={S.name}>
@@ -165,59 +180,62 @@ export default function ProfileChangesPage() {
                     {item.member && item.member.wing ? ` (${item.member.wing})` : ""}
                   </div>
                   <div style={S.meta}>
-                    {SECTION_LABELS[item.section] || item.section} / {item.action}
-                    {item.createdAt ? ` / ${fmtTime(item.createdAt)}` : ""}
+                    {SECTION_LABELS[item.section] || item.section} · {item.action}
+                    {item.createdAt ? ` · ${fmtTime(item.createdAt)}` : ""}
                   </div>
                 </div>
-                <Badge color={STATUS_COLOR[item.status] || tokens.sub}>{item.status}</Badge>
+                <Pill tone={STATUS_TONE[item.status] || "neutral"}>{item.status}</Pill>
               </div>
 
               <div style={S.body}>{describePayload(item)}</div>
 
               <div style={S.actions}>
-                <Button size="sm" variant="ghost" onClick={() => setDetail(item)}>Show details</Button>
+                <Btn size="sm" variant="ghost" onClick={() => setDetail(item)}>Show details</Btn>
                 {item.status === "Pending" && (
                   <>
-                    <Button size="sm" disabled={busyId === item._id} onClick={() => approve(item._id)}>Approve</Button>
-                    <Button size="sm" variant="ghost" disabled={busyId === item._id} onClick={() => reject(item._id)}>Reject</Button>
+                    <Btn size="sm" variant="primary" icon="check" disabled={busyId === item._id} onClick={() => approve(item._id)}>Approve</Btn>
+                    <Btn size="sm" variant="danger" icon="x" disabled={busyId === item._id} onClick={() => reject(item._id)}>Reject</Btn>
                   </>
                 )}
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
 
       <Modal
         open={Boolean(detail)}
-        title={detail ? `${SECTION_LABELS[detail.section] || detail.section} / ${detail.action}` : ""}
+        title={detail ? `${SECTION_LABELS[detail.section] || detail.section} · ${detail.action}` : ""}
+        sub={detail ? `${(detail.member && detail.member.ownerName) || DASH} — flat ${(detail.member && detail.member.flatNo) || DASH}${detail.createdAt ? ` — submitted ${fmtTime(detail.createdAt)}` : ""}` : ""}
         onClose={() => setDetail(null)}
         width={560}
-        footer={detail && detail.status === "Pending" ? (
-          <div style={{ display: "flex", gap: 8 }}>
-            <Button disabled={busyId === detail._id} onClick={() => approve(detail._id)}>Approve</Button>
-            <Button variant="ghost" disabled={busyId === detail._id} onClick={() => reject(detail._id)}>Reject</Button>
-          </div>
-        ) : null}
       >
         {detail && (
-          <div style={{ display: "grid", gap: 12 }}>
-            <div style={S.meta}>
-              {(detail.member && detail.member.ownerName) || DASH} / flat {(detail.member && detail.member.flatNo) || DASH}
-              {detail.createdAt ? ` / submitted ${fmtTime(detail.createdAt)}` : ""}
-            </div>
+          <div style={{ display: "grid", gap: 14 }}>
             <div style={S.body}>{describePayload(detail)}</div>
+
             {detail.rejectionReason && (
-              <div style={{ fontSize: 12.5, color: "var(--danger-fg)", fontWeight: 600 }}>
-                Rejection reason: {detail.rejectionReason}
+              <div style={{
+                fontSize: 12.5, lineHeight: 1.5, padding: "10px 12px", borderRadius: 8,
+                background: "var(--r-danger-soft)", color: "var(--r-fg-2)",
+              }}>
+                <strong style={{ color: "var(--r-danger)" }}>Rejection reason:</strong> {detail.rejectionReason}
               </div>
             )}
+
             <div style={S.pre}>{JSON.stringify(detail.payload || {}, null, 2)}</div>
+
+            {detail.status === "Pending" && (
+              <div style={{ display: "flex", gap: 8 }}>
+                <Btn variant="primary" icon="check" disabled={busyId === detail._id} onClick={() => approve(detail._id)}>Approve</Btn>
+                <Btn variant="danger" icon="x" disabled={busyId === detail._id} onClick={() => reject(detail._id)}>Reject</Btn>
+              </div>
+            )}
           </div>
         )}
       </Modal>
 
-      {toast ? <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} /> : null}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

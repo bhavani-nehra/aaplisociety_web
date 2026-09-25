@@ -316,8 +316,8 @@ export default function AuditPage() {
             }}
           >
             {result.passed
-              ? "✅ Validation Passed — Report Submitted"
-              : "❌ Validation Failed"}
+              ? "Validation Passed — Report Submitted"
+              : "Validation Failed"}
           </h3>
           {result.errors?.length > 0 && (
             <div>

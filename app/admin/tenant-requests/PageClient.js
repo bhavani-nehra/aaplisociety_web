@@ -1,9 +1,9 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Card, PageHeader, Button, Badge, Spinner, Toast, EmptyState,
-  Modal, StatCard, tokens, fmtTime, grid,
-} from "@/components/visitor/ui";
+  PageHeader, Card, Btn, Pill, Icon, Tabs, SearchInput,
+  SectionLabel, EmptyState, RevampSkeleton, Modal, Toast, SmallStat,
+} from "@/components/revamp";
 import notify from "@/lib/notify";
 
 async function api(url, opts) {
@@ -23,36 +23,29 @@ const DOCUMENT_FIELDS = [
   { field: "policeVerification", label: "Police verification" },
 ];
 const TABS = ["Requests", "Active", "Inactive", "All"];
-const STATE_COLOR = { Active: "var(--success-fg)", Requests: "var(--warning-fg)", Inactive: "var(--fg-4)" };
-const DASH = "\u2014";
-
-const S = {
-  card: { border: `1px solid ${tokens.border}`, borderRadius: 12, padding: 16, display: "grid", gap: 10, background: "var(--bg-surface)" },
-  head: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 },
-  flat: { fontWeight: 800, fontSize: 15, color: tokens.text },
-  meta: { fontSize: 12.5, color: tokens.sub, marginTop: 3 },
-  tenant: { fontSize: 13, color: tokens.text, fontWeight: 600 },
-  actions: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 },
-  tabs: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" },
-  tab: (on) => ({
-    padding: "7px 14px", borderRadius: 20,
-    border: `1px solid ${on ? tokens.primary : tokens.border}`,
-    background: on ? tokens.primary : "var(--bg-surface)",
-    color: on ? "var(--bg-surface)" : tokens.sub,
-    fontWeight: 600, fontSize: 13, cursor: "pointer",
-  }),
-  search: { marginLeft: "auto", padding: "7px 12px", borderRadius: 8, border: `1px solid ${tokens.border}`, fontSize: 13, minWidth: 240 },
-  dl: { display: "grid", gridTemplateColumns: "140px 1fr", gap: "6px 12px", fontSize: 13 },
-  dt: { color: tokens.sub },
-  dd: { color: tokens.text, fontWeight: 600 },
-  center: { display: "flex", justifyContent: "center", padding: 48 },
-  section: { fontWeight: 700, fontSize: 13, color: tokens.text, marginTop: 8, marginBottom: 6 },
-};
+const STATE_TONE = { Active: "paid", Requests: "warning", Inactive: "neutral" };
+const DASH = "—";
 
 function d(v) {
   if (!v) return DASH;
   const p = new Date(v);
   return Number.isNaN(p.getTime()) ? DASH : p.toLocaleDateString("en-IN");
+}
+function when(v) {
+  if (!v) return DASH;
+  const p = new Date(v);
+  return Number.isNaN(p.getTime()) ? DASH : p.toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+}
+
+function DL({ rows }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: "6px 12px", fontSize: 13 }}>
+      {rows.map(([label, value]) => [
+        <div key={`${label}-k`} style={{ color: "var(--r-fg-4)" }}>{label}</div>,
+        <div key={`${label}-v`} style={{ color: "var(--r-fg-1)", fontWeight: 600 }}>{value}</div>,
+      ])}
+    </div>
+  );
 }
 
 export default function ManageTenantsPage() {
@@ -65,6 +58,11 @@ export default function ManageTenantsPage() {
   const [detail, setDetail] = useState(null);
   const [q, setQ] = useState("");
 
+  const showToast = (msg, type = "success") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 4500);
+  };
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -72,7 +70,7 @@ export default function ManageTenantsPage() {
       setFlats(data.flats || []);
       setSummary(data.summary || { active: 0, requests: 0, inactive: 0 });
     } catch (err) {
-      setToast({ type: "error", message: err.message });
+      showToast(err.message, "error");
     } finally {
       setLoading(false);
     }
@@ -96,16 +94,16 @@ export default function ManageTenantsPage() {
     try {
       const data = await api(`/api/admin/tenant-requests/${requestId}/documents/${field}`);
       window.open(data.url, "_blank", "noopener,noreferrer");
-    } catch (err) { setToast({ type: "error", message: err.message }); }
+    } catch (err) { showToast(err.message, "error"); }
   }
 
   async function approve(id) {
     setBusyId(id);
     try {
       const data = await api(`/api/admin/tenant-requests/${id}/approve`, { method: "POST" });
-      setToast({ type: "success", message: `Approved. Username: ${data.username}${data.emailDelivered ? "" : " (email not sent - check email provider config)"}` });
+      showToast(`Approved. Username: ${data.username}${data.emailDelivered ? "" : " (email not sent - check email provider config)"}`);
       setDetail(null); load();
-    } catch (err) { setToast({ type: "error", message: err.message }); }
+    } catch (err) { showToast(err.message, "error"); }
     finally { setBusyId(null); }
   }
 
@@ -115,9 +113,9 @@ export default function ManageTenantsPage() {
     setBusyId(id);
     try {
       await api(`/api/admin/tenant-requests/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) });
-      setToast({ type: "success", message: "Request rejected" });
+      showToast("Request rejected");
       setDetail(null); load();
-    } catch (err) { setToast({ type: "error", message: err.message }); }
+    } catch (err) { showToast(err.message, "error"); }
     finally { setBusyId(null); }
   }
 
@@ -128,56 +126,78 @@ export default function ManageTenantsPage() {
     setBusyId(id);
     try {
       await api(`/api/admin/tenant-requests/${id}/confirm-move-out`, { method: "POST" });
-      setToast({ type: "success", message: "Tenancy closed" });
+      showToast("Tenancy closed");
       setDetail(null); load();
-    } catch (err) { setToast({ type: "error", message: err.message }); }
+    } catch (err) { showToast(err.message, "error"); }
     finally { setBusyId(null); }
   }
 
+  const tabBadge = (t) => {
+    if (t === "Requests") return summary.requests || undefined;
+    if (t === "Active") return summary.active || undefined;
+    if (t === "Inactive") return summary.inactive || undefined;
+    return flats.length || undefined;
+  };
+
   return (
-    <div>
+    <div style={{ maxWidth: 1400, margin: "0 auto" }}>
       <PageHeader
+        eyebrow={<><Icon name="home" size={11} /> People · Tenants</>}
         title="Manage Tenants"
-        subtitle="Flat-wise view of every tenancy: live tenants, pending onboarding requests, and past tenants."
-        actions={<Button variant="ghost" onClick={load}>Refresh</Button>}
+        sub="Flat-wise view of every tenancy: live tenants, pending onboarding requests, and past tenants."
+        right={<Btn variant="ghost" icon="refresh-cw" onClick={load}>Refresh</Btn>}
       />
 
-      <div style={{ ...grid(200), marginBottom: 18 }}>
-        <StatCard label="Active tenancies" value={summary.active} color="var(--success)" />
-        <StatCard label="Awaiting approval" value={summary.requests} color="var(--warning)" />
-        <StatCard label="Flats without a tenant" value={summary.inactive} color="var(--fg-4)" />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 18 }}>
+        <SmallStat icon="check-circle-2" label="Active tenancies" value={summary.active} tone="success" />
+        <SmallStat icon="clock" label="Awaiting approval" value={summary.requests} tone={summary.requests > 0 ? "danger" : undefined} />
+        <SmallStat icon="home" label="Flats without a tenant" value={summary.inactive} />
       </div>
 
-      <div style={S.tabs}>
-        {TABS.map((t) => (
-          <button key={t} style={S.tab(tab === t)} onClick={() => setTab(t)}>{t}</button>
-        ))}
-        <input style={S.search} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search flat, owner or tenant..." />
-      </div>
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        tabs={TABS.map((t) => ({ key: t, label: t, badge: tabBadge(t) }))}
+      />
+
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div className="label" style={{ marginBottom: 4 }}>Search</div>
+            <SearchInput value={q} onChange={setQ} placeholder="Search flat, owner or tenant..." size="md" />
+          </div>
+        </div>
+      </Card>
 
       {loading ? (
-        <Card><div style={S.center}><Spinner /></div></Card>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 14 }}>
+          {[1, 2, 3].map((i) => <RevampSkeleton key={i} h={160} />)}
+        </div>
       ) : visible.length === 0 ? (
-        <Card><EmptyState title="Nothing here" subtitle="No flats match this filter." /></Card>
+        <Card><EmptyState icon="home" title="Nothing here" sub="No flats match this filter." /></Card>
       ) : (
-        <div style={grid(320)}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 14 }}>
           {visible.map((f) => {
             const live = f.currentTenant;
             const pending = f.pendingRequests || [];
             return (
-              <div key={f.memberId} style={S.card}>
-                <div style={S.head}>
+              <Card key={f.memberId} hover style={{ display: "grid", gap: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
                   <div>
-                    <div style={S.flat}>{f.wing ? `${f.wing}-` : ""}{f.flatNo || DASH}</div>
-                    <div style={S.meta}>Owner: {f.ownerName || DASH}{f.ownershipType ? ` / ${f.ownershipType}` : ""}</div>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: "var(--r-fg-1)" }}>
+                      {f.wing ? `${f.wing}-` : ""}{f.flatNo || DASH}
+                    </div>
+                    <div style={{ fontSize: 12.5, color: "var(--r-fg-4)", marginTop: 3 }}>
+                      Owner: {f.ownerName || DASH}{f.ownershipType ? ` / ${f.ownershipType}` : ""}
+                    </div>
                   </div>
-                  <Badge color={STATE_COLOR[f.state]}>{f.state}</Badge>
+                  <Pill tone={STATE_TONE[f.state]}>{f.state}</Pill>
                 </div>
 
                 {live ? (
                   <div>
-                    <div style={S.tenant}>{live.name || "Tenant"}</div>
-                    <div style={S.meta}>
+                    <div style={{ fontSize: 13, color: "var(--r-fg-1)", fontWeight: 600 }}>{live.name || "Tenant"}</div>
+                    <div style={{ fontSize: 12.5, color: "var(--r-fg-4)", marginTop: 3, lineHeight: 1.5 }}>
                       {live.contactNumber || live.phoneNumber || live.phone || DASH}
                       {live.rentPerMonth ? ` / Rs ${live.rentPerMonth}/mo` : ""}
                       <br />
@@ -185,29 +205,31 @@ export default function ManageTenantsPage() {
                     </div>
                   </div>
                 ) : (
-                  <div style={S.meta}>No live tenancy on this flat.</div>
+                  <div style={{ fontSize: 12.5, color: "var(--r-fg-4)" }}>No live tenancy on this flat.</div>
                 )}
 
                 {pending.length > 0 && (
-                  <div style={{ ...S.meta, color: "var(--warning-fg)", fontWeight: 700 }}>
+                  <Pill tone="warning">
                     {pending.length} request{pending.length > 1 ? "s" : ""} awaiting approval
-                  </div>
+                  </Pill>
                 )}
-                {f.counts.past > 0 && <div style={S.meta}>{f.counts.past} past tenant(s) on record</div>}
+                {f.counts.past > 0 && (
+                  <div style={{ fontSize: 12.5, color: "var(--r-fg-4)" }}>{f.counts.past} past tenant(s) on record</div>
+                )}
 
-                <div style={S.actions}>
-                  <Button size="sm" variant="ghost" onClick={() => setDetail({ flat: f, request: null })}>Show details</Button>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+                  <Btn size="sm" variant="ghost" icon="eye" onClick={() => setDetail({ flat: f, request: null })}>Show details</Btn>
                   {pending.map((r) => (
-                    <Button key={r._id} size="sm" onClick={() => setDetail({ flat: f, request: r })}>
+                    <Btn key={r._id} size="sm" variant="primary" icon="file-text" onClick={() => setDetail({ flat: f, request: r })}>
                       Review {r.tenantName || "request"}
-                    </Button>
+                    </Btn>
                   ))}
                   {live && f.activeRequest && (
-                    <Button size="sm" variant="ghost" disabled={busyId === f.activeRequest._id}
-                      onClick={() => confirmMoveOut(f.activeRequest._id)}>Close tenancy</Button>
+                    <Btn size="sm" variant="ghost" icon="log-out" disabled={busyId === f.activeRequest._id}
+                      onClick={() => confirmMoveOut(f.activeRequest._id)}>Close tenancy</Btn>
                   )}
                 </div>
-              </div>
+              </Card>
             );
           })}
         </div>
@@ -218,74 +240,81 @@ export default function ManageTenantsPage() {
         title={detail ? `${detail.flat.wing ? `${detail.flat.wing}-` : ""}${detail.flat.flatNo || ""} tenancy` : ""}
         onClose={() => setDetail(null)}
         width={620}
-        footer={detail && detail.request && detail.request.status === "Pending" ? (
-          <div style={{ display: "flex", gap: 8 }}>
-            <Button disabled={busyId === detail.request._id} onClick={() => approve(detail.request._id)}>Approve and create login</Button>
-            <Button variant="ghost" disabled={busyId === detail.request._id} onClick={() => reject(detail.request._id)}>Reject</Button>
-          </div>
-        ) : null}
       >
         {detail && (
-          <div style={{ display: "grid", gap: 14 }}>
+          <div style={{ display: "grid", gap: 16 }}>
             <div>
-              <div style={S.section}>Flat</div>
-              <div style={S.dl}>
-                <div style={S.dt}>Owner</div><div style={S.dd}>{detail.flat.ownerName || DASH}</div>
-                <div style={S.dt}>Ownership</div><div style={S.dd}>{detail.flat.ownershipType || DASH}</div>
-              </div>
+              <SectionLabel>Flat</SectionLabel>
+              <DL rows={[
+                ["Owner", detail.flat.ownerName || DASH],
+                ["Ownership", detail.flat.ownershipType || DASH],
+              ]} />
             </div>
 
             {detail.flat.currentTenant && (
               <div>
-                <div style={S.section}>Current tenant</div>
-                <div style={S.dl}>
-                  <div style={S.dt}>Name</div><div style={S.dd}>{detail.flat.currentTenant.name || DASH}</div>
-                  <div style={S.dt}>Phone</div><div style={S.dd}>{detail.flat.currentTenant.contactNumber || detail.flat.currentTenant.phoneNumber || detail.flat.currentTenant.phone || DASH}</div>
-                  <div style={S.dt}>Email</div><div style={S.dd}>{detail.flat.currentTenant.email || DASH}</div>
-                  <div style={S.dt}>Rent</div><div style={S.dd}>{detail.flat.currentTenant.rentAmount ? `Rs ${detail.flat.currentTenant.rentAmount}/mo` : DASH}</div>
-                  <div style={S.dt}>Deposit</div><div style={S.dd}>{detail.flat.currentTenant.depositAmount ? `Rs ${detail.flat.currentTenant.depositAmount}` : DASH}</div>
-                  <div style={S.dt}>Lease</div><div style={S.dd}>{d(detail.flat.currentTenant.leaseStartDate)} to {d(detail.flat.currentTenant.leaseEndDate)}</div>
-                </div>
+                <SectionLabel>Current tenant</SectionLabel>
+                <DL rows={[
+                  ["Name", detail.flat.currentTenant.name || DASH],
+                  ["Phone", detail.flat.currentTenant.contactNumber || detail.flat.currentTenant.phoneNumber || detail.flat.currentTenant.phone || DASH],
+                  ["Email", detail.flat.currentTenant.email || DASH],
+                  ["Rent", detail.flat.currentTenant.rentAmount ? `Rs ${detail.flat.currentTenant.rentAmount}/mo` : DASH],
+                  ["Deposit", detail.flat.currentTenant.depositAmount ? `Rs ${detail.flat.currentTenant.depositAmount}` : DASH],
+                  ["Lease", `${d(detail.flat.currentTenant.leaseStartDate)} to ${d(detail.flat.currentTenant.leaseEndDate)}`],
+                ]} />
               </div>
             )}
 
             {detail.request && (
               <div>
-                <div style={S.section}>Request under review</div>
-                <div style={S.dl}>
-                  <div style={S.dt}>Tenant</div><div style={S.dd}>{detail.request.tenantName || DASH}</div>
-                  <div style={S.dt}>Phone</div><div style={S.dd}>{detail.request.tenantPhone || DASH}</div>
-                  <div style={S.dt}>Email</div><div style={S.dd}>{detail.request.tenantEmail || DASH}</div>
-                  <div style={S.dt}>Rent</div><div style={S.dd}>{detail.request.rentPerMonth ? `Rs ${detail.request.rentPerMonth}/mo` : DASH}</div>
-                  <div style={S.dt}>Lease</div><div style={S.dd}>{d(detail.request.leaseStartDate)} to {d(detail.request.leaseEndDate)}</div>
-                  <div style={S.dt}>Submitted</div><div style={S.dd}>{detail.request.createdAt ? fmtTime(detail.request.createdAt) : DASH}</div>
-                </div>
+                <SectionLabel>Request under review</SectionLabel>
+                <DL rows={[
+                  ["Tenant", detail.request.tenantName || DASH],
+                  ["Phone", detail.request.tenantPhone || DASH],
+                  ["Email", detail.request.tenantEmail || DASH],
+                  ["Rent", detail.request.rentPerMonth ? `Rs ${detail.request.rentPerMonth}/mo` : DASH],
+                  ["Lease", `${d(detail.request.leaseStartDate)} to ${d(detail.request.leaseEndDate)}`],
+                  ["Submitted", detail.request.createdAt ? when(detail.request.createdAt) : DASH],
+                ]} />
 
                 {detail.request.pendingLeaseChange && detail.request.pendingLeaseChange.status === "Pending" && (
-                  <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: "var(--warning-bg)", color: "var(--warning-fg)", fontSize: 12.5, fontWeight: 600 }}>
+                  <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: "var(--r-warning-soft)", color: "var(--r-warning)", fontSize: 12.5, fontWeight: 600 }}>
                     Owner proposed new lease dates: {d(detail.request.pendingLeaseChange.leaseStartDate)} to {d(detail.request.pendingLeaseChange.leaseEndDate)}
                   </div>
                 )}
 
-                <div style={S.section}>Documents</div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {DOCUMENT_FIELDS.map(({ field, label }) => (
-                    <Button key={field} variant="ghost" size="sm" onClick={() => viewDocument(detail.request._id, field)}>
-                      View {label}
-                    </Button>
-                  ))}
+                <div style={{ marginTop: 14 }}>
+                  <SectionLabel>Documents</SectionLabel>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {DOCUMENT_FIELDS.map(({ field, label }) => (
+                      <Btn key={field} variant="secondary" size="sm" icon="file-text" onClick={() => viewDocument(detail.request._id, field)}>
+                        View {label}
+                      </Btn>
+                    ))}
+                  </div>
                 </div>
 
                 {(detail.request.notes || []).length > 0 && (
-                  <div>
-                    <div style={S.section}>Owner notes</div>
+                  <div style={{ marginTop: 14 }}>
+                    <SectionLabel>Owner notes</SectionLabel>
                     <div style={{ display: "grid", gap: 5 }}>
                       {detail.request.notes.map((n, i) => (
-                        <div key={i} style={{ fontSize: 12.5, color: tokens.sub }}>
-                          {n.text} - {n.by || "Owner"}{n.at ? `, ${fmtTime(n.at)}` : ""}
+                        <div key={i} style={{ fontSize: 12.5, color: "var(--r-fg-4)" }}>
+                          {n.text} - {n.by || "Owner"}{n.at ? `, ${when(n.at)}` : ""}
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {detail.request.status === "Pending" && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+                    <Btn variant="primary" icon="check" disabled={busyId === detail.request._id} onClick={() => approve(detail.request._id)}>
+                      Approve and create login
+                    </Btn>
+                    <Btn variant="danger" icon="x" disabled={busyId === detail.request._id} onClick={() => reject(detail.request._id)}>
+                      Reject
+                    </Btn>
                   </div>
                 )}
               </div>
@@ -293,10 +322,10 @@ export default function ManageTenantsPage() {
 
             {(detail.flat.pastTenants || []).length > 0 && (
               <div>
-                <div style={S.section}>Past tenants</div>
+                <SectionLabel>Past tenants</SectionLabel>
                 <div style={{ display: "grid", gap: 6 }}>
                   {detail.flat.pastTenants.map((p, i) => (
-                    <div key={i} style={{ fontSize: 12.5, color: tokens.sub }}>
+                    <div key={i} style={{ fontSize: 12.5, color: "var(--r-fg-4)" }}>
                       {p.name || DASH} / {d(p.leaseStartDate)} to {d(p.leaseEndDate)}
                     </div>
                   ))}
@@ -307,7 +336,7 @@ export default function ManageTenantsPage() {
         )}
       </Modal>
 
-      {toast ? <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} /> : null}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

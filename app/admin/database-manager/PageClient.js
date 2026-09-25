@@ -95,7 +95,7 @@ setSelectedIds([]);
   // Reset/Clear all mutation
   const resetMutation = useMutation({
     mutationFn: async ({ entity }) => {
-      if (!(await notify.confirm(`⚠️ ARE YOU ABSOLUTELY SURE?\n\nThis will PERMANENTLY DELETE ALL ${entity.toUpperCase()} data!\n\nType "DELETE ALL" to confirm.`, { tone: "danger" }))) {
+      if (!(await notify.confirm(`ARE YOU ABSOLUTELY SURE?\n\nThis will PERMANENTLY DELETE ALL ${entity.toUpperCase()} data!\n\nType "DELETE ALL" to confirm.`, { tone: "danger" }))) {
         throw new Error('Cancelled');
       }
       const userConfirmation = await notify.prompt('Type "DELETE ALL" to confirm:');
@@ -194,7 +194,7 @@ setSelectedIds([]);
   return (
       <div className={styles.container}>
         <div className={styles.header}>
-          <h1 className={styles.title}>🗄️ Database Manager</h1>
+          <h1 className={styles.title}>Database Manager</h1>
           <p className={styles.subtitle}>Complete database access - View, Import, Export, and Manage all data</p>
         </div>
         <div className={styles.toolbar}>
@@ -223,13 +223,13 @@ setSelectedIds([]);
                 className={`${styles.btn} ${viewMode === 'table' ? styles.btnActive : styles.btnSecondary}`}
                 onClick={() => setViewMode('table')}
               >
-                📊 Table
+                Table
               </button>
               <button 
                 className={`${styles.btn} ${viewMode === 'json' ? styles.btnActive : styles.btnSecondary}`}
                 onClick={() => setViewMode('json')}
               >
-                📝 JSON
+                JSON
               </button>
             </div>
           </div>
@@ -303,13 +303,13 @@ setSelectedIds([]);
   }
 }}
   >
-    🔧 Fix Duplicates
+    Fix Duplicates
   </button>
 </div>
         </div>
           {/* Filters Section */}
         <div className={styles.filtersSection}>
-          <h3>🔍 Filters</h3>
+          <h3>Filters</h3>
           <div className={styles.filterGrid}>
             {selectedEntity === 'members' && (
               <>
@@ -392,7 +392,7 @@ setSelectedIds([]);
                 className={`${styles.btn} ${styles.btnSecondary}`}
                 onClick={() => refetch()}
               >
-                🔄 Refresh
+                Refresh
               </button>
             </div>
           </div>
@@ -409,7 +409,7 @@ setSelectedIds([]);
         </div>
         {/* Danger Zone */}
         <div className={styles.dangerZone}>
-          <h3>⚠️ Danger Zone</h3>
+          <h3>Danger Zone</h3>
           <p>These actions are irreversible. Use with extreme caution!</p>
                 <div className={styles.dangerActions}>
             <button 
@@ -428,14 +428,14 @@ setSelectedIds([]);
 }}
               disabled={deleteMutation.isPending || selectedIds.length === 0}
             >
-              {deleteMutation.isPending ? 'Deleting...' : `🗑️ Delete Selected (${selectedIds.length})`}
+              {deleteMutation.isPending ? 'Deleting...' : `Delete Selected (${selectedIds.length})`}
             </button>
             <button 
               className={`${styles.btn} ${styles.btnDanger}`}
               onClick={() => resetMutation.mutate({ entity: selectedEntity })}
               disabled={resetMutation.isPending}
             >
-              {resetMutation.isPending ? 'Resetting...' : `💣 RESET ALL ${selectedEntity.toUpperCase()}`}
+              {resetMutation.isPending ? 'Resetting...' : `RESET ALL ${selectedEntity.toUpperCase()}`}
             </button>
           </div>
         </div>

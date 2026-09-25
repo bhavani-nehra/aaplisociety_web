@@ -2,9 +2,18 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
-import styles from "@/styles/Dashboard.module.css";
-import gridStyles from "@/styles/BillingGrid.module.css";
 import { produce } from "immer";
+import {
+  PageHeader, Card, CardHead, Btn, Icon, RevampSkeleton, Toast,
+} from "@/components/revamp";
+
+// Config group register (final_audit_fix_plan/06-skills-and-execution-tooling.md
+// §13): "Calm/minimal — infrequent, high-consequence screens, maximum
+// legibility, zero decoration." Rewritten onto components/revamp with the
+// same restraint as app/my-access/page.js (the Run 19 exemplar for this
+// register) — plain Cards, no tinted panels, no icon-in-a-box treatments,
+// quiet section labels instead of colored banner blocks. Business logic
+// (queries, mutations, validate, handleChange, handleSubmit) is untouched.
 export default function SocietyConfigPage() {
   const queryClient = useQueryClient();
   const [formData, setFormData] = useState({
@@ -75,7 +84,7 @@ export default function SocietyConfigPage() {
   const updateMutation = useMutation({
     mutationFn: (data) => apiClient.put("/api/society/update", data),
     onSuccess: (data) => {
-      setSuccessMessage("✅ Society configuration updated successfully!");
+      setSuccessMessage("Society configuration updated successfully!");
       // ✅ UPDATE FORM STATE WITH SERVER RESPONSE
       if (data.society) {
         const c = data.society.config || {};
@@ -165,70 +174,63 @@ export default function SocietyConfigPage() {
       setErrors({ submit: error.message });
     }
   };
+
   if (isLoading) {
     return (
-      <div
-        style={{ display: "flex", justifyContent: "center", padding: "40px" }}
-      >
-        <div className="loading-spinner"></div>
+      <div style={{ maxWidth: 900, margin: "0 auto" }}>
+        <RevampSkeleton h={64} style={{ marginBottom: 14 }} />
+        <RevampSkeleton h={220} style={{ marginBottom: 14 }} />
+        <RevampSkeleton h={280} />
       </div>
     );
   }
+
+  // Was a bare `maxWidth: 760` with no centering — on anything wider than
+  // that (every real monitor) the form sat flush left with a dead gap
+  // filling the rest of the content frame, which is what read as the page
+  // stopping short partway across ("cuts at 90%"). Centered and widened
+  // slightly; still a single readable column, just not orphaned on one side.
   return (
-    <div>
+    <div style={{ maxWidth: 900, margin: "0 auto" }}>
       <form onSubmit={handleSubmit}>
-        <div className={styles.pageHeader}>
-          <div>
-            <h1 className={styles.pageTitle}>Society Configuration</h1>
-            <p className={styles.pageSubtitle}>
-              Manage society details and financial parameters
-            </p>
-          </div>
-          <div>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="btn btn-secondary"
-            >
-              🔄 Reset Changes
-            </button>
-            <button
-              type="submit"
-              className="btn btn-success"
-              disabled={updateMutation.isPending}
-            >
-              {updateMutation.isPending ? (
-                <>
-                  <span className="loading-spinner"></span>
-                  Saving...
-                </>
-              ) : (
-                <>💾 Save Configuration</>
-              )}
-            </button>
-          </div>
-        </div>
-        {successMessage && (
-          <div
-            className="toast toast-success"
-            style={{ position: "relative", marginBottom: "var(--spacing-lg)" }}
-          >
-            {successMessage}
-          </div>
-        )}
+        <PageHeader
+          eyebrow="Config"
+          title="Society Configuration"
+          sub="Society details and financial parameters"
+          right={
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn variant="ghost" icon="rotate-ccw" onClick={() => window.location.reload()}>
+                Reset changes
+              </Btn>
+              <Btn
+                variant="primary"
+                icon={updateMutation.isPending ? undefined : "save"}
+                type="submit"
+                disabled={updateMutation.isPending}
+              >
+                {updateMutation.isPending ? "Saving…" : "Save configuration"}
+              </Btn>
+            </div>
+          }
+        />
+
         {errors.submit && (
-          <div className={gridStyles.errorList}>
-            <div className={gridStyles.errorListTitle}>❌ Update Failed</div>
-            <div>{errors.submit}</div>
-          </div>
+          <Card style={{ marginBottom: 16, borderColor: "var(--r-danger)" }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+              <Icon name="alert-circle" size={16} color="var(--r-danger)" />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--r-fg-1)" }}>Update failed</div>
+                <div style={{ fontSize: 12.5, color: "var(--r-fg-3)", marginTop: 2 }}>{errors.submit}</div>
+              </div>
+            </div>
+          </Card>
         )}
-        <div className={styles.contentCard}>
-          <div className={styles.cardHeader}>
-            <h2 className={styles.cardTitle}>Basic Information</h2>
-          </div>
-          <div className={gridStyles.configForm}>
-            <div className={gridStyles.formGroup}>
-              <label className="label">Society Name *</label>
+
+        <Card style={{ marginBottom: 16 }}>
+          <CardHead title="Basic information" />
+          <div style={{ display: "grid", gap: 16 }}>
+            <div>
+              <label className="label">Society name *</label>
               <input
                 type="text"
                 value={formData.name}
@@ -238,21 +240,17 @@ export default function SocietyConfigPage() {
               />
               {errors.name && <p className="error-text">{errors.name}</p>}
             </div>
-            <div className={gridStyles.formRow}>
-              <div className={gridStyles.formGroup}>
-                <label className="label">Registration Number</label>
-                <input
-                  type="text"
-                  value={formData.registrationNo}
-                  onChange={(e) =>
-                    handleChange("registrationNo", e.target.value)
-                  }
-                  className="input"
-                  placeholder="REG/2024/1234"
-                />
-              </div>
+            <div>
+              <label className="label">Registration number</label>
+              <input
+                type="text"
+                value={formData.registrationNo}
+                onChange={(e) => handleChange("registrationNo", e.target.value)}
+                className="input"
+                placeholder="REG/2024/1234"
+              />
             </div>
-            <div className={gridStyles.formGroup}>
+            <div>
               <label className="label">Address</label>
               <textarea
                 value={formData.address}
@@ -263,158 +261,170 @@ export default function SocietyConfigPage() {
               />
             </div>
           </div>
-        </div>
-        <div className={styles.contentCard}>
-          <div className={styles.cardHeader}>
-            <h2 className={styles.cardTitle}>Financial Parameters</h2>
-          </div>
-          <div className={gridStyles.formRow}>
-            {/* Interest Rate on Arrears */}
-            <div className={gridStyles.formGroup}>
-              <label className="label">
-                Interest Rate on Arrears (% per annum) *
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                value={formData.config.interestRate}
-                onChange={(e) =>
-                  handleChange(
-                    "config.interestRate",
-                    parseFloat(e.target.value) || 0,
-                  )
-                }
-                className={`input ${errors.interestRate ? "input-error" : ""}`}
-                placeholder="21.00"
-              />
-              {errors.interestRate && (
-                <p className="error-text">{errors.interestRate}</p>
-              )}
-              <span
-                style={{
-                  fontSize: "var(--font-xs)",
-                  color: "var(--text-secondary)",
-                }}
-              >
-                Annual interest rate on overdue payments (e.g., 21% p.a.)
-              </span>
+        </Card>
+
+        <Card style={{ marginBottom: 16 }}>
+          <CardHead title="Financial parameters" />
+          <div style={{ display: "grid", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+              <div>
+                <label className="label">Interest rate on arrears (% p.a.) *</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={formData.config.interestRate}
+                  onChange={(e) => handleChange("config.interestRate", parseFloat(e.target.value) || 0)}
+                  className={`input ${errors.interestRate ? "input-error" : ""}`}
+                  placeholder="21.00"
+                />
+                {errors.interestRate ? (
+                  <p className="error-text">{errors.interestRate}</p>
+                ) : (
+                  <p style={{ fontSize: 12, color: "var(--r-fg-4)", marginTop: 6 }}>
+                    Annual interest rate on overdue payments (e.g., 21% p.a.)
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="label">Service tax rate (%)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={formData.config.serviceTaxRate}
+                  onChange={(e) => handleChange("config.serviceTaxRate", parseFloat(e.target.value) || 0)}
+                  className={`input ${errors.serviceTaxRate ? "input-error" : ""}`}
+                  placeholder="2.00"
+                />
+                {errors.serviceTaxRate ? (
+                  <p className="error-text">{errors.serviceTaxRate}</p>
+                ) : (
+                  <p style={{ fontSize: 12, color: "var(--r-fg-4)", marginTop: 6 }}>
+                    Tax applied on total charges (e.g., GST 2%)
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="label">Interest rounding</label>
+                <select
+                  value={formData.config.interestRounding || "TWO_DECIMAL"}
+                  onChange={(e) => handleChange("config.interestRounding", e.target.value)}
+                  className="input"
+                >
+                  <option value="TWO_DECIMAL">2 decimal (e.g. 10.256 → 10.26)</option>
+                  <option value="ROUND_UP">Round up to whole rupee (e.g. 10.001 → 11)</option>
+                </select>
+                <p style={{ fontSize: 12, color: "var(--r-fg-4)", marginTop: 6 }}>
+                  Society never spares even ₹0.01 — use Round Up
+                </p>
+              </div>
+              <div>
+                <label className="label">Interest use mode</label>
+                <select
+                  value={formData.config.interestUseMode || "OLDEST_FIRST"}
+                  onChange={(e) => handleChange("config.interestUseMode", e.target.value)}
+                  className="input"
+                >
+                  <option value="OLDEST_FIRST">Oldest first — clear oldest period&rsquo;s interest first</option>
+                  <option value="TOTAL">Total pool — treat all interest as one bucket</option>
+                </select>
+              </div>
             </div>
-            <div className="config-field">
-              <label>Interest Rounding</label>
-              <select
-                value={formData.config.interestRounding || "TWO_DECIMAL"}
-                onChange={(e) =>
-                  handleChange("config.interestRounding", e.target.value)
-                }
-                className="input"
-              >
-                <option value="TWO_DECIMAL">
-                  2 Decimal (e.g. 10.256 → 10.26)
-                </option>
-                <option value="ROUND_UP">
-                  Round Up to whole rupee (e.g. 10.001 → 11)
-                </option>
-              </select>
-              <p className="hint">
-                Society never spares even ₹0.01 — use Round Up
-              </p>
-            </div>
-            <div className="config-field">
-              <label>Interest Use Mode</label>
-              <select
-                value={formData.config.interestUseMode || "OLDEST_FIRST"}
-                onChange={(e) =>
-                  handleChange("config.interestUseMode", e.target.value)
-                }
-                className="input"
-              >
-                <option value="OLDEST_FIRST">
-                  Oldest First — clear oldest period's interest first
-                </option>
-                <option value="TOTAL">
-                  Total Pool — treat all interest as one bucket
-                </option>
-              </select>
-            </div>
-            <div className="config-field">
-              <label>Member Payment Breakdown Visible</label>
+
+            <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
               <input
                 type="checkbox"
-                checked={
-                  formData.config.memberPaymentBreakdownVisible !== false
-                }
-                onChange={(e) =>
-                  handleChange(
-                    "config.memberPaymentBreakdownVisible",
-                    e.target.checked,
-                  )
-                }
+                checked={formData.config.memberPaymentBreakdownVisible !== false}
+                onChange={(e) => handleChange("config.memberPaymentBreakdownVisible", e.target.checked)}
+                style={{ marginTop: 3 }}
               />
-              <span>Show members how much goes to interest vs principal</span>
-            </div>
-            {/* Service Tax Rate */}
-            <div className={gridStyles.formGroup}>
-              <label className="label">Service Tax Rate (%)</label>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                value={formData.config.serviceTaxRate}
-                onChange={(e) =>
-                  handleChange(
-                    "config.serviceTaxRate",
-                    parseFloat(e.target.value) || 0,
-                  )
-                }
-                className={`input ${
-                  errors.serviceTaxRate ? "input-error" : ""
-                }`}
-                placeholder="2.00"
-              />
-              {errors.serviceTaxRate && (
-                <p className="error-text">{errors.serviceTaxRate}</p>
-              )}
-              <span
-                style={{
-                  fontSize: "var(--font-xs)",
-                  color: "var(--text-secondary)",
-                }}
-              >
-                Tax applied on total charges (e.g., GST 2%)
+              <span>
+                <span style={{ display: "block", fontSize: 13.5, fontWeight: 500, color: "var(--r-fg-1)" }}>
+                  Member payment breakdown visible
+                </span>
+                <span style={{ display: "block", fontSize: 12, color: "var(--r-fg-4)", marginTop: 2 }}>
+                  Show members how much goes to interest vs principal
+                </span>
               </span>
-            </div>
-            <div style={{ gridColumn: "1 / -1", border: "1px solid var(--primary-tint)", borderRadius: "10px", padding: "1.25rem", background: "var(--accent-tint)" }}>
-              <h3 style={{ margin: "0 0 0.5rem", fontSize: "0.95rem", color: "var(--info)", fontWeight: 700 }}>Monthly billing schedule</h3>
-              <p style={{ margin: "0 0 1rem", color: "var(--fg-3)", fontSize: "0.85rem" }}>
-                Enter only a day number. Example: 30 means the 30th of every month. February automatically uses its last day. Admins receive email and in-app reminders one day before bill creation and payment upload.
+            </label>
+
+            <div style={{ borderTop: "1px solid var(--r-hairline)", paddingTop: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--r-fg-2)", marginBottom: 4 }}>
+                Monthly billing schedule
+              </div>
+              <p style={{ fontSize: 12, color: "var(--r-fg-4)", marginBottom: 14 }}>
+                Enter only a day number. Example: 30 means the 30th of every month. February
+                automatically uses its last day. Admins receive email and in-app reminders one day
+                before bill creation and payment upload.
               </p>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "1rem" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 16 }}>
                 {[
                   ["billGenerationDay", "Bill creation day", "Create monthly bills by this day"],
                   ["paymentUploadDay", "Payment upload day", "Upload the payment Excel by this day"],
                   ["billDueDay", "Bill due day", "Members should pay by this day"],
                 ].map(([key, label, help]) => (
                   <div key={key}>
-                    <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem" }}>{label}</label>
-                    <input type="number" min="1" max="31" step="1" value={formData.config[key]}
+                    <label className="label">{label}</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="31"
+                      step="1"
+                      value={formData.config[key]}
                       onChange={(e) => handleChange(`config.${key}`, Number(e.target.value))}
-                      className={`input ${errors[key] ? "input-error" : ""}`} />
-                    <span style={{ display: "block", marginTop: "0.3rem", fontSize: "0.75rem", color: "var(--fg-4)" }}>{help}</span>
+                      className={`input ${errors[key] ? "input-error" : ""}`}
+                    />
+                    <p style={{ fontSize: 12, color: "var(--r-fg-4)", marginTop: 6 }}>{help}</p>
                     {errors[key] && <p className="error-text">{errors[key]}</p>}
                   </div>
                 ))}
               </div>
+
+              {/* Live timeline built from the three day-numbers above — grounds
+                  three lonely input boxes in what they actually mean for a
+                  real month, instead of leaving the admin to do the mental
+                  math themselves. Updates as the fields change. */}
+              <div style={{
+                display: "flex", alignItems: "center", marginTop: 20, padding: "14px 4px",
+                overflowX: "auto",
+              }}>
+                {[
+                  { day: formData.config.billGenerationDay, label: "Bills created", icon: "file-spreadsheet" },
+                  { day: formData.config.paymentUploadDay, label: "Payments uploaded", icon: "upload" },
+                  { day: formData.config.billDueDay, label: "Due date", icon: "flag" },
+                  { day: (Number(formData.config.billDueDay) || 0) + (Number(formData.config.interestAfterDays) || 0), label: "Interest begins", icon: "percent", wraps: true },
+                ].map((step, i, arr) => (
+                  <div key={step.label} style={{ display: "flex", alignItems: "center", flex: i < arr.length - 1 ? 1 : "0 0 auto", minWidth: 92 }}>
+                    <div style={{ textAlign: "center", flexShrink: 0 }}>
+                      <div style={{
+                        width: 34, height: 34, borderRadius: "50%", margin: "0 auto 8px",
+                        background: "var(--r-brand-soft)", color: "var(--r-brand)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        <Icon name={step.icon} size={15} />
+                      </div>
+                      <div className="revamp-num" style={{ fontSize: 15, fontWeight: 700, color: "var(--r-fg-1)" }}>
+                        {step.wraps && step.day > 31 ? `+${Number(formData.config.interestAfterDays) || 0}d` : `Day ${step.day || "—"}`}
+                      </div>
+                      <div style={{ fontSize: 10.5, color: "var(--r-fg-4)", marginTop: 2, whiteSpace: "nowrap" }}>{step.label}</div>
+                    </div>
+                    {i < arr.length - 1 && (
+                      <div style={{ flex: 1, height: 1, background: "var(--r-border)", margin: "0 4px 26px" }} />
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-            {/* Interest After Days — display label only, no logic gate */}
-            <div style={{ gridColumn: "1 / -1", border: "1px solid var(--primary-tint)", borderRadius: "10px", padding: "1.25rem", background: "var(--bg-canvas)" }}>
-              <h3 style={{ margin: "0 0 0.75rem", fontSize: "0.95rem", color: "var(--primary-hover)", fontWeight: 700 }}>
-                Interest Info
-              </h3>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <label style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--fg-3)", whiteSpace: "nowrap" }}>
+
+            <div style={{ borderTop: "1px solid var(--r-hairline)", paddingTop: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--r-fg-2)", marginBottom: 10 }}>
+                Interest info
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <label style={{ fontSize: 13, fontWeight: 500, color: "var(--r-fg-3)", whiteSpace: "nowrap" }}>
                   Interest starts after due date
                 </label>
                 <input
@@ -423,85 +433,84 @@ export default function SocietyConfigPage() {
                   max="365"
                   value={formData.config.interestAfterDays}
                   onChange={(e) => handleChange("config.interestAfterDays", parseInt(e.target.value) || 0)}
-                  style={{ width: "80px", padding: "0.4rem 0.6rem", border: "1px solid var(--primary-tint)", borderRadius: "6px", fontSize: "0.875rem", textAlign: "center" }}
+                  className="input"
+                  style={{ width: 80, textAlign: "center" }}
                 />
-                <span style={{ fontSize: "0.875rem", color: "var(--fg-4)" }}>days after the recurring bill due day</span>
-                {errors.interestAfterDays && <span style={{ color: "var(--danger)", fontSize: "0.8rem" }}>{errors.interestAfterDays}</span>}
+                <span style={{ fontSize: 13, color: "var(--r-fg-4)" }}>days after the recurring bill due day</span>
+                {errors.interestAfterDays && (
+                  <span style={{ fontSize: 12, color: "var(--r-danger)" }}>{errors.interestAfterDays}</span>
+                )}
               </div>
             </div>
           </div>
-        </div>
+        </Card>
+
         {/* Commercial module. Always visible to admins - this is the only
             place the module can be switched on. Every flag defaults to off. */}
-        <div className={styles.contentCard}>
-          <div className={styles.cardHeader}>
-            <h2 className={styles.cardTitle}>Commercial Module</h2>
-          </div>
-          <div style={{ padding: "0 1.25rem 1.25rem" }}>
-            <p style={{ margin: "0 0 1rem", color: "var(--fg-3)", fontSize: "0.85rem" }}>
-              Directory of the shops and offices inside this society. Changes save
-              immediately - the Save button below does not apply to this section.
-              Turning the master switch off hides the module instantly for members
-              and admins. No data is deleted.
-            </p>
-            {commercialMutation.isError && (
-              <div className={gridStyles.errorList}>
-                <div className={gridStyles.errorListTitle}>Could not update</div>
-                <div>{commercialMutation.error?.message}</div>
-              </div>
-            )}
-            <div style={{ display: "grid", gap: "0.85rem" }}>
-              {[
-                ["enabled", "Enable commercial module",
-                  "Master switch. Off means nothing commercial exists for this society."],
-                ["directoryEnabled", "Show the directory in the member app",
-                  "Members can browse published shops. Off keeps listings admin-only."],
-                ["ownerEditingEnabled", "Let shop owners edit their own listing",
-                  "Owners edit details; publishing and suspending stay with the admin."],
-                ["commercialBillingEnabled", "Allow charges restricted to shops/offices",
-                  "Lets a billing head target specific unit types. Off means every head applies to everyone, exactly as today."],
-              ].map(([key, label, help]) => {
-                const locked = key !== "enabled" && !commercialFlags.enabled;
-                return (
-                  <label
-                    key={key}
-                    style={{
-                      display: "flex",
-                      gap: "0.65rem",
-                      alignItems: "flex-start",
-                      opacity: locked ? 0.5 : 1,
-                      cursor: locked ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={!!commercialFlags[key]}
-                      disabled={locked || commercialMutation.isPending}
-                      onChange={(e) =>
-                        commercialMutation.mutate({ [key]: e.target.checked })
-                      }
-                      style={{ marginTop: "0.25rem" }}
-                    />
-                    <span>
-                      <span style={{ display: "block", fontWeight: 700, fontSize: "0.875rem" }}>
-                        {label}
-                      </span>
-                      <span style={{ display: "block", fontSize: "0.78rem", color: "var(--fg-4)" }}>
-                        {help}
-                      </span>
-                    </span>
-                  </label>
-                );
-              })}
+        <Card>
+          <CardHead
+            title="Commercial module"
+            sub="Directory of the shops and offices inside this society. Changes save immediately — the Save button above does not apply to this section. Turning the master switch off hides the module instantly for members and admins. No data is deleted."
+          />
+          {commercialMutation.isError && (
+            <div style={{ marginBottom: 14, fontSize: 12.5, color: "var(--r-danger)" }}>
+              Could not update: {commercialMutation.error?.message}
             </div>
-            {commercialFlags.enabled && (
-              <p style={{ marginTop: "1rem", fontSize: "0.8rem", color: "var(--fg-3)" }}>
-                Manage listings under Commercial in the sidebar.
-              </p>
-            )}
+          )}
+          <div style={{ display: "grid", gap: 14 }}>
+            {[
+              ["enabled", "Enable commercial module",
+                "Master switch. Off means nothing commercial exists for this society."],
+              ["directoryEnabled", "Show the directory in the member app",
+                "Members can browse published shops. Off keeps listings admin-only."],
+              ["ownerEditingEnabled", "Let shop owners edit their own listing",
+                "Owners edit details; publishing and suspending stay with the admin."],
+              ["commercialBillingEnabled", "Allow charges restricted to shops/offices",
+                "Lets a billing head target specific unit types. Off means every head applies to everyone, exactly as today."],
+            ].map(([key, label, help]) => {
+              const locked = key !== "enabled" && !commercialFlags.enabled;
+              return (
+                <label
+                  key={key}
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    alignItems: "flex-start",
+                    opacity: locked ? 0.5 : 1,
+                    cursor: locked ? "not-allowed" : "pointer",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!!commercialFlags[key]}
+                    disabled={locked || commercialMutation.isPending}
+                    onChange={(e) => commercialMutation.mutate({ [key]: e.target.checked })}
+                    style={{ marginTop: 3 }}
+                  />
+                  <span>
+                    <span style={{ display: "block", fontSize: 13.5, fontWeight: 500, color: "var(--r-fg-1)" }}>
+                      {label}
+                    </span>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--r-fg-4)", marginTop: 2 }}>
+                      {help}
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
           </div>
-        </div>
+          {commercialFlags.enabled && (
+            <p style={{ marginTop: 14, fontSize: 12, color: "var(--r-fg-4)" }}>
+              Manage listings under Commercial in the sidebar.
+            </p>
+          )}
+        </Card>
       </form>
+
+      <Toast
+        toast={successMessage ? { message: successMessage, type: "success" } : null}
+        onClose={() => setSuccessMessage("")}
+      />
     </div>
   );
 }

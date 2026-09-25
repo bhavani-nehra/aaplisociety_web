@@ -23,15 +23,15 @@ const EXPIRY_OPTIONS = [
   { value: "", label: "No Expiry" },
 ];
 const TYPE_ICONS = {
-  maintenance: "🔧",
-  meeting: "📅",
-  water: "💧",
-  electricity: "⚡",
-  parking: "🚗",
-  security: "🔒",
-  event: "🎉",
-  billing: "💰",
-  custom: "📋",
+  maintenance: "",
+  meeting: "",
+  water: "",
+  electricity: "",
+  parking: "",
+  security: "",
+  event: "",
+  billing: "",
+  custom: "",
 };
 const PRIORITY_COLORS = {
   low: { bg: "var(--bg-muted)", color: "var(--fg-3)", border: "var(--border)" },
@@ -252,7 +252,7 @@ export default function AdminNoticesPage() {
         </div>
       ) : notices.length === 0 ? (
         <div className={styles.empty}>
-          <div className={styles.emptyIcon}>📭</div>
+          <div className={styles.emptyIcon}></div>
           <p>No notices found.</p>
           <button
             className={styles.createBtn}
@@ -274,7 +274,7 @@ export default function AdminNoticesPage() {
                 <div className={styles.cardTop}>
                   <div className={styles.cardMeta}>
                     {n.pinned && (
-                      <span className={styles.pinnedBadge}>📌 Pinned</span>
+                      <span className={styles.pinnedBadge}>Pinned</span>
                     )}
                     <span className={styles.typeBadge}>
                       {TYPE_ICONS[n.type]} {n.type}
@@ -298,7 +298,7 @@ export default function AdminNoticesPage() {
                       disabled={actionLoading[n._id] === "pin"}
                       title={n.pinned ? "Unpin" : "Pin to top"}
                     >
-                      {n.pinned ? "📌" : "📍"}
+                      {n.pinned ? "" : ""}
                     </button>
                     <button
                       className={`${styles.actionBtn} ${styles.deleteBtn}`}
@@ -306,7 +306,7 @@ export default function AdminNoticesPage() {
                       disabled={actionLoading[n._id] === "delete"}
                       title="Delete"
                     >
-                      🗑
+                      
                     </button>
                   </div>
                 </div>
@@ -322,10 +322,10 @@ export default function AdminNoticesPage() {
                   )}
                   {/* View stats */}
                   <span className={styles.viewStats}>
-                    👁 {n.viewedCount || 0} / {n.totalMembers || 0} viewed
+                    {n.viewedCount || 0} / {n.totalMembers || 0} viewed
                     {n.priority === "urgent" && (
                       <span className={styles.ackStats}>
-                        &nbsp;·&nbsp;✅ {n.acknowledgedCount || 0} acknowledged
+                        &nbsp;·&nbsp;{n.acknowledgedCount || 0} acknowledged
                       </span>
                     )}
                   </span>
@@ -479,7 +479,7 @@ export default function AdminNoticesPage() {
                     setForm({ ...form, pinned: e.target.checked })
                   }
                 />
-                <span>📌 Pin this notice to top</span>
+                <span>Pin this notice to top</span>
               </label>
               <div className={styles.formActions}>
                 <button

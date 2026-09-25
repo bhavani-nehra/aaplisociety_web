@@ -1,10 +1,12 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { motion, AnimatePresence } from "framer-motion";
 import { apiClient } from "@/lib/api-client";
-import styles from "@/styles/Dashboard.module.css";
-import gridStyles from "@/styles/BillingGrid.module.css";
 import { produce } from "immer";
+import {
+  PageHeader, Card, Btn, Icon, Select, EmptyState, RevampSkeleton, Toast,
+} from "@/components/revamp";
 
 const CATEGORIES = [
   "Society Office",
@@ -20,6 +22,21 @@ const CATEGORIES = [
   "Utility",
   "Other",
 ];
+
+const CATEGORY_ICON = {
+  "Society Office": "building-2",
+  "Watchman/Security": "shield",
+  Plumber: "wrench",
+  Electrician: "zap",
+  "Gas Agency": "flame",
+  Housekeeping: "sparkles",
+  "Pest Control": "bug",
+  "Lift AMC": "move-vertical",
+  Emergency: "siren",
+  Helpline: "phone-call",
+  Utility: "plug",
+  Other: "more-horizontal",
+};
 
 // These are the numbers the resident app's Essential Contacts screen already
 // ships hardcoded (see aaplisociety_app essential_contacts_page.dart) — real,
@@ -57,11 +74,32 @@ const contactsToRows = (contacts) =>
     numbers: c.numbers.length > 0 ? c.numbers : [""],
   }));
 
+// Reduced-motion read, same local pattern already used in
+// app/admin/dashboard/PageClient.js and app/admin/ledger/PageClient.js — see
+// docs/motion-system.md's rule of thumb: a third use stays local, a fourth
+// is the signal to extract a shared primitive.
+function useReduceMotionPref() {
+  const [reduce, setReduce] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduce(mq.matches);
+    const onChange = () => setReduce(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return reduce;
+}
+
 export default function SocietyContactsPage() {
   const queryClient = useQueryClient();
   const [rows, setRows] = useState([]);
-  const [errors, setErrors] = useState([]);
-  const [successMessage, setSuccessMessage] = useState("");
+  const [toast, setToast] = useState(null);
+  const reduceMotion = useReduceMotionPref();
+
+  const showToast = (msg, type = "ok") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 4500);
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ["society-contacts"],
@@ -86,13 +124,11 @@ export default function SocietyContactsPage() {
   const saveMutation = useMutation({
     mutationFn: (contacts) => apiClient.put("/api/admin/society-contacts", { contacts }),
     onSuccess: () => {
-      setSuccessMessage("✅ Essential contacts saved");
-      setErrors([]);
+      showToast("Essential contacts saved");
       queryClient.invalidateQueries(["society-contacts"]);
-      setTimeout(() => setSuccessMessage(""), 5000);
     },
     onError: (error) => {
-      setErrors([error.message || "Save failed"]);
+      showToast(error.message || "Save failed", "err");
     },
   });
 
@@ -152,8 +188,7 @@ export default function SocietyContactsPage() {
       .map((c) => blankRow(c));
     const additions = [...seeded, ...manual];
     if (additions.length === 0) {
-      setSuccessMessage("Every default is already here.");
-      setTimeout(() => setSuccessMessage(""), 4000);
+      showToast("Every default is already here.");
       return;
     }
     setRows((prev) => [...prev, ...additions]);
@@ -172,169 +207,165 @@ export default function SocietyContactsPage() {
 
   if (isLoading) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", padding: "40px" }}>
-        <div className="loading-spinner"></div>
+      <div style={{ maxWidth: "820px", margin: "40px auto" }}>
+        <RevampSkeleton h={420} />
       </div>
     );
   }
 
+  const rowMotion = reduceMotion
+    ? {}
+    : {
+        initial: { opacity: 0, y: -6 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -6 },
+        transition: { duration: 0.16, ease: [0.16, 1, 0.3, 1] },
+      };
+
   return (
     <div style={{ maxWidth: "820px", margin: "0 auto" }}>
-      <div className={styles.pageHeader}>
-        <div>
-          <h1 className={styles.pageTitle}>Essential Contacts</h1>
-          <p className={styles.pageSubtitle}>
+      <PageHeader
+        eyebrow={<><Icon name="phone-call" size={11} /> People · Essential Contacts</>}
+        title="Essential Contacts"
+        sub={
+          <>
             Numbers a resident actually needs — society office, watchman, plumber, gas agency and
             more. Shown on the &ldquo;Essential contacts&rdquo; screen in the resident app.
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <button type="button" onClick={seedDefaults} className="btn btn-secondary">
-            🌱 Seed defaults
-          </button>
-          {isDirty && (
-            <button
-              type="button"
-              onClick={handleCancel}
-              className="btn btn-secondary"
-              title="Discard unsaved changes"
-            >
-              Cancel
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={handleSave}
-            className="btn btn-success"
-            disabled={saveMutation.isPending || !isDirty}
-          >
-            {saveMutation.isPending ? (
-              <>
-                <span className="loading-spinner"></span>
-                Saving...
-              </>
-            ) : (
-              <>💾 Save</>
+          </>
+        }
+        right={
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn variant="secondary" icon="sparkles" onClick={seedDefaults}>
+              Seed defaults
+            </Btn>
+            {isDirty && (
+              <Btn variant="ghost" onClick={handleCancel} title="Discard unsaved changes">
+                Cancel
+              </Btn>
             )}
-          </button>
-        </div>
-      </div>
+            <Btn
+              variant="primary"
+              icon={saveMutation.isPending ? undefined : "save"}
+              onClick={handleSave}
+              disabled={saveMutation.isPending || !isDirty}
+            >
+              {saveMutation.isPending ? "Saving…" : "Save"}
+            </Btn>
+          </div>
+        }
+      />
 
-      {successMessage && (
-        <div className="toast toast-success" style={{ position: "relative", marginBottom: "var(--spacing-lg)" }}>
-          {successMessage}
-        </div>
-      )}
-      {errors.length > 0 && (
-        <div className={gridStyles.errorList}>
-          <div className={gridStyles.errorListTitle}>❌ Could not save</div>
-          {errors.map((e, i) => (
-            <div key={i}>{e}</div>
-          ))}
-        </div>
-      )}
-
-      <div className={styles.contentCard}>
-        <div className={styles.cardHeader}>
-          <h2 className={styles.cardTitle}>Contacts</h2>
-          <span style={{ fontSize: "0.75rem", color: "var(--fg-5)" }}>
+      <Card>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--r-fg-1)" }}>Contacts</div>
+          <span style={{ fontSize: 11.5, color: "var(--r-fg-4)" }}>
             {rows.length} {rows.length === 1 ? "entry" : "entries"}
           </span>
         </div>
-        <div style={{ padding: "0 0.25rem 0.25rem" }}>
-          <p style={{ margin: "0 0 1rem", color: "var(--fg-3)", fontSize: "0.85rem" }}>
-            Up to 3 numbers per contact — e.g. a plumber&rsquo;s own phone plus a WhatsApp or
-            alternate number. A row with no number filled in is dropped when you save.
-          </p>
-          {rows.length === 0 && (
-            <div
-              style={{
-                textAlign: "center",
-                padding: "2rem 1rem",
-                color: "var(--fg-4)",
-                fontSize: "0.85rem",
-                border: "1px dashed var(--border-strong)",
-                borderRadius: "8px",
-              }}
-            >
-              No contacts yet. Click &ldquo;Seed defaults&rdquo; to start from the standard
-              categories, or &ldquo;+ Add contact&rdquo; below.
-            </div>
-          )}
-          <div style={{ display: "grid", gap: "0.5rem" }}>
-            {rows.map((row) => (
-              <div
-                key={row._rowId}
-                className={gridStyles.contactRow}
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "0.4rem",
-                  alignItems: "center",
-                  padding: "0.45rem",
-                  border: "1px solid var(--border)",
-                  borderRadius: "8px",
-                }}
-              >
-                <select
-                  value={row.category}
-                  onChange={(e) => updateRow(row._rowId, { category: e.target.value })}
-                  className="input"
-                  style={{ width: "150px", flex: "0 0 auto" }}
-                >
-                  {CATEGORIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  value={row.name}
-                  onChange={(e) => updateRow(row._rowId, { name: e.target.value })}
-                  className="input"
-                  placeholder={row.category === "Other" ? "Contact name *" : "Name (optional)"}
-                  style={{ width: "160px", flex: "0 0 auto" }}
-                />
-                {row.numbers.map((n, i) => (
-                  <input
-                    key={i}
-                    type="tel"
-                    value={n}
-                    onChange={(e) => updateNumber(row._rowId, i, e.target.value)}
-                    className="input"
-                    placeholder={i === 0 ? "Phone number *" : `Number ${i + 1}`}
-                    style={{ width: "125px", flex: "0 0 auto" }}
-                  />
-                ))}
-                {row.numbers.length < 3 && (
-                  <button
-                    type="button"
-                    onClick={() => addNumberSlot(row._rowId)}
-                    className="btn btn-secondary"
-                    title="Add another number"
-                    style={{ padding: "0.3rem 0.55rem", flex: "0 0 auto" }}
+        <p style={{ margin: "6px 0 16px", color: "var(--r-fg-4)", fontSize: 12.5 }}>
+          Up to 3 numbers per contact — e.g. a plumber&rsquo;s own phone plus a WhatsApp or
+          alternate number. A row with no number filled in is dropped when you save.
+        </p>
+
+        {rows.length === 0 ? (
+          <EmptyState
+            icon="phone-off"
+            title="No contacts yet"
+            sub={'Click "Seed defaults" to start from the standard categories, or "+ Add contact" below.'}
+          />
+        ) : (
+          <div style={{ display: "grid", gap: 8 }}>
+            <AnimatePresence initial={false}>
+              {rows.map((row) => (
+                <motion.div key={row._rowId} {...rowMotion}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 8,
+                      alignItems: "center",
+                      padding: "8px 10px",
+                      border: "1px solid var(--r-border)",
+                      borderRadius: 10,
+                      background: "var(--r-surface)",
+                    }}
                   >
-                    +
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => removeRow(row._rowId)}
-                  className="btn btn-secondary"
-                  title="Remove contact"
-                  style={{ padding: "0.3rem 0.55rem", flex: "0 0 auto" }}
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
+                    <div
+                      style={{
+                        width: 30,
+                        height: 30,
+                        borderRadius: 8,
+                        background: "var(--r-brand-soft)",
+                        color: "var(--r-brand)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Icon name={CATEGORY_ICON[row.category] || "phone"} size={15} />
+                    </div>
+                    <Select
+                      value={row.category}
+                      onChange={(v) => updateRow(row._rowId, { category: v })}
+                      size="sm"
+                      style={{ width: 150, flex: "0 0 auto" }}
+                    >
+                      {CATEGORIES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </Select>
+                    <input
+                      type="text"
+                      value={row.name}
+                      onChange={(e) => updateRow(row._rowId, { name: e.target.value })}
+                      className="input"
+                      placeholder={row.category === "Other" ? "Contact name *" : "Name (optional)"}
+                      style={{ width: 160, height: 30, fontSize: 12.5, flex: "0 0 auto" }}
+                    />
+                    {row.numbers.map((n, i) => (
+                      <input
+                        key={i}
+                        type="tel"
+                        value={n}
+                        onChange={(e) => updateNumber(row._rowId, i, e.target.value)}
+                        className="input"
+                        placeholder={i === 0 ? "Phone number *" : `Number ${i + 1}`}
+                        style={{ width: 120, height: 30, fontSize: 12.5, flex: "0 0 auto" }}
+                      />
+                    ))}
+                    {row.numbers.length < 3 && (
+                      <Btn
+                        size="sm"
+                        variant="ghost"
+                        icon="plus"
+                        title="Add another number"
+                        onClick={() => addNumberSlot(row._rowId)}
+                      />
+                    )}
+                    <Btn
+                      size="sm"
+                      variant="ghost"
+                      icon="trash-2"
+                      title="Remove contact"
+                      onClick={() => removeRow(row._rowId)}
+                      style={{ marginLeft: "auto", color: "var(--r-danger)" }}
+                    />
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
-          <button type="button" onClick={addRow} className="btn btn-secondary" style={{ marginTop: "0.85rem" }}>
-            + Add contact
-          </button>
-        </div>
-      </div>
+        )}
+
+        <Btn variant="secondary" icon="plus" onClick={addRow} style={{ marginTop: 14 }}>
+          Add contact
+        </Btn>
+      </Card>
+
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

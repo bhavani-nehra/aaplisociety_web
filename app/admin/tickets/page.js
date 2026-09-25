@@ -1,7 +1,9 @@
 "use client";
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import notify from "@/lib/notify";
+import {
+  PageHeader, Card, CardHead, Btn, Pill, Icon, Modal, Toast, DataTable, RevampSkeleton,
+} from "@/components/revamp";
 import {
   TICKET_CATEGORIES,
   MAX_SCREENSHOTS,
@@ -12,13 +14,6 @@ import {
   MAX_ERROR_LOG_CHARS,
   STATUS_TONE,
 } from "@/lib/support/ticketPolicy";
-
-const STATUS_COLOR_VAR = {
-  info: "var(--info, #2563eb)",
-  warning: "var(--warning, #b45309)",
-  success: "var(--success, #059669)",
-  danger: "var(--danger, #dc2626)",
-};
 
 async function apiFetch(url, opts = {}) {
   const res = await fetch(url, {
@@ -40,6 +35,22 @@ function readFileAsDataUrl(file) {
   });
 }
 
+// ticketPolicy's STATUS_TONE speaks in semantic tones (info/warning/success/
+// danger); the revamp kit's <Pill> only ships info/warning/neutral plus a
+// set of billing-status names — "paid" and "unpaid" are its green/red, so
+// map onto those rather than falling through to an uncolored neutral pill.
+const PILL_TONE = { info: "info", warning: "warning", success: "paid", danger: "unpaid" };
+
+function Field({ label, children, hint }) {
+  return (
+    <div>
+      <div className="label" style={{ marginBottom: 4 }}>{label}</div>
+      {children}
+      {hint ? <div style={{ fontSize: 11.5, color: "var(--r-fg-4)", marginTop: 4 }}>{hint}</div> : null}
+    </div>
+  );
+}
+
 const EMPTY_FORM = { category: TICKET_CATEGORIES[0], title: "", description: "", errorLogs: "" };
 
 export default function AdminTicketsPage() {
@@ -47,7 +58,13 @@ export default function AdminTicketsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [screenshots, setScreenshots] = useState([]); // [{ data, filename, size }]
   const [selected, setSelected] = useState(null); // ticket id whose detail is open
+  const [toast, setToast] = useState(null);
   const fileInputRef = useRef(null);
+
+  const showToast = (message, type = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 5000);
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-tickets"],
@@ -63,29 +80,29 @@ export default function AdminTicketsPage() {
   const createMutation = useMutation({
     mutationFn: (payload) => apiFetch("/api/admin/tickets", { method: "POST", body: JSON.stringify(payload) }),
     onSuccess: () => {
-      notify.success("Ticket submitted");
+      showToast("Ticket submitted");
       setForm(EMPTY_FORM);
       setScreenshots([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
       qc.invalidateQueries({ queryKey: ["admin-tickets"] });
     },
-    onError: (err) => notify.error(err.message),
+    onError: (err) => showToast(err.message, "error"),
   });
 
   async function handleFiles(e) {
     const files = Array.from(e.target.files || []);
     if (screenshots.length + files.length > MAX_SCREENSHOTS) {
-      notify.error(`Maximum ${MAX_SCREENSHOTS} screenshots allowed`);
+      showToast(`Maximum ${MAX_SCREENSHOTS} screenshots allowed`, "error");
       e.target.value = "";
       return;
     }
     for (const file of files) {
       if (!ACCEPTED_SCREENSHOT_TYPES.includes(file.type)) {
-        notify.error(`${file.name}: only PNG, JPEG, WebP allowed`);
+        showToast(`${file.name}: only PNG, JPEG, WebP allowed`, "error");
         continue;
       }
       if (file.size > MAX_SCREENSHOT_BYTES) {
-        notify.error(`${file.name} is ${Math.round(file.size / 1024)}KB — max is ${MAX_SCREENSHOT_BYTES / 1024}KB`);
+        showToast(`${file.name} is ${Math.round(file.size / 1024)}KB — max is ${MAX_SCREENSHOT_BYTES / 1024}KB`, "error");
         continue;
       }
       const data = await readFileAsDataUrl(file);
@@ -100,8 +117,8 @@ export default function AdminTicketsPage() {
 
   function handleSubmit(e) {
     e.preventDefault();
-    if (form.title.trim().length < 5) return notify.error(`Title must be at least 5 characters`);
-    if (form.description.trim().length < 10) return notify.error("Description must be at least 10 characters");
+    if (form.title.trim().length < 5) return showToast("Title must be at least 5 characters", "error");
+    if (form.description.trim().length < 10) return showToast("Description must be at least 10 characters", "error");
     createMutation.mutate({
       ...form,
       screenshots: screenshots.map((s) => ({ data: s.data, filename: s.filename })),
@@ -110,217 +127,196 @@ export default function AdminTicketsPage() {
 
   const tickets = data?.tickets || [];
 
+  const cols = [
+    {
+      key: "ticket", label: "Ticket", render: (t) => (
+        <div>
+          <div style={{ fontWeight: 600, color: "var(--r-fg-1)" }}>{t.title}</div>
+          <div style={{ fontSize: 11.5, color: "var(--r-fg-4)" }}>{t.category}</div>
+        </div>
+      ),
+    },
+    { key: "status", label: "Status", render: (t) => <Pill tone={PILL_TONE[STATUS_TONE[t.status]] || "info"}>{t.status}</Pill> },
+    {
+      key: "created", label: "Created", render: (t) => (
+        <span style={{ fontSize: 12, color: "var(--r-fg-4)" }}>{new Date(t.createdAt).toLocaleDateString("en-IN")}</span>
+      ),
+    },
+    { key: "actions", label: "", render: (t) => <Btn size="sm" variant="secondary" icon="external-link" onClick={() => setSelected(t.id)}>Open</Btn> },
+  ];
+
   return (
-    <div style={{ padding: "2rem", maxWidth: 1000, margin: "0 auto" }}>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "0.35rem" }}>Support Ticket</h1>
-      <p style={{ color: "var(--fg-4)", marginBottom: "2rem" }}>
-        Report a bug, an error, or ask something — this goes straight to the platform team.
-      </p>
+    <div style={{ maxWidth: 1000, margin: "0 auto" }}>
+      <PageHeader
+        eyebrow={<><Icon name="life-buoy" size={11} /> Support</>}
+        title="Support Ticket"
+        sub="Report a bug, an error, or ask something — this goes straight to the platform team."
+      />
 
-      {/* ── New ticket form ─────────────────────────────────────────── */}
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          background: "var(--bg-surface)",
-          border: "1px solid var(--border)",
-          borderRadius: 12,
-          padding: "1.5rem",
-          marginBottom: "2rem",
-        }}
-      >
-        <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: "1rem", marginBottom: "1rem" }}>
-          <div>
-            <label style={labelStyle}>Category</label>
-            <select
-              value={form.category}
-              onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-              style={inputStyle}
-            >
-              {TICKET_CATEGORIES.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label style={labelStyle}>Title</label>
-            <input
-              value={form.title}
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              maxLength={MAX_TITLE_CHARS}
-              placeholder="One line summarising the issue"
-              style={inputStyle}
-            />
-          </div>
-        </div>
-
-        <div style={{ marginBottom: "1rem" }}>
-          <label style={labelStyle}>Description</label>
-          <textarea
-            value={form.description}
-            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-            maxLength={MAX_DESCRIPTION_CHARS}
-            rows={5}
-            placeholder="What happened, what you expected, steps to reproduce…"
-            style={{ ...inputStyle, resize: "vertical" }}
-          />
-          <div style={{ fontSize: 12, color: "var(--fg-5)", textAlign: "right" }}>
-            {form.description.length}/{MAX_DESCRIPTION_CHARS}
-          </div>
-        </div>
-
-        <div style={{ marginBottom: "1rem" }}>
-          <label style={labelStyle}>Error logs <span style={{ color: "var(--fg-5)", fontWeight: 400 }}>(optional — paste console/stack trace text)</span></label>
-          <textarea
-            value={form.errorLogs}
-            onChange={(e) => setForm((f) => ({ ...f, errorLogs: e.target.value }))}
-            maxLength={MAX_ERROR_LOG_CHARS}
-            rows={4}
-            placeholder="Paste any error text here"
-            style={{ ...inputStyle, resize: "vertical", fontFamily: "ui-monospace, monospace", fontSize: 12.5 }}
-          />
-        </div>
-
-        <div style={{ marginBottom: "1.25rem" }}>
-          <label style={labelStyle}>
-            Screenshots <span style={{ color: "var(--fg-5)", fontWeight: 400 }}>
-              (optional — up to {MAX_SCREENSHOTS}, {MAX_SCREENSHOT_BYTES / 1024}KB each, PNG/JPEG/WebP)
-            </span>
-          </label>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={ACCEPTED_SCREENSHOT_TYPES.join(",")}
-            multiple
-            disabled={screenshots.length >= MAX_SCREENSHOTS}
-            onChange={handleFiles}
-            style={{ display: "block" }}
-          />
-          {screenshots.length > 0 && (
-            <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-              {screenshots.map((s, i) => (
-                <div key={i} style={{ position: "relative", border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" }}>
-                  <img src={s.data} alt={s.filename} style={{ width: 100, height: 70, objectFit: "cover", display: "block" }} />
-                  <button
-                    type="button"
-                    onClick={() => removeScreenshot(i)}
-                    title="Remove"
-                    style={{
-                      position: "absolute", top: 2, right: 2, width: 20, height: 20, borderRadius: "50%",
-                      border: "none", background: "rgba(0,0,0,0.6)", color: "#fff", cursor: "pointer", fontSize: 12, lineHeight: "20px",
-                    }}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
+      <form onSubmit={handleSubmit}>
+        <Card style={{ marginBottom: 24 }}>
+          <CardHead title="New ticket" sub="Tell us what happened — the more detail, the faster it gets triaged." />
+          <div style={{ display: "grid", gap: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 14 }}>
+              <Field label="Category">
+                <select className="input" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>
+                  {TICKET_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Title">
+                <input
+                  className="input"
+                  value={form.title}
+                  onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                  maxLength={MAX_TITLE_CHARS}
+                  placeholder="One line summarising the issue"
+                />
+              </Field>
             </div>
-          )}
-        </div>
 
-        <button
-          type="submit"
-          disabled={createMutation.isPending}
-          style={{
-            padding: "0.65rem 1.5rem", background: "var(--primary)", color: "#fff", border: "none",
-            borderRadius: 8, fontWeight: 600, cursor: "pointer",
-          }}
-        >
-          {createMutation.isPending ? "Submitting…" : "Submit ticket"}
-        </button>
+            <Field label="Description">
+              <textarea
+                className="input"
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                maxLength={MAX_DESCRIPTION_CHARS}
+                rows={5}
+                placeholder="What happened, what you expected, steps to reproduce…"
+                style={{ resize: "vertical" }}
+              />
+              <div style={{ fontSize: 11.5, color: "var(--r-fg-5)", textAlign: "right", marginTop: 4 }}>
+                {form.description.length}/{MAX_DESCRIPTION_CHARS}
+              </div>
+            </Field>
+
+            <Field label="Error logs" hint="Optional — paste console/stack trace text">
+              <textarea
+                className="input"
+                value={form.errorLogs}
+                onChange={(e) => setForm((f) => ({ ...f, errorLogs: e.target.value }))}
+                maxLength={MAX_ERROR_LOG_CHARS}
+                rows={4}
+                placeholder="Paste any error text here"
+                style={{ resize: "vertical", fontFamily: "ui-monospace, monospace", fontSize: 12.5 }}
+              />
+            </Field>
+
+            <Field
+              label="Screenshots"
+              hint={`Optional — up to ${MAX_SCREENSHOTS}, ${MAX_SCREENSHOT_BYTES / 1024}KB each, PNG/JPEG/WebP`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={ACCEPTED_SCREENSHOT_TYPES.join(",")}
+                multiple
+                disabled={screenshots.length >= MAX_SCREENSHOTS}
+                onChange={handleFiles}
+                style={{ display: "block", fontSize: 13 }}
+              />
+              {screenshots.length > 0 && (
+                <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                  {screenshots.map((s, i) => (
+                    <div key={i} style={{ position: "relative", border: "1px solid var(--r-border)", borderRadius: 8, overflow: "hidden" }}>
+                      <img src={s.data} alt={s.filename} style={{ width: 100, height: 70, objectFit: "cover", display: "block" }} />
+                      <button
+                        type="button"
+                        onClick={() => removeScreenshot(i)}
+                        title="Remove"
+                        aria-label={`Remove ${s.filename}`}
+                        style={{
+                          position: "absolute", top: 2, right: 2, width: 20, height: 20, borderRadius: "50%",
+                          border: "none", background: "rgba(0,0,0,0.6)", color: "#fff", cursor: "pointer",
+                          fontSize: 12, lineHeight: "20px", padding: 0,
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Field>
+
+            <div>
+              <Btn type="submit" variant="primary" size="lg" disabled={createMutation.isPending} icon={createMutation.isPending ? undefined : "send"}>
+                {createMutation.isPending ? "Submitting…" : "Submit ticket"}
+              </Btn>
+            </div>
+          </div>
+        </Card>
       </form>
 
-      {/* ── My tickets ──────────────────────────────────────────────── */}
-      <h2 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "0.75rem" }}>My tickets</h2>
+      <SectionHeading />
+
       {isLoading ? (
-        <div style={{ padding: "2rem", textAlign: "center", color: "var(--fg-4)" }}>Loading…</div>
-      ) : tickets.length === 0 ? (
-        <div style={{ padding: "2rem", textAlign: "center", color: "var(--fg-4)", border: "1px dashed var(--border)", borderRadius: 8 }}>
-          No tickets yet.
-        </div>
+        <RevampSkeleton h={220} />
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {tickets.map((t) => (
-            <div
-              key={t.id}
-              onClick={() => setSelected(t.id)}
-              style={{
-                display: "flex", alignItems: "center", gap: 12, padding: "0.75rem 1rem",
-                border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer", background: "var(--bg-surface)",
-              }}
-            >
-              <StatusPill status={t.status} />
-              <span style={{ fontSize: 11, color: "var(--fg-5)", minWidth: 90 }}>{t.category}</span>
-              <span style={{ fontWeight: 600, flex: 1 }}>{t.title}</span>
-              <span style={{ fontSize: 12, color: "var(--fg-5)" }}>
-                {new Date(t.createdAt).toLocaleDateString("en-IN")}
-              </span>
-            </div>
-          ))}
-        </div>
+        <DataTable
+          cols={cols}
+          rows={tickets}
+          rowKey="id"
+          onRowClick={(t) => setSelected(t.id)}
+          emptyIcon="life-buoy"
+          emptyTitle="No tickets yet"
+          emptySub="Anything you report will show up here."
+        />
       )}
 
-      {/* ── Detail modal ────────────────────────────────────────────── */}
-      {selected && (
-        <div
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}
-          onClick={() => setSelected(null)}
-        >
-          <div
-            style={{ background: "var(--bg-surface)", borderRadius: 12, maxWidth: 640, width: "100%", maxHeight: "88vh", overflowY: "auto", padding: "2rem" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {detailQuery.isLoading || !detailQuery.data ? (
-              <div style={{ padding: "2rem", textAlign: "center", color: "var(--fg-4)" }}>Loading…</div>
-            ) : (
-              <TicketDetail ticket={detailQuery.data.ticket} onClose={() => setSelected(null)} />
-            )}
-          </div>
-        </div>
-      )}
+      <Modal
+        open={Boolean(selected)}
+        onClose={() => setSelected(null)}
+        title={detailQuery.data?.ticket?.title}
+        sub={detailQuery.data?.ticket ? detailQuery.data.ticket.category : ""}
+        width={640}
+      >
+        {detailQuery.isLoading || !detailQuery.data ? (
+          <RevampSkeleton h={200} />
+        ) : (
+          <TicketDetail ticket={detailQuery.data.ticket} onClose={() => setSelected(null)} />
+        )}
+      </Modal>
+
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }
 
-function StatusPill({ status }) {
-  const tone = STATUS_TONE[status] || "info";
-  const color = STATUS_COLOR_VAR[tone];
+function SectionHeading() {
   return (
-    <span style={{ padding: "3px 10px", borderRadius: 12, fontSize: "0.75rem", fontWeight: 700, background: `${color}22`, color, whiteSpace: "nowrap" }}>
-      {status}
-    </span>
+    <div style={{ fontSize: 13, fontWeight: 700, color: "var(--r-fg-2)", margin: "4px 0 12px" }}>
+      My tickets
+    </div>
   );
 }
 
 function TicketDetail({ ticket, onClose }) {
   return (
-    <>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: "1rem" }}>
-        <div>
-          <div style={{ fontSize: 11, color: "var(--fg-5)", marginBottom: 4 }}>{ticket.category}</div>
-          <h2 style={{ fontWeight: 700, fontSize: "1.15rem" }}>{ticket.title}</h2>
-        </div>
-        <StatusPill status={ticket.status} />
+    <div style={{ display: "grid", gap: 18 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <Pill tone={PILL_TONE[STATUS_TONE[ticket.status]] || "info"}>{ticket.status}</Pill>
       </div>
 
-      <p style={{ whiteSpace: "pre-wrap", color: "var(--fg-2)", marginBottom: "1.25rem", fontSize: 14 }}>
+      <p style={{ whiteSpace: "pre-wrap", color: "var(--r-fg-2)", fontSize: 13.5, lineHeight: 1.55, margin: 0 }}>
         {ticket.description}
       </p>
 
       {ticket.errorLogs && (
-        <div style={{ marginBottom: "1.25rem" }}>
-          <div style={labelStyle}>Error logs</div>
+        <Field label="Error logs">
           <pre style={{
-            background: "var(--bg-sunken)", padding: "0.75rem", borderRadius: 8, fontSize: 12,
+            background: "var(--r-surface-2)", padding: "0.75rem", borderRadius: 8, fontSize: 12,
             maxHeight: 200, overflow: "auto", whiteSpace: "pre-wrap", userSelect: "none",
+            border: "1px solid var(--r-hairline)", margin: 0,
           }}>
             {ticket.errorLogs}
           </pre>
-        </div>
+        </Field>
       )}
 
       {ticket.screenshots?.length > 0 && (
-        <div style={{ marginBottom: "1.25rem" }}>
-          <div style={labelStyle}>Screenshots</div>
+        <Field label="Screenshots">
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {ticket.screenshots.map((s, i) => (
               <img
@@ -328,40 +324,30 @@ function TicketDetail({ ticket, onClose }) {
                 src={s.data}
                 alt={s.filename || `screenshot ${i + 1}`}
                 onContextMenu={(e) => e.preventDefault()}
-                style={{ maxWidth: 240, maxHeight: 180, borderRadius: 8, border: "1px solid var(--border)" }}
+                style={{ maxWidth: 240, maxHeight: 180, borderRadius: 8, border: "1px solid var(--r-border)" }}
               />
             ))}
           </div>
-        </div>
+        </Field>
       )}
 
-      <div style={{ marginBottom: "1.25rem" }}>
-        <div style={labelStyle}>Status history</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <Field label="Status history">
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {ticket.statusHistory?.map((h, i) => (
-            <div key={i} style={{ fontSize: 13, display: "flex", gap: 8, alignItems: "baseline" }}>
-              <StatusPill status={h.status} />
-              <span style={{ color: "var(--fg-5)", fontSize: 12 }}>
+            <div key={i} style={{ fontSize: 12.5, display: "flex", gap: 8, alignItems: "baseline" }}>
+              <Pill tone={PILL_TONE[STATUS_TONE[h.status]] || "info"}>{h.status}</Pill>
+              <span style={{ color: "var(--r-fg-5)", fontSize: 11.5 }}>
                 {new Date(h.changedAt).toLocaleString("en-IN")}
               </span>
-              {h.note && <span style={{ color: "var(--fg-3)" }}>— {h.note}</span>}
+              {h.note && <span style={{ color: "var(--r-fg-3)" }}>— {h.note}</span>}
             </div>
           ))}
         </div>
-      </div>
+      </Field>
 
-      <button
-        onClick={onClose}
-        style={{ padding: "0.6rem 1.25rem", background: "var(--bg-muted)", color: "var(--fg-3)", borderRadius: 8, border: "none", cursor: "pointer" }}
-      >
-        Close
-      </button>
-    </>
+      <div>
+        <Btn variant="secondary" onClick={onClose}>Close</Btn>
+      </div>
+    </div>
   );
 }
-
-const labelStyle = { display: "block", fontWeight: 600, fontSize: 13, marginBottom: 6, color: "var(--fg-2)" };
-const inputStyle = {
-  width: "100%", padding: "0.55rem 0.7rem", borderRadius: 8, border: "1px solid var(--border-strong)",
-  background: "var(--bg-input, var(--bg-surface))", color: "var(--fg-1)", fontSize: 14, fontFamily: "inherit", boxSizing: "border-box",
-};

@@ -1,25 +1,27 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
-import { verifyToken, getTokenFromRequest } from "@/lib/jwt";
+import { authorize } from "@/lib/rbac/authorize";
 import Notification from "@/models/Notification";
+
+// SEC-21: converged off inline `verifyToken()` onto authorize(). Gated on
+// `notice.notice.view` for the same reason as ../mark-read: this only ever
+// writes the CALLER'S OWN read state, scoped by `readBy.userId`, and that
+// permission is in MEMBER_CAPABILITIES so residents keep working.
 export async function POST(request) {
+  const gate = await authorize(request, "notice.notice.view");
+  if (!gate.ok) return gate.response;
+  const { userId, societyId } = gate.context;
   try {
     await connectDB();
-    const token = getTokenFromRequest(request);
-    if (!token)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const decoded = verifyToken(token);
-    if (!decoded)
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-    // Find all unread notifications for this user
+    // Every notification this user has not yet read, in their society only.
     await Notification.updateMany(
       {
-        societyId: decoded.societyId,
+        societyId,
         isDeleted: false,
-        "readBy.userId": { $ne: decoded.userId },
+        "readBy.userId": { $ne: userId },
       },
       {
-        $push: { readBy: { userId: decoded.userId, readAt: new Date() } },
+        $push: { readBy: { userId, readAt: new Date() } },
       },
     );
     return NextResponse.json({ success: true });

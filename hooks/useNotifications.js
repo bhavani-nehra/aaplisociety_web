@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import { installIdleTracking, isPageIdleForPolling } from "@/lib/idle-tracker";
 
 // Poll cadence (ms) while the tab is visible.
 const DEFAULT_POLL_INTERVAL = 20000;
@@ -26,6 +27,12 @@ export function useNotifications({
   const fetchNotifications = useCallback(async () => {
     // Never hit the network on a page that doesn't need notifications.
     if (!enabled) return;
+    // Plan 05 §A3: a VISIBLE-but-abandoned tab (document.hidden stays false —
+    // the user just walked away with the tab still focused) must not keep
+    // polling forever; that would silently renew the refresh token and
+    // requirement 2 ("logged out if not opened for a while") would never
+    // fire. The interval keeps ticking (cheap); this just skips the request.
+    if (isPageIdleForPolling()) return;
     try {
       const res = await fetch("/api/notifications?limit=20", {
         credentials: "include",
@@ -58,6 +65,10 @@ export function useNotifications({
   // an immediate catch-up fetch when the tab is foregrounded again. This kills
   // the old "every open page polls forever in the background" waste.
   useEffect(() => {
+    // Idempotent — safe even though components/session/SessionGuard.js also
+    // calls this from the root layout; a page rendered before that effect
+    // fires must not be left with no interaction listeners at all.
+    installIdleTracking();
     if (!enabled) {
       // Disabled page: make sure nothing lingers from a previous enabled state.
       setNotifications([]);

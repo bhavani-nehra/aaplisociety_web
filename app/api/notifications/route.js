@@ -1,20 +1,23 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
-import { verifyToken, getTokenFromRequest } from "@/lib/jwt";
+import { authorize } from "@/lib/rbac/authorize";
 import Notification from "@/models/Notification";
 import Member from "@/models/Member";
 import { emitNotification } from "@/lib/socket-server";
-// POST /api/notifications — Admin sends notification
+
+// POST /api/notifications — send a notification to the society
+//
+// SEC-21: converged off an inline `["Admin","Secretary"].includes(decoded.role)`
+// string check onto authorize(). That check read the literal role STRING on the
+// token, so it accepted a stale token after a role handover and ignored
+// whatever RBAC had actually granted — e.g. a custom role explicitly given
+// notice-create could not use it, while a demoted Secretary still could.
 export async function POST(request) {
+  const gate = await authorize(request, "notice.notice.create");
+  if (!gate.ok) return gate.response;
+  const { userId, societyId, decoded } = gate.context;
   try {
     await connectDB();
-    const token = getTokenFromRequest(request);
-    if (!token)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const decoded = verifyToken(token);
-    if (!decoded || !["Admin", "Secretary"].includes(decoded.role)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
     const {
       type,
       title,
@@ -35,9 +38,9 @@ export async function POST(request) {
       expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
     }
     const notification = await Notification.create({
-      societyId: decoded.societyId,
-      createdBy: decoded.userId,
-      createdByName: decoded.name || "Admin",
+      societyId,
+      createdBy: userId,
+      createdByName: decoded?.name || "Admin",
       type,
       title: title.trim(),
       message: message.trim(),
@@ -56,20 +59,21 @@ export async function POST(request) {
     );
   }
 }
-// GET /api/notifications — Fetch for current user with unread count
+// GET /api/notifications — the caller's own notifications, with unread count
+//
+// SEC-21: gated on `notice.notice.view`, which is in MEMBER_CAPABILITIES, so
+// this stays readable by residents as well as staff. The scoping below is
+// unchanged — a member still only sees notifications addressed to them.
 export async function GET(request) {
+  const gate = await authorize(request, "notice.notice.view");
+  if (!gate.ok) return gate.response;
+  const { societyId, userId, hat, decoded } = gate.context;
   try {
     await connectDB();
-    const token = getTokenFromRequest(request);
-    if (!token)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const decoded = verifyToken(token);
-    if (!decoded)
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     const searchParams = new URL(request.url).searchParams;
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
-    const { societyId, userId, memberId, role } = decoded;
+    const memberId = decoded?.memberId;
     // Build recipient filter — show notification if:
     // recipientType=all OR user's memberId/wing is in recipientIds
     const member = memberId
@@ -89,8 +93,14 @@ export async function GET(request) {
         },
       ],
     };
-    // Admins see all notifications they sent + all targeted at them
-    const baseQuery = ["Admin", "Secretary"].includes(role)
+    // Staff see every notification in their society (they send them and need to
+    // audit delivery); a member sees only what was addressed to them.
+    //
+    // Keyed on the RBAC hat rather than the legacy role string it used to read:
+    // a custom staff role (Auditor, Committee Member) got the member-scoped
+    // view before, because its token carries no literal "Admin"/"Secretary".
+    const isStaff = hat === "staff";
+    const baseQuery = isStaff
       ? { societyId, isDeleted: false }
       : { societyId, isDeleted: false, ...recipientFilter };
     const [notifications, total] = await Promise.all([

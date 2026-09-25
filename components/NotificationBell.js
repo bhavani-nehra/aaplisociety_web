@@ -105,15 +105,18 @@ export default function NotificationBell() {
   return (
     <>
       {/* Toast container */}
-      <div className={styles.toastContainer}>
-        {toasts.map((t) => (
-          <NotificationToast
-            key={t.id}
-            notification={t}
-            onDismiss={() => dismissToast(t.id)}
-          />
-        ))}
-      </div>
+      {mounted && createPortal(
+        <div className={styles.toastContainer}>
+          {toasts.map((t) => (
+            <NotificationToast
+              key={t.id}
+              notification={t}
+              onDismiss={() => dismissToast(t.id)}
+            />
+          ))}
+        </div>,
+        document.body,
+      )}
       {/* Bell */}
       <div className={styles.wrapper} ref={ref}>
         <button
@@ -152,7 +155,7 @@ export default function NotificationBell() {
               {loading && <div className={styles.empty}>Loading...</div>}
               {!loading && notifications.length === 0 && (
                 <div className={styles.empty}>
-                  <span>🔕</span>
+                  <span></span>
                   <p>No notifications yet</p>
                 </div>
               )}
@@ -163,7 +166,7 @@ export default function NotificationBell() {
                   onClick={() => handleItemClick(n)}
                 >
                   <div className={styles.icon}>
-                    {TYPE_ICONS[n.type] || "🔔"}
+                    {TYPE_ICONS[n.type] || ""}
                   </div>
                   <div className={styles.content}>
                     <div className={styles.title}>{n.title}</div>

@@ -1,17 +1,18 @@
 "use client";
 import { useEffect } from "react";
+import { Icon } from "@/components/revamp";
 import styles from "@/styles/NotificationToast.module.css";
 const TYPE_ICONS = {
-  BILL_GENERATED: "🧾",
-  PAYMENT_RECEIVED: "✅",
-  PAYMENT_FAILED: "❌",
-  DUE_REMINDER: "⏰",
-  NOTICE_POSTED: "📢",
-  COMPLAINT_APPROVED: "👍",
-  COMPLAINT_REJECTED: "👎",
-  MAINTENANCE_ALERT: "🔧",
-  ADMIN_MESSAGE: "📣",
-  CUSTOM: "🔔",
+  BILL_GENERATED: "file-text",
+  PAYMENT_RECEIVED: "indian-rupee",
+  PAYMENT_FAILED: "circle-alert",
+  DUE_REMINDER: "bell",
+  NOTICE_POSTED: "megaphone",
+  COMPLAINT_APPROVED: "circle-check",
+  COMPLAINT_REJECTED: "circle-x",
+  MAINTENANCE_ALERT: "wrench",
+  ADMIN_MESSAGE: "message-square",
+  CUSTOM: "bell",
 };
 export default function NotificationToast({ notification, onDismiss }) {
   useEffect(() => {
@@ -20,7 +21,7 @@ export default function NotificationToast({ notification, onDismiss }) {
   }, [onDismiss]);
   return (
     <div className={styles.toast}>
-      <div className={styles.icon}>{TYPE_ICONS[notification.type] || "🔔"}</div>
+      <div className={styles.icon}><Icon name={TYPE_ICONS[notification.type] || "bell"} size={18} /></div>
       <div className={styles.body}>
         <div className={styles.title}>{notification.title}</div>
         <div className={styles.message}>{notification.message}</div>

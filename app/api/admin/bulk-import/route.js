@@ -31,7 +31,7 @@ import Bill from "@/models/Bill";
 import Transaction from "@/models/Transaction";
 import BulkImportRun from "@/models/BulkImportRun";
 import BulkImportPreview from "@/models/BulkImportPreview";
-import EmailOutbox from "@/models/EmailOutbox";
+import { compensateImportRun } from "@/lib/onboarding-rollback";
 import TenantRequest from "@/models/TenantRequest";
 // SEC-20: read back after seeding to assert the society is actually usable,
 // rather than trusting that two awaited calls not throwing means they worked.
@@ -47,10 +47,10 @@ import { generateSimpleUsername, buildUsernameBloomFilter } from "@/lib/username
 import { generateUniqueSocietyCode } from "@/lib/society-code";
 import { generatePassword } from "@/lib/password-generator";
 import cache from "@/lib/cache";
-import { sendEmail, onboardingEmailHtml } from "@/lib/brevo-email";
-import { signToken } from "@/lib/jwt";
+import { finalizeBulkImportOnboarding } from "@/lib/onboarding-finalize";
 import { ensureAdminAssignment } from "@/lib/rbac/ensure-admin-assignment";
 import { seedAllRoleTemplatesForSociety } from "@/lib/rbac/seed-society-roles";
+import { getBillHistoryWindow } from "@/lib/billing/historicalWindow";
 
 const STALE_RUN_MS = 3 * 60 * 1000; // an in-flight run with no update in 3 min is presumed crashed
 
@@ -68,25 +68,6 @@ function generateSocietyId(name) {
 // uses the pre-existing importBatchId field for the same purpose), so
 // compensation never has to be kept in sync with a second, hand-maintained
 // list of "what this phase created".
-async function compensateImportRun(importRunId) {
-  if (!importRunId) return;
-  try {
-    await Promise.all([
-      Bill.deleteMany({ importBatchId: importRunId }),
-      Transaction.deleteMany({ importRunId }),
-      BillingHead.deleteMany({ importRunId }),
-      Member.deleteMany({ importRunId }),
-      User.deleteMany({ importRunId }),
-      Society.deleteMany({ importRunId }),
-      EmailOutbox.deleteMany({ importRunId }),
-    ]);
-  } catch (cleanupErr) {
-    console.error(
-      `[bulk-import] compensation cleanup failed for run ${importRunId}:`,
-      cleanupErr.message,
-    );
-  }
-}
 
 async function markRun(importRunId, patch) {
   try {
@@ -309,6 +290,22 @@ export async function POST(request) {
   const memberCredentials = [];
   const memberCreateErrors = [];
   let membersCreated = 0;
+  // Computed here (not down at Phase 5, where this used to live) because
+  // Society.onboarding.joinPeriodId needs it at creation time — that field
+  // is the single source of truth lib/billing/historicalWindow.js reads to
+  // work out whether this society has bill-history months to import before
+  // its first live bill (final_audit_fix_plan/bill-history-upgrade.md §40).
+  // A society bulk-imported today "joins" this calendar month, by
+  // definition — there is no separate join-date input in this flow.
+  const now = new Date();
+  const billYear = now.getFullYear();
+  const billMonth = now.getMonth() + 1; // 1-indexed
+  const billPeriod = `${billYear}-${String(billMonth).padStart(2, "0")}`;
+  const startDate = new Date(billYear, billMonth - 1, 1);
+  const financialYear =
+    billMonth >= 4
+      ? `${billYear}-${billYear + 1}`
+      : `${billYear - 1}-${billYear}`;
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
@@ -335,6 +332,7 @@ export async function POST(request) {
             isDeleted: false,
             importRunId,
             importStatus: "importing",
+            onboarding: { joinPeriodId: billPeriod },
           },
         ],
         { session },
@@ -361,6 +359,12 @@ export async function POST(request) {
               profiles: [],
               isActive: true,
               importRunId,
+              // Without this, the onboarding email's "set up my account" link
+              // hits /api/onboarding/verify's mustChangePassword check and
+              // says "already set up" the instant the admin clicks it —
+              // model default is false, only the member-creation path below
+              // ever set this explicitly.
+              mustChangePassword: true,
             },
           ],
           { session },
@@ -628,18 +632,31 @@ export async function POST(request) {
   // transaction, so this phase runs after Phase 3 commits rather than nested
   // inside it. Any failure here is compensated the same way as a Phase 3
   // failure: delete everything tagged with this importRunId.
-  const now = new Date();
-  const billYear = now.getFullYear();
-  const billMonth = now.getMonth() + 1; // 1-indexed
-  const billPeriod = `${billYear}-${String(billMonth).padStart(2, "0")}`;
-  const startDate = new Date(billYear, billMonth - 1, 1);
-  const financialYear =
-    billMonth >= 4
-      ? `${billYear}-${billYear + 1}`
-      : `${billYear - 1}-${billYear}`;
+  // (billYear/billMonth/billPeriod/startDate/financialYear are computed
+  // above, before Society.create, since onboarding.joinPeriodId needs them.)
   let billsGenerated = 0;
   const billErrors = [];
-  if (billingHeads.length > 0 && membersCreated > 0) {
+  // §40 ONBOARDING ORDER: a society with bill-history months to fill (its FY
+  // start is before this calendar month) must NOT get its current-month
+  // bill generated yet — that bill's opening balances would be wrong until
+  // bill-history is committed and rolls each Member's opening forward.
+  // Generation is deferred to the Bill History step's Confirm (or its Skip
+  // action, which generates off the Member sheet's typed openings instead —
+  // see /api/superadmin/bill-history-v2/skip). A society with NO history
+  // needed (joined on/before its own FY start) keeps today's immediate
+  // behavior unchanged.
+  let needsBillHistory = false;
+  try {
+    needsBillHistory = getBillHistoryWindow(society).periods.length > 0;
+  } catch {
+    needsBillHistory = false; // no accountingConfig / can't compute — fall back to today's behavior rather than block onboarding
+  }
+  if (needsBillHistory) {
+    warnings.push(
+      `Current-month (${billPeriod}) bills were NOT generated yet — this society has bill-history months to import first. Use "Import Bill History" below, or Skip to generate ${billPeriod}'s bills immediately off the opening balances already on the Members sheet.`,
+    );
+  }
+  if (!needsBillHistory && billingHeads.length > 0 && membersCreated > 0) {
     const allMembers = await Member.find({
       societyId: society._id,
       isDeleted: { $ne: true },
@@ -732,8 +749,7 @@ export async function POST(request) {
     );
   }
 
-  // ── COMMIT: society is now safe to expose to normal queries ──────────
-  await Society.updateOne({ _id: society._id }, { $set: { importStatus: "active" } });
+  // ── FINALIZE, or DEFER (§40 ONBOARDING ORDER) ─────────────────────────
   // Only now — a mid-transaction failure above must leave the preview
   // reusable so a retry with the same previewId skips straight back to
   // Phase 3 instead of re-uploading and re-validating from scratch.
@@ -742,134 +758,64 @@ export async function POST(request) {
     await cache.delPattern(`v1:bills:${society._id}:member:*`);
     await cache.delPattern(`v1:ledger:${society._id}:member:*`);
   }
-  await markRun(importRunId, {
-    status: "COMMITTED",
-    stage: "Queueing onboarding emails",
-    processedCount: billsGenerated,
-    pointOfNoReturn: true, // real data now — never auto-compensate a stuck retry past here
-  });
 
-  // ── Past this point nothing may compensate/delete. Any error below is
-  // real, must never crash uncaught (it would leave the run stuck at
-  // COMMITTED/EMAIL_QUEUED forever with no FAILED/finishedAt, and a later
-  // retry would hit the pointOfNoReturn guard above and dead-end on a run
-  // that never actually finished) — so it's caught here, logged, and turned
-  // into a clear "data is real, don't retry, contact support" response.
-  try {
-  // ── EMAIL OUTBOX — created only now, after every rollback checkpoint has
-  // passed. Durable + idempotent: a retry of this same importRunId can never
-  // queue a duplicate email (unique importRunId+userId+type index), and a
-  // send failure here cannot undo the DB writes above.
-  const outboxDocs = memberCredentials
-    .filter((c) => c.isNewUser && c.email)
-    .map((cred) => {
-      const onboardingToken = signToken({ userId: cred.userId, purpose: "onboarding" }, { expiresIn: "7d" });
-      const setCredentialsUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/onboarding/set-credentials?token=${onboardingToken}`;
-      cred.setCredentialsUrl = setCredentialsUrl;
-      return {
-        importRunId,
-        userId: cred.userId,
-        type: "onboarding",
-        to: cred.email,
-        subject: `Set up your account — ${societyPayload.societyName}`,
-        html: onboardingEmailHtml({
-          memberName: cred.ownerName,
-          societyName: societyPayload.societyName,
-          societyAddress: societyPayload.address || "",
-          unitKind: cred.accountType === "Tenant" ? "Flat (as tenant of)" : "Flat",
-          unitLabel: cred.wing ? `${cred.wing}-${cred.flatNo}` : cred.flatNo,
-          setCredentialsUrl,
-        }),
-      };
-    });
-  // Reused accounts (member or admin) got no new password, so they were
-  // excluded above — but silence isn't right either: they still need to
-  // know a new flat/society just appeared under their existing login. Same
-  // outbox, a much shorter email, no setup link since they already have one.
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  // Set below when a brand-new society admin account was created, so the
-  // response can hand the wizard a link to show instead of a password.
   let adminSetCredentialsUrl = null;
-  const notifyDocs = [];
-  for (const cred of memberCredentials) {
-    if (cred.isNewUser || !cred.email || !cred.userId) continue;
-    notifyDocs.push({
-      importRunId,
-      userId: cred.userId,
-      type: "profile-added",
-      to: cred.email,
-      subject: `${societyPayload.societyName} added to your account`,
-      html: `<p>Hi ${cred.ownerName || ""},</p><p><strong>${cred.wing ? `${cred.wing}-${cred.flatNo}` : cred.flatNo}</strong> at <strong>${societyPayload.societyName}</strong> has been added to your existing account. Sign in as usual and pick it from your profile list.</p><p><a href="${appUrl}/auth/login">${appUrl}/auth/login</a></p>`,
-    });
-  }
-  if (multiSocietyAdminUser && societyPayload.email) {
-    notifyDocs.push({
-      importRunId,
-      userId: societyAdminUser._id,
-      type: "profile-added",
-      to: societyPayload.email,
-      subject: `${societyPayload.societyName} added to your account`,
-      html: `<p>Hi ${societyPayload.fullName || ""},</p><p>You've been made Admin of <strong>${societyPayload.societyName}</strong> using your existing login. Sign in as usual and pick it from your profile list.</p><p><a href="${appUrl}/auth/login">${appUrl}/auth/login</a></p>`,
-    });
-  }
+  let onboardingEmailErrors = [];
 
-  // SEC-19: a BRAND-NEW society admin previously received no email at all —
-  // their password was generated here and printed in the import wizard, and
-  // that display was the entire delivery mechanism. Now that the password is
-  // never returned, the admin needs the same setup link every new member
-  // already gets, or the import would create a society nobody can log into.
-  if (!multiSocietyAdminUser && societyPayload.email && societyAdminUser?._id) {
-    const adminToken = signToken(
-      { userId: String(societyAdminUser._id), purpose: "onboarding" },
-      { expiresIn: "7d" },
-    );
-    adminSetCredentialsUrl = `${appUrl}/onboarding/set-credentials?token=${adminToken}`;
-    outboxDocs.push({
-      importRunId,
-      userId: societyAdminUser._id,
-      type: "onboarding",
-      to: societyPayload.email,
-      subject: `Set up your admin account — ${societyPayload.societyName}`,
-      html: onboardingEmailHtml({
-        memberName: societyPayload.fullName || "Admin",
-        societyName: societyPayload.societyName,
-        societyAddress: societyPayload.address || "",
-        unitKind: "",
-        unitLabel: "",
-        setCredentialsUrl: adminSetCredentialsUrl,
-      }),
+  if (needsBillHistory) {
+    // This society still needs a Bill History decision (Confirm or Skip,
+    // in the wizard's Step 4) before it's actually done. Society/Members/
+    // BillingHeads are real rows (bill-history reconstruction needs real
+    // flat records to attach bills and roll balances forward onto), but
+    // the society stays importStatus:"importing" (not "active") and NO
+    // email goes out yet — and this run is deliberately left WITHOUT
+    // pointOfNoReturn, so it is still eligible for compensateImportRun()
+    // if the admin abandons or the Bill History step fails outright (see
+    // /api/superadmin/bill-history-v2/commit and /cancel).
+    await markRun(importRunId, {
+      status: "AWAITING_BILL_HISTORY",
+      stage: "Waiting for the Bill History step",
+      processedCount: billsGenerated,
     });
-  }
-  outboxDocs.push(...notifyDocs);
-  if (outboxDocs.length > 0) {
+  } else {
+    // Nothing to wait for — finalize immediately, exactly as before.
+    await markRun(importRunId, {
+      status: "COMMITTED",
+      stage: "Queueing onboarding emails",
+      processedCount: billsGenerated,
+      pointOfNoReturn: true, // real data now — never auto-compensate a stuck retry past here
+    });
+    // ── Past this point nothing may compensate/delete. Any error below is
+    // real, must never crash uncaught (it would leave the run stuck at
+    // COMMITTED forever with no FAILED/finishedAt, and a later retry would
+    // hit the pointOfNoReturn guard above and dead-end on a run that never
+    // actually finished) — so it's caught here, logged, and turned into a
+    // clear "data is real, don't retry, contact support" response.
     try {
-      await EmailOutbox.insertMany(outboxDocs, { ordered: false });
+      const finalized = await finalizeBulkImportOnboarding({
+        importRunId,
+        societyId: society._id,
+        societyPayload,
+        memberCredentials,
+        societyAdminUser,
+        multiSocietyAdminUser,
+      });
+      adminSetCredentialsUrl = finalized.adminSetCredentialsUrl;
+      onboardingEmailErrors = finalized.onboardingEmailErrors;
     } catch (err) {
-      // Duplicate-key errors here just mean a prior crashed attempt already
-      // queued these rows — safe to ignore; anything else is logged.
-      if (err.code !== 11000) {
-        console.error("[bulk-import] outbox insert error:", err.message);
-      }
-    }
-  }
-  await markRun(importRunId, { status: "EMAIL_QUEUED", stage: "Sending onboarding emails" });
-
-  // ── SEND — best-effort, never re-runs a row already marked sent ──────
-  const onboardingEmailErrors = [];
-  const pending = await EmailOutbox.find({ importRunId, status: "pending" });
-  for (const row of pending) {
-    try {
-      await sendEmail({ to: row.to, subject: row.subject, html: row.html });
-      row.status = "sent";
-      row.sentAt = new Date();
-      await row.save();
-    } catch (err) {
-      row.attempts += 1;
-      row.lastError = err.message;
-      row.status = "failed";
-      await row.save();
-      console.error(`Onboarding email failed for ${row.to}:`, err.message);
-      onboardingEmailErrors.push(row.to);
+      console.error(`[bulk-import] post-commit error for run ${importRunId}:`, err.message, err.stack);
+      await markRun(importRunId, {
+        errorMessages: [err.message],
+        finishedAt: new Date(),
+      });
+      return NextResponse.json(
+        {
+          error:
+            "Society, members, and bills were created successfully, but an internal error interrupted the final onboarding-email step. Nothing was rolled back. Do NOT re-upload/re-run this file — check the Society list, and contact support with this importRunId if anything looks incomplete.",
+          importRunId,
+        },
+        { status: 500 },
+      );
     }
   }
 
@@ -892,6 +838,10 @@ export async function POST(request) {
       chargesSummary: activeCharges.map((c) => `${c.label}: ₹${c.value}`),
     },
     admin: {
+      // Read back by /api/superadmin/bill-history-v2/commit|skip|cancel to
+      // finalize onboarding (or roll it back) later, once this run is
+      // AWAITING_BILL_HISTORY — see lib/onboarding-finalize.js.
+      userId: societyAdminUser?._id || null,
       name: societyPayload.fullName,
       email: societyPayload.email,
       // SEC-19: the generated password is never returned. It is hashed, and the
@@ -911,6 +861,7 @@ export async function POST(request) {
     billingHeadsCreated: billingHeads.length,
     billsGenerated,
     billPeriod,
+    needsBillHistory,
     billErrors,
     warnings,
   };
@@ -918,32 +869,20 @@ export async function POST(request) {
   // SEC-20: COMPLETED would overwrite the NEEDS_REPAIR set above and hide the
   // one thing that stops this society being usable. An import whose RBAC setup
   // did not finish is not complete, however many members it created.
-  await markRun(importRunId, {
-    status: rbacRepair ? "NEEDS_REPAIR" : "COMPLETED",
-    stage: rbacRepair
-      ? "RBAC setup incomplete — admin cannot sign in until repaired"
-      : "Done",
-    processedCount: validMembers.length,
-    result,
-    finishedAt: new Date(),
-  });
-  return NextResponse.json(result);
-  } catch (err) {
-    console.error(`[bulk-import] post-commit error for run ${importRunId}:`, err.message, err.stack);
+  // needsBillHistory: leave the AWAITING_BILL_HISTORY status set above alone —
+  // this run genuinely is not done, whatever RBAC's state is.
+  if (!needsBillHistory) {
     await markRun(importRunId, {
-      errorMessages: [err.message],
+      status: rbacRepair ? "NEEDS_REPAIR" : "COMPLETED",
+      stage: rbacRepair
+        ? "RBAC setup incomplete — admin cannot sign in until repaired"
+        : "Done",
+      processedCount: validMembers.length,
+      result,
       finishedAt: new Date(),
-      // status intentionally left as-is (COMMITTED/EMAIL_QUEUED) — the data
-      // is real, this was not a validation/rollback failure.
     });
-    return NextResponse.json(
-      {
-        error:
-          "Society, members, and bills were created successfully, and onboarding emails may already be sent, but an internal error interrupted the final step. Nothing was rolled back. Do NOT re-upload/re-run this file — check the Society list, and contact support with this importRunId if anything looks incomplete.",
-        importRunId,
-        pointOfNoReturn: true,
-      },
-      { status: 500 },
-    );
+  } else {
+    await markRun(importRunId, { result });
   }
+  return NextResponse.json(result);
 }

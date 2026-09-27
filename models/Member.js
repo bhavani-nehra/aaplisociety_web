@@ -264,6 +264,11 @@ const MemberSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Historical billing applicability (final_audit_fix_plan/bill-history-upgrade.md §5) —
+    // when this flat actually became/stopped being billable, distinct from when it
+    // was created in the system. null billingEndPeriod = still billable today.
+    billingStartPeriod: { type: String, default: null }, // "YYYY-MM"
+    billingEndPeriod: { type: String, default: null }, // "YYYY-MM" or null = open
     securityDeposit: {
       amount: { type: Number, default: 0 },
       depositDate: { type: Date },

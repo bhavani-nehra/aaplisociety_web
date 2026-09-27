@@ -146,118 +146,138 @@ function validateBillHistorySheet(rows, periodId, prevState, interestRate) {
   }
   return { ok: errors.length === 0, errors, warnings, closingState };
 }
-// ── BillHistoryStep Component ─────────────────────────────────────────────────
-function BillHistoryStep({ societyId, societyName, joinPeriodId, interestRate, onComplete, onSkip }) {
+// ── BillHistoryStep Component (v2 engine) ──────────────────────────────────
+// final_audit_fix_plan/bill-history-upgrade.md §0-40. Server parses,
+// reconciles and reconstructs — this component only uploads bytes and shows
+// the server's result. It never computes a bill amount itself.
+function BillHistoryStep({ societyId, societyName, importRunId, onComplete, onSkip, onCancelled }) {
   const [bhFile, setBhFile] = useState(null);
-  const [bhStep, setBhStep] = useState("idle"); // idle | validating | saving | done | error
-  const [sheetResults, setSheetResults] = useState([]); // per sheet: { periodId, ok, errors, warnings, rowCount }
-  const [validationDone, setValidationDone] = useState(false);
-  const [allValid, setAllValid] = useState(false);
-  const [validatedBills, setValidatedBills] = useState(null); // flat array of bill objects
-  const [saveResult, setSaveResult] = useState(null);
-  const [saveError, setSaveError] = useState(null);
-  const [activeSheetIdx, setActiveSheetIdx] = useState(null);
-  const handleFileChange = (file) => {
-    if (!file) return;
-    setBhFile(file);
-    setBhStep("validating");
-    setSheetResults([]);
-    setValidationDone(false);
-    setAllValid(false);
-    setValidatedBills(null);
-    setActiveSheetIdx(null);
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const wb = await loadWorkbookFromArrayBuffer(evt.target.result);
-        // Skip "Instructions" sheet, process period sheets (named YYYY-MM)
-        const periodSheets = wb.worksheets
-          .map((ws) => ws.name)
-          .filter((n) => /^\d{4}-\d{2}$/.test(n))
-          .sort();
-        if (!periodSheets.length) {
-          setSheetResults([{ periodId: "?", ok: false, errors: ["No period sheets found (expected sheets named YYYY-MM like 2026-04)"], warnings: [], rowCount: 0 }]);
-          setValidationDone(true);
-          setAllValid(false);
-          setBhStep("idle");
-          return;
-        }
-        const results = [];
-        const allBills = [];
-        let prevState = null; // Map of wingFlat → closing state
-        let allOk = true;
-        for (let si = 0; si < periodSheets.length; si++) {
-          const sheetName = periodSheets[si];
-          const rows = sheetToRows(wb.getWorksheet(sheetName));
-          const result = validateBillHistorySheet(rows, sheetName, prevState, interestRate || 21);
-          results.push({ periodId: sheetName, ...result, rowCount: rows.length });
-          prevState = result.closingState;
-          if (!result.ok) allOk = false;
-          // Collect bills from this sheet
-          for (const row of rows) {
-            const wingFlat = String(row["Wing-FlatNo"] || "").trim();
-            if (!wingFlat || wingFlat.startsWith("⚠")) continue;
-            allBills.push({ periodId: sheetName, wingFlat, ...row });
-          }
-        }
-        setSheetResults(results);
-        setValidationDone(true);
-        setAllValid(allOk);
-        setValidatedBills(allOk ? allBills : null);
-        setBhStep("idle");
-      } catch (err) {
-        setSheetResults([{ periodId: "?", ok: false, errors: [`Could not parse file: ${err.message}`], warnings: [], rowCount: 0 }]);
-        setValidationDone(true);
-        setAllValid(false);
-        setBhStep("idle");
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  };
-  const handleSave = async () => {
-    if (!validatedBills?.length) return;
-    setBhStep("saving");
-    setSaveError(null);
+  const [bhStep, setBhStep] = useState("idle"); // idle | previewing | committing | committed | skipping | cancelling | error
+  const [preview, setPreview] = useState(null);
+  const [commitResult, setCommitResult] = useState(null);
+  const [errorMsg, setErrorMsg] = useState(null);
+  const [rolledBack, setRolledBack] = useState(false);
+
+  const runPreview = async (file) => {
+    setBhStep("previewing");
+    setErrorMsg(null);
+    setPreview(null);
     try {
-      const res = await fetch("/api/superadmin/bill-history-import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ societyId, bills: validatedBills, joinPeriodId }),
-      });
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("societyId", societyId);
+      const res = await fetch("/api/superadmin/bill-history-v2/preview", { method: "POST", credentials: "include", body: fd });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Save failed");
-      setSaveResult(data);
-      setBhStep("done");
-      if (onComplete) onComplete(data);
+      if (!res.ok) throw new Error(data.error || "Preview failed");
+      setPreview(data);
+      setBhStep("idle");
     } catch (err) {
-      setSaveError(err.message);
+      setErrorMsg(err.message);
       setBhStep("error");
     }
   };
-  const totalErrors = sheetResults.reduce((s, r) => s + r.errors.length, 0);
-  const totalWarnings = sheetResults.reduce((s, r) => s + r.warnings.length, 0);
+
+  const handleFileChange = (file) => {
+    if (!file) return;
+    setBhFile(file);
+    runPreview(file);
+  };
+
+  const handleCommit = async () => {
+    if (!bhFile) return;
+    if (!window.confirm(`Confirm & Commit for ${societyName}?\n\nThis writes ${preview?.billCount || ""} history bills for real, generates the current-month bill, marks the society ACTIVE, and sends onboarding emails to every member. This cannot be undone.`)) return;
+    setBhStep("committing");
+    setErrorMsg(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", bhFile);
+      fd.append("societyId", societyId);
+      if (importRunId) fd.append("importRunId", importRunId);
+      const res = await fetch("/api/superadmin/bill-history-v2/commit", { method: "POST", credentials: "include", body: fd });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.rolledBack) setRolledBack(true);
+        throw new Error(`${data.code ? `[${data.code}] ` : ""}${data.error || "Commit failed"}`);
+      }
+      setCommitResult(data);
+      setBhStep("committed");
+      if (onComplete) onComplete(data);
+    } catch (err) {
+      setErrorMsg(err.message);
+      setBhStep("error");
+    }
+  };
+
+  const handleSkip = async () => {
+    if (!window.confirm(`Skip Bill History for ${societyName}?\n\nThis is NOT a "close this step" button — it generates the current-month bill off the Members sheet openings right now, marks the society ACTIVE, and sends onboarding emails to every member. This cannot be undone.`)) return;
+    setBhStep("skipping");
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/superadmin/bill-history-v2/skip", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ societyId, importRunId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.rolledBack) setRolledBack(true);
+        throw new Error(data.error || "Skip failed");
+      }
+      notify.success(`Generated ${data.generated} current-month bill(s) off the Members sheet openings.`);
+      if (onSkip) onSkip();
+    } catch (err) {
+      setErrorMsg(err.message);
+      setBhStep("error");
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!importRunId) return;
+    if (!window.confirm(`Cancel this onboarding? This permanently deletes ${societyName}, its members, and any bills created so far. Nobody has been emailed yet.`)) return;
+    setBhStep("cancelling");
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/superadmin/bill-history-v2/cancel", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ importRunId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Cancel failed");
+      notify.success(`${societyName} and its data were deleted.`);
+      if (onCancelled) onCancelled();
+    } catch (err) {
+      setErrorMsg(err.message);
+      setBhStep("error");
+    }
+  };
+
+  const blockingErrors = preview?.errors?.filter((e) => e.severity !== "WARNING") || [];
+
   return (
     <div style={{ padding: "0.5rem 0" }}>
       <h3 style={{ margin: "0 0 0.4rem", color: "var(--accent)", fontSize: "1rem" }}>
         Step 4: Bill History Import
       </h3>
       <p style={{ color: "var(--fg-5)", fontSize: "0.82rem", margin: "0 0 1.25rem" }}>
-        Import all historical bills from prev April to the month before they joined. Required for accurate opening balance and audit trail.
+        Import historical bills before {societyName}'s first live period. The server derives the exact months needed and reconstructs every bill — nothing here is trusted from the browser.
       </p>
-      {/* Template download */}
-      {bhStep !== "done" && (
+
+      {bhStep !== "committed" && (
         <div style={{ background: "var(--primary)", borderRadius: 8, padding: "1rem", marginBottom: "1.25rem" }}>
           <div style={{ fontSize: "0.82rem", color: "var(--primary-tint)", marginBottom: "0.5rem" }}>
-            First, download the pre-filled template for <strong>{societyName}</strong> (all members, all months from prev April to {joinPeriodId}):
+            First, download the pre-filled template for <strong>{societyName}</strong>:
           </div>
           <button
             onClick={async () => {
-              const res = await fetch(
-                `/api/superadmin/bill-history-template?societyId=${societyId}&joinPeriod=${joinPeriodId}`,
-                { credentials: "include" }
-              );
-              if (!res.ok) { notify.error("Template download failed"); return; }
+              const res = await fetch(`/api/superadmin/bill-history-v2/template?societyId=${societyId}`, { credentials: "include" });
+              if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                notify.error(data.error || "Template download failed");
+                return;
+              }
               const blob = await res.blob();
               const url = URL.createObjectURL(blob);
               const a = document.createElement("a");
@@ -272,16 +292,19 @@ function BillHistoryStep({ societyId, societyName, joinPeriodId, interestRate, o
           </button>
         </div>
       )}
-      {bhStep === "done" && saveResult ? (
+
+      {bhStep === "committed" && commitResult ? (
         <div style={{ background: "var(--success-fg)", borderRadius: 8, padding: "1.25rem" }}>
-          <div style={{ color: "var(--success)", fontWeight: 700, fontSize: "1rem", marginBottom: "0.5rem" }}>✅ Bill History Saved</div>
+          <div style={{ color: "var(--success)", fontWeight: 700, fontSize: "1rem", marginBottom: "0.5rem" }}>✅ Bill History Committed</div>
           <div style={{ fontSize: "0.85rem", color: "var(--success-bg)", lineHeight: 1.8 }}>
-            <div><strong>Bills created:</strong> {saveResult.created}</div>
-            <div><strong>Periods covered:</strong> {saveResult.periods?.join(", ")}</div>
-            {saveResult.errors > 0 && <div style={{ color: "var(--warning)" }}><strong>Errors:</strong> {saveResult.errors} rows failed — check data</div>}
+            <div><strong>History bills written:</strong> {commitResult.historyBillCount}</div>
+            <div><strong>Live bills generated:</strong> {commitResult.liveBillResults.generated.length}</div>
+            {commitResult.liveBillResults.failed.length > 0 && (
+              <div style={{ color: "var(--warning)" }}><strong>Live bill failures:</strong> {commitResult.liveBillResults.failed.length} — check the society's bills manually</div>
+            )}
           </div>
           <button
-            onClick={() => onComplete && onComplete(saveResult)}
+            onClick={() => onComplete && onComplete(commitResult)}
             style={{ marginTop: "1rem", background: "var(--success)", color: "var(--on-solid)", border: "none", padding: "0.6rem 1.5rem", borderRadius: 6, cursor: "pointer", fontWeight: 700 }}
           >
             Continue →
@@ -289,115 +312,95 @@ function BillHistoryStep({ societyId, societyName, joinPeriodId, interestRate, o
         </div>
       ) : (
         <>
-          {/* Upload */}
-          {bhStep !== "saving" && (
+          {bhStep !== "committing" && bhStep !== "skipping" && (
             <DropZone
               accept=".xlsx,.xls"
               file={bhFile}
               onFile={handleFileChange}
-              onClear={() => { setBhFile(null); setSheetResults([]); setValidationDone(false); setAllValid(false); setValidatedBills(null); }}
+              onClear={() => { setBhFile(null); setPreview(null); setErrorMsg(null); setBhStep("idle"); }}
               label="Upload filled Bill History Excel"
-              hint=".xlsx — must have sheets named YYYY-MM"
+              hint=".xlsx — the 4-sheet Flats/Paid/Rate table/Exceptions template"
               style={{ marginBottom: "1.25rem" }}
             />
           )}
-          {bhStep === "validating" && (
-            <div style={{ padding: "1rem", textAlign: "center", color: "var(--accent)" }}>Validating all sheets...</div>
+          {bhStep === "previewing" && (
+            <div style={{ padding: "1rem", textAlign: "center", color: "var(--accent)" }}>Parsing and reconstructing on the server…</div>
           )}
-          {bhStep === "saving" && (
-            <div style={{ padding: "1rem", textAlign: "center", color: "var(--accent)" }}>Saving to database...</div>
+          {bhStep === "committing" && (
+            <div style={{ padding: "1rem", textAlign: "center", color: "var(--accent)" }}>Committing — writing history bills and generating the current bill…</div>
           )}
-          {bhStep === "error" && saveError && (
+          {bhStep === "skipping" && (
+            <div style={{ padding: "1rem", textAlign: "center", color: "var(--accent)" }}>Generating current-month bills…</div>
+          )}
+          {bhStep === "cancelling" && (
+            <div style={{ padding: "1rem", textAlign: "center", color: "var(--accent)" }}>Deleting society and members…</div>
+          )}
+          {bhStep === "error" && errorMsg && (
             <div style={{ background: "var(--danger-bg)", borderRadius: 8, padding: "1rem", marginBottom: "1rem" }}>
-              <div style={{ color: "var(--danger-bg)", fontWeight: 600 }}>Save Failed</div>
-              <div style={{ color: "var(--danger-bg)", fontSize: "0.82rem", marginTop: 4 }}>{saveError}</div>
+              <div style={{ color: "var(--danger-bg)", fontWeight: 600 }}>{rolledBack ? "Rolled back" : "Failed"}</div>
+              <div style={{ color: "var(--danger-bg)", fontSize: "0.82rem", marginTop: 4 }}>{errorMsg}</div>
+              {!rolledBack && (
+                <div style={{ color: "var(--danger-bg)", fontSize: "0.78rem", marginTop: 6, opacity: 0.85 }}>
+                  Nothing new was written — fix the file and try again, or Cancel below to delete everything and start over.
+                </div>
+              )}
             </div>
           )}
-          {/* Sheet results */}
-          {validationDone && sheetResults.length > 0 && (
+
+          {preview && (
             <div style={{ marginBottom: "1.25rem" }}>
-              <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--fg-5)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.6rem" }}>
-                Validation Results — {sheetResults.length} months
-              </div>
-              {/* Summary bar */}
               <div style={{ display: "flex", gap: "1rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
                 <span style={{ background: "var(--success-fg)", border: "1px solid var(--success)", borderRadius: 6, padding: "3px 10px", fontSize: "0.75rem", color: "var(--success)", fontWeight: 700 }}>
-                  ✓ {sheetResults.filter(r => r.ok).length} passed
+                  {preview.flatCount} flats · {preview.billCount} bills
                 </span>
-                {totalErrors > 0 && (
+                {blockingErrors.length > 0 && (
                   <span style={{ background: "var(--danger-bg)", border: "1px solid var(--danger)", borderRadius: 6, padding: "3px 10px", fontSize: "0.75rem", color: "var(--danger)", fontWeight: 700 }}>
-                    ✕ {sheetResults.filter(r => !r.ok).length} failed · {totalErrors} errors
+                    ✕ {blockingErrors.length} errors
                   </span>
                 )}
-                {totalWarnings > 0 && (
+                {preview.warnings.length > 0 && (
                   <span style={{ background: "var(--warning-bg)", border: "1px solid var(--warning)", borderRadius: 6, padding: "3px 10px", fontSize: "0.75rem", color: "var(--warning)", fontWeight: 700 }}>
-                    ⚠ {totalWarnings} warnings
+                    ⚠ {preview.warnings.length} warnings
                   </span>
                 )}
               </div>
-              {/* Sheet list — timeline style */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-                {sheetResults.map((r, i) => (
-                  <div key={r.periodId}>
-                    <div
-                      onClick={() => setActiveSheetIdx(activeSheetIdx === i ? null : i)}
-                      style={{
-                        display: "flex", alignItems: "center", gap: "0.75rem",
-                        padding: "0.5rem 0.75rem", borderRadius: 6, cursor: "pointer",
-                        background: r.ok ? "#064e3b22" : "#450a0a22",
-                        border: `1px solid ${r.ok ? "var(--success)" : "var(--danger)"}`,
-                        transition: "all 0.2s",
-                      }}
-                    >
-                      <div style={{ fontSize: "1.1rem" }}>{r.ok ? "✓" : "✕"}</div>
-                      <div style={{ flex: 1 }}>
-                        <span style={{ color: r.ok ? "var(--success)" : "var(--danger)", fontWeight: 700, fontSize: "0.85rem" }}>{r.periodId}</span>
-                        <span style={{ color: "var(--fg-4)", fontSize: "0.72rem", marginLeft: 8 }}>{r.rowCount} rows</span>
-                      </div>
-                      {r.errors.length > 0 && (
-                        <span style={{ color: "var(--danger)", fontSize: "0.72rem" }}>{r.errors.length} error{r.errors.length > 1 ? "s" : ""}</span>
-                      )}
-                      {r.warnings.length > 0 && (
-                        <span style={{ color: "var(--warning)", fontSize: "0.72rem" }}>{r.warnings.length} warning{r.warnings.length > 1 ? "s" : ""}</span>
-                      )}
-                      <span style={{ color: "var(--fg-3)", fontSize: "0.7rem" }}>{activeSheetIdx === i ? "▲" : "▼"}</span>
+              {blockingErrors.length > 0 && (
+                <div style={{ background: "var(--fg-1)", borderRadius: 6, padding: "0.75rem", maxHeight: 200, overflowY: "auto" }}>
+                  {blockingErrors.map((e, i) => (
+                    <div key={i} style={{ fontSize: "0.75rem", color: "var(--danger)", marginBottom: 4 }}>
+                      ✕ {e.flat} / {e.period || "-"}: [{e.code}] {e.message}
                     </div>
-                    {/* Expanded error detail */}
-                    {activeSheetIdx === i && (r.errors.length > 0 || r.warnings.length > 0) && (
-                      <div style={{ background: "var(--fg-1)", borderRadius: "0 0 6px 6px", padding: "0.75rem", marginTop: -1, border: "1px solid var(--fg-3)", borderTop: "none" }}>
-                        {r.errors.map((e, ei) => (
-                          <div key={ei} style={{ fontSize: "0.75rem", color: "var(--danger)", marginBottom: 4, display: "flex", gap: "0.4rem" }}>
-                            <span>✕</span><span>{e}</span>
-                          </div>
-                        ))}
-                        {r.warnings.map((w, wi) => (
-                          <div key={wi} style={{ fontSize: "0.75rem", color: "var(--warning)", marginBottom: 4, display: "flex", gap: "0.4rem" }}>
-                            <span>⚠</span><span>{w}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
-          {/* Actions */}
+
           <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.75rem" }}>
-            {allValid && validatedBills && bhStep !== "saving" && (
+            {preview?.canCommit && bhStep !== "committing" && (
               <button
-                onClick={handleSave}
+                onClick={handleCommit}
                 style={{ flex: 1, background: "var(--success)", color: "var(--on-solid)", border: "none", padding: "0.75rem", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: "0.9rem" }}
               >
-                ✅ All Valid — Save {validatedBills.length} Bill Records
+                ✅ Confirm & Commit {preview.billCount} Bills
               </button>
             )}
             <button
-              onClick={onSkip}
+              onClick={handleSkip}
+              disabled={bhStep === "skipping" || bhStep === "cancelling"}
               style={{ background: "var(--fg-3)", color: "var(--fg-5)", border: "none", padding: "0.75rem 1.25rem", borderRadius: 8, cursor: "pointer", fontSize: "0.85rem" }}
             >
-              Skip (do later)
+              Skip — generate current bill from Members sheet instead
             </button>
+            {importRunId && !rolledBack && (
+              <button
+                onClick={handleCancel}
+                disabled={bhStep === "cancelling"}
+                style={{ background: "transparent", color: "var(--danger)", border: "1px solid var(--danger)", padding: "0.75rem 1.25rem", borderRadius: 8, cursor: "pointer", fontSize: "0.85rem" }}
+              >
+                Cancel — delete this society & everything so far
+              </button>
+            )}
           </div>
         </>
       )}

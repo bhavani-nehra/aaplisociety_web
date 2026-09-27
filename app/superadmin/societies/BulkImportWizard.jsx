@@ -730,10 +730,10 @@ export default function BulkImportWizard({ open, onClose, onImported, BillHistor
                   <BillHistoryStep
                     societyId={serverResult.society?.id}
                     societyName={serverResult.society?.name || ""}
-                    joinPeriodId={serverResult.billPeriod || ""}
-                    interestRate={21}
+                    importRunId={serverResult.importRunId || null}
                     onComplete={() => setBillHistoryDone(true)}
                     onSkip={() => { setShowBillHistory(false); setBillHistoryDone(true); }}
+                    onCancelled={onClose}
                   />
                 </div>
               )}

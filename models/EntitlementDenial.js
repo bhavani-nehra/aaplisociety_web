@@ -44,7 +44,9 @@ const EntitlementDenialSchema = new mongoose.Schema(
     // an admin clicking around or a mobile build that never got updated.
     surface: { type: String },
 
-    at: { type: Date, default: Date.now, index: true },
+    // No `index: true` here — the explicit TTL index below already covers
+    // {at: 1}; declaring both throws Mongoose's duplicate-schema-index warning.
+    at: { type: Date, default: Date.now },
   },
   { timestamps: false },
 );

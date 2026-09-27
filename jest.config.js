@@ -11,6 +11,8 @@ const customJestConfig = {
   testMatch: [
     "**/__tests__/unit/**/*.unit.test.js",
     "**/tests/unit/**/*.unit.test.js",
+    // Audit-fix suites moved out of __tests__/ and tests/unit/ (see final_audit_fix_plan/tests).
+    "**/final_audit_fix_plan/tests/91-existing-unit/**/*.unit.test.js",
   ],
   // next/jest does NOT actually read jsconfig.json's `paths` — it only maps
   // its own built-in aliases (next/font, css/image mocks, etc). Every "@/..."

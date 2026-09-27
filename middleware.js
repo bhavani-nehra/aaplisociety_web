@@ -488,6 +488,7 @@ export async function middleware(request) {
     // cover /auth/* at all), which without this entry bounced a successful
     // multi-profile login straight back to /auth/login with no error.
     "/auth/select-society",
+    "/auth/resume",
     "/admin/login",
     "/security/login",
     "/member/login",
@@ -554,11 +555,30 @@ export async function middleware(request) {
     return withCsp(NextResponse.next(nextArgs), nonce);
   }
   // ── ADMIN + MEMBER PROTECTED ROUTES ──────────────────────────────────────
+  // The 15-minute access cookie vanishes from the browser while the 2-hour
+  // refresh cookie is still valid (tab idle for an hour). Bouncing straight to
+  // login threw away a perfectly recoverable session, so hand off to the
+  // resume page, which refreshes and returns here.
+  const hasRefresh = Boolean(request.cookies.get("refreshToken")?.value);
+  const resumeUrl = () => {
+    const u = new URL("/auth/resume", request.url);
+    u.searchParams.set("next", pathname + (request.nextUrl.search || ""));
+    return u;
+  };
   if (!token) {
-    return withCsp(NextResponse.redirect(new URL("/auth/login", request.url)), nonce);
+    return withCsp(
+      NextResponse.redirect(hasRefresh ? resumeUrl() : new URL("/auth/login", request.url)),
+      nonce,
+    );
   }
   const payload = await parseJwt(token);
-  if (!payload || (await isRevoked(payload)) || (await isStaleSession(payload))) {
+  if (!payload) {
+    return withCsp(
+      NextResponse.redirect(hasRefresh ? resumeUrl() : new URL("/auth/login", request.url)),
+      nonce,
+    );
+  }
+  if ((await isRevoked(payload)) || (await isStaleSession(payload))) {
     return withCsp(NextResponse.redirect(new URL("/auth/login", request.url)), nonce);
   }
   // Determine effective role:

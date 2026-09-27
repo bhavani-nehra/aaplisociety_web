@@ -74,6 +74,13 @@ export async function POST(request) {
         role: "Security",
         societyId: guard.societyId.toString(),
         gateLabel: guard.gateLabel || "Main Gate",
+        // Same bug as the resident-profile login/refresh paths — omitting
+        // this stamps the token at epoch 0, which then permanently fails
+        // authorize()/middleware's freshness check the moment this guard's
+        // sessionEpoch is ever bumped above 0 (e.g. the password-reset flow
+        // in app/api/admin/security-guards/[id]/route.js, which deliberately
+        // bumps it to kill the old session).
+        sessionEpoch: guard.sessionEpoch || 0,
       },
       { expiresIn: "12h" },
     );

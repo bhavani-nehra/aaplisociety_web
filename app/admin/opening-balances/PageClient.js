@@ -19,6 +19,7 @@ import { NoFinancialYear, SetupAdvisory } from "@/components/accounting/SetupGat
 import Assistant from "@/components/accounting/Assistant";
 import { useFinancialYears } from "../../../components/accounting/generate/useFinancialYears";
 import { fmtINR, Banner } from "../../../components/accounting/generate/Primitives";
+import { isContraAccount } from "@/lib/accounting/standardAccounts";
 
 async function fetchJSON(url, opts) {
   const res = await fetch(url, { credentials: "include", ...opts });
@@ -130,7 +131,14 @@ export default function OpeningBalancesScreen() {
     entries.forEach(({ accountId, amount }) => {
       const acc = accounts.find((a) => String(a._id) === accountId);
       if (!acc) return;
-      if (acc.normalBalance === "Debit") debit += amount; else credit += amount;
+      // Contra accounts (Accumulated Depreciation) sit on the OPPOSITE side
+      // from their type's normalBalance — an "Asset" that's a credit,
+      // reducing Fixed Assets. Posting it to Debit here would double it
+      // (once as a positive asset, once again failing to net against General
+      // Fund), which is exactly what silently inflated this form's totals
+      // before the actual posted journal entry (source of truth) caught it.
+      const onDebitSide = isContraAccount(acc) ? acc.normalBalance !== "Debit" : acc.normalBalance === "Debit";
+      if (onDebitSide) debit += amount; else credit += amount;
     });
     return { debit, credit };
   }, [entries, accounts]);

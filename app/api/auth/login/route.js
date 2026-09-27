@@ -280,6 +280,10 @@ export async function POST(request) {
         societyId: profile.societyId,
         role: profile.role,
         occupancyType: profile.occupancyType,
+        // Missing here let a resident/member profile mint a token stuck at
+        // epoch 0 forever — see the identical fix + comment in
+        // app/api/auth/refresh/route.js.
+        sessionEpoch: user.sessionEpoch || 0,
       });
       const response = NextResponse.json({
         success: true,

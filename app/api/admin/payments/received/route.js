@@ -35,6 +35,9 @@ export async function GET(request) {
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(200, Math.max(1, parseInt(searchParams.get("limit") || "50", 10)));
     const memberId = searchParams.get("memberId");
+    if (memberId && !/^[a-f\d]{24}$/i.test(memberId)) {
+      return NextResponse.json({ error: "Invalid member ID" }, { status: 400 });
+    }
     const mode = searchParams.get("paymentMode");
     const from = searchParams.get("from");
     const to = searchParams.get("to");

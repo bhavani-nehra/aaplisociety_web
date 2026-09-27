@@ -18,6 +18,9 @@ import { expandPageAccess } from "@/lib/rbac/page-access-map";
 export async function GET(request, { params }) {
   const gate = await authorize(request, "rbac.role.view");
   if (!gate.ok) return gate.response;
+  if (!/^[a-f\d]{24}$/i.test(String(params.id))) {
+    return NextResponse.json({ error: "Role not found" }, { status: 404 });
+  }
   const role = await getRole(gate.context.societyId, params.id);
   if (!role)
     return NextResponse.json({ error: "Role not found" }, { status: 404 });
@@ -27,6 +30,9 @@ export async function GET(request, { params }) {
 export async function PATCH(request, { params }) {
   const gate = await authorize(request, "rbac.role.update");
   if (!gate.ok) return gate.response;
+  if (!/^[a-f\d]{24}$/i.test(String(params.id))) {
+    return NextResponse.json({ error: "Role not found" }, { status: 404 });
+  }
   let body;
   try {
     body = await request.json();
@@ -54,6 +60,9 @@ export async function PATCH(request, { params }) {
 export async function DELETE(request, { params }) {
   const gate = await authorize(request, "rbac.role.delete");
   if (!gate.ok) return gate.response;
+  if (!/^[a-f\d]{24}$/i.test(String(params.id))) {
+    return NextResponse.json({ error: "Role not found" }, { status: 404 });
+  }
   try {
     const result = await deleteRole({
       societyId: gate.context.societyId,

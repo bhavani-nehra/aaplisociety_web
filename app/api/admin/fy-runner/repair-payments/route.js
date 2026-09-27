@@ -23,7 +23,9 @@ const isHistoryTxn = (t) => /^history/.test(String(t.notes || ""));
 const OPEN = ["Unpaid", "Partial", "Overdue"];
 
 export async function POST(request) {
-  const gate = await authorize(request, "finance.accounting.manage");
+  // See app/api/admin/fy-runner/backfill-ledger/route.js — same phantom,
+  // never-registered permission fixed the same way.
+  const gate = await authorize(request, "accounting.fiscalConfig.update");
   if (!gate.ok) return gate.response;
   try {
     await connectDB();

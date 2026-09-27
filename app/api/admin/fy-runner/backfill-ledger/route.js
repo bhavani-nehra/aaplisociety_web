@@ -15,7 +15,13 @@ import FinancialYear from "@/models/FinancialYear";
 import { backfillMissingLedgerEntries } from "@/lib/accounting/backfillLedger";
 
 export async function POST(request) {
-  const gate = await authorize(request, "finance.accounting.manage");
+  // "finance.accounting.manage" was never a registered permission (not in
+  // lib/rbac/permissions-catalog.js/registry.js) — every call to this route
+  // 403'd for everyone, admin included, since authorize() rejects an unknown
+  // permission id regardless of superuser status. accounting.fiscalConfig.update
+  // is the closest real, registered, dangerous permission for a ledger-mutating
+  // repair action.
+  const gate = await authorize(request, "accounting.fiscalConfig.update");
   if (!gate.ok) return gate.response;
   try {
     await connectDB();

@@ -25,7 +25,9 @@ const twoDp = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const CONTRA_CODES = new Set(STANDARD_ACCOUNTS.filter((a) => a.key === "accumDep").map((a) => a.code));
 
 export async function POST(request) {
-  const gate = await authorize(request, "finance.accounting.manage");
+  // See app/api/admin/fy-runner/backfill-ledger/route.js — same phantom,
+  // never-registered permission fixed the same way.
+  const gate = await authorize(request, "accounting.fiscalConfig.update");
   if (!gate.ok) return gate.response;
   try {
     await connectDB();

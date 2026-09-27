@@ -121,6 +121,6 @@ export async function POST(request, { params }) {
     return NextResponse.json({ grant: sanitizeGrant(grant.toObject()) });
   } catch (error) {
     console.error("takeover approve failed:", error);
-    return NextResponse.json({ error: error.message || "Could not approve the request. Try again." }, { status: 500 });
+    return NextResponse.json({ error: "Could not approve the request. Try again." }, { status: 500 });
   }
 }

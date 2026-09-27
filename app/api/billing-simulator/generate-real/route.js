@@ -88,6 +88,6 @@ export async function POST(request) {
     });
   } catch (err) {
     console.error("generate-real error:", err);
-    return NextResponse.json({ error: "Internal server error", details: err.message }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -83,6 +83,6 @@ export async function POST(request) {
   } catch (err) {
     console.error("pay-real error:", err);
     if (err.status) return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
-    return NextResponse.json({ error: "Internal server error", details: err.message }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

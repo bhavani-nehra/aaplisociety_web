@@ -47,6 +47,6 @@ export async function POST(request) {
     return NextResponse.json({ ok: true, bundleVersion: BUNDLE_VERSION, acceptedAt: record.acceptedAt });
   } catch (error) {
     console.error("legal accept failed:", error);
-    return NextResponse.json({ error: error.message || "Could not record acceptance. Try again." }, { status: 500 });
+    return NextResponse.json({ error: "Could not record acceptance. Try again." }, { status: 500 });
   }
 }

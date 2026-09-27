@@ -128,6 +128,6 @@ export async function POST(request, { params }) {
     return NextResponse.json({ grant: sanitizeGrant(grant.toObject()) });
   } catch (error) {
     console.error("takeover verify-otp failed:", error);
-    return NextResponse.json({ error: error.message || "Could not confirm the code. Try again." }, { status: 500 });
+    return NextResponse.json({ error: "Could not confirm the code. Try again." }, { status: 500 });
   }
 }

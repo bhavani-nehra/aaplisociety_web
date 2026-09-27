@@ -97,6 +97,6 @@ export async function POST(request, { params }) {
     });
   } catch (error) {
     console.error("takeover resend-otp failed:", error);
-    return NextResponse.json({ error: error.message || "Could not resend the code. Try again." }, { status: 500 });
+    return NextResponse.json({ error: "Could not resend the code. Try again." }, { status: 500 });
   }
 }

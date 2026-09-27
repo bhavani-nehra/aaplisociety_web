@@ -49,6 +49,6 @@ export async function POST(request, { params }) {
     return NextResponse.json({ grant: sanitizeGrant(grant.toObject()) });
   } catch (error) {
     console.error("takeover deny failed:", error);
-    return NextResponse.json({ error: error.message || "Could not deny the request. Try again." }, { status: 500 });
+    return NextResponse.json({ error: "Could not deny the request. Try again." }, { status: 500 });
   }
 }

@@ -63,7 +63,7 @@ export async function GET(request) {
     return NextResponse.json({ grants: grants.map(sanitizeGrant) });
   } catch (error) {
     console.error("takeover status failed:", error);
-    return NextResponse.json({ error: error.message || "Something went wrong. Try again." }, { status: 500 });
+    return NextResponse.json({ error: "Something went wrong. Try again." }, { status: 500 });
   }
 }
 
@@ -145,6 +145,6 @@ export async function POST(request) {
     return NextResponse.json({ grant: sanitizeGrant(grant.toObject()) }, { status: 201 });
   } catch (error) {
     console.error("takeover request failed:", error);
-    return NextResponse.json({ error: error.message || "Could not send the request. Try again." }, { status: 500 });
+    return NextResponse.json({ error: "Could not send the request. Try again." }, { status: 500 });
   }
 }

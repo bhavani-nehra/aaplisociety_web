@@ -64,7 +64,7 @@ export async function GET(request)  {
     });
   } catch (error) {
     console.error("Lab depreciation GET error:", error);
-    return NextResponse.json({ error: "Internal server error", details: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -248,7 +248,7 @@ if (amount > 0) {
   } catch (error) {
     console.error("Lab depreciation error:", error);
     return NextResponse.json(
-      { error: error.message || "Internal server error" },
+      { error: "Internal server error" },
       { status: error.status || 500 },
     );
   }

@@ -31,6 +31,6 @@ export async function GET(request) {
     });
   } catch (error) {
     console.error("legal status check failed:", error);
-    return NextResponse.json({ error: error.message || "Could not check acceptance status." }, { status: 500 });
+    return NextResponse.json({ error: "Could not check acceptance status." }, { status: 500 });
   }
 }

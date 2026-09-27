@@ -584,7 +584,7 @@ export async function POST(request) {
   } catch (error) {
     console.error("Billing simulator error:", error);
     return NextResponse.json(
-      { error: "Simulation failed", details: error.message },
+      { error: "Simulation failed" },
       { status: 500 }
     );
   }

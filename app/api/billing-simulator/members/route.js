@@ -61,7 +61,7 @@ export async function GET(request) {
   } catch (error) {
     console.error("billing-simulator/members error:", error);
     return NextResponse.json(
-      { error: "Failed to fetch members", details: error.message },
+      { error: "Failed to fetch members" },
       { status: 500 },
     );
   }

@@ -70,6 +70,6 @@ export async function POST(request, { params }) {
     return res;
   } catch (error) {
     console.error("takeover claim failed:", error);
-    return NextResponse.json({ error: error.message || "Could not open the session. Try again." }, { status: 500 });
+    return NextResponse.json({ error: "Could not open the session. Try again." }, { status: 500 });
   }
 }

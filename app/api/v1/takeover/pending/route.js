@@ -49,6 +49,6 @@ export async function GET(request) {
     // A polled endpoint failing must never surface as a hard error banner —
     // the panel just quietly retries on its next 5s tick. See
     // TakeoverSessionPanel's query (retry stays default-on for GETs).
-    return NextResponse.json({ error: error.message || "Could not check for a pending request." }, { status: 500 });
+    return NextResponse.json({ error: "Could not check for a pending request." }, { status: 500 });
   }
 }

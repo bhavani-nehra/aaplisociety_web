@@ -214,7 +214,7 @@ export default function TakeoverSessionPanel({ user }) {
     <>
       {isError && (
         <div style={{ ...barStyle, background: "var(--danger-bg, #fee)", color: "var(--danger)", borderBottom: "1px solid var(--danger)" }}>
-          <span>Couldn't check for support requests: {error.message}</span>
+          <span>Couldn&apos;t check for support requests: {error.message}</span>
           <button
             onClick={() => refetch()}
             disabled={isFetching}
@@ -248,7 +248,7 @@ export default function TakeoverSessionPanel({ user }) {
             <p style={{ fontSize: 13, color: "var(--fg-3)", marginBottom: "1rem" }}>
               <strong>{pending.requestedByName}</strong> is asking to{" "}
               <strong>{pending.scope === "write" ? "view and edit" : "view"}</strong> your dashboard
-              {pendingTicket ? <> for ticket "<strong>{pendingTicket.title}</strong>"</> : null}.
+              {pendingTicket ? <> for ticket &quot;<strong>{pendingTicket.title}</strong>&quot;</> : null}.
             </p>
 
             {step === "review" ? (

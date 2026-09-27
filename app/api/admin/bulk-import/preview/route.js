@@ -59,8 +59,6 @@ export async function POST(request) {
       previewId,
       societyPayload: result.societyPayload,
       validMembers: result.validMembers,
-      // Plan 02 §17
-      optional: result.optional,
       existingMemberEmailMap: result.existingMemberEmailMap,
       multiSocietyAdminUserId: result.multiSocietyAdminUserId,
       warnings: result.warnings,

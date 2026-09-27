@@ -33,11 +33,6 @@ import BulkImportRun from "@/models/BulkImportRun";
 import BulkImportPreview from "@/models/BulkImportPreview";
 import EmailOutbox from "@/models/EmailOutbox";
 import TenantRequest from "@/models/TenantRequest";
-// Plan 02 §17 - the optional commercial and amenity sheets.
-import CommercialCategory from "@/models/CommercialCategory";
-import Shop from "@/models/Shop";
-import BusinessProfile from "@/models/BusinessProfile";
-import { Amenity, AmenityCategory } from "@/models/amenities";
 // SEC-20: read back after seeding to assert the society is actually usable,
 // rather than trusting that two awaited calls not throwing means they worked.
 import Role from "@/models/Role";
@@ -245,16 +240,6 @@ export async function POST(request) {
 
   const societyPayload = preview.societyPayload;
   const validMembers = preview.validMembers;
-  // Plan 02 §17. Defaulted, so a preview taken before these sheets existed
-  // (the 30-minute TTL means one can still be in flight) commits as it always
-  // did rather than throwing on a missing field.
-  const optional = {
-    commercialCategories: [],
-    shops: [],
-    businesses: [],
-    amenities: [],
-    ...(preview.optional || {}),
-  };
   const warnings = preview.warnings || [];
   const existingMemberUsersByEmail = new Map(
     (preview.existingMemberEmailMap || []).map(([email, u]) => [
@@ -324,22 +309,6 @@ export async function POST(request) {
   const memberCredentials = [];
   const memberCreateErrors = [];
   let membersCreated = 0;
-  // Plan 02 §17 - what the optional sheets produced, reported alongside
-  // membersCreated so the final report covers everything the import wrote.
-  const counts = {
-    commercialCategories: 0,
-    shops: 0,
-    businesses: 0,
-    amenities: 0,
-    amenityCategories: 0,
-  };
-  // flatNo -> Member._id, so a shop can name the flat whose owner owns it.
-  const memberIdByFlat = new Map();
-  // shopNo -> Shop._id, so a business can name the unit it trades from.
-  const shopIdByNo = new Map();
-  // shopNo -> the Member._id of the flat whose owner owns that shop, which a
-  // BusinessProfile requires.
-  const shopOwnerMemberByNo = new Map();
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
@@ -553,7 +522,6 @@ export async function POST(request) {
           });
         }
         membersCreated++;
-        memberIdByFlat.set(String(memberData.flatNo).trim(), member._id);
       }
 
       const headsToCreate = societyPayload.config.charges
@@ -574,183 +542,6 @@ export async function POST(request) {
         warnings.push(
           "No billing heads created — all charge values were 0 in the Society sheet.",
         );
-      }
-
-      // ── Plan 02 §17: the optional commercial and amenity sheets ──────────
-      //
-      // Inside the same transaction as everything above. A society that
-      // imported its flats but silently lost its shops would look successful
-      // and be wrong, and the admin would not find out until somebody went
-      // looking for a shop.
-      //
-      // Order matters: categories first, because shops and businesses
-      // reference them by name.
-      const categoryIdByName = new Map();
-      if (optional.commercialCategories.length > 0) {
-        const created = await CommercialCategory.create(
-          optional.commercialCategories.map((c, i) => ({
-            scope: "SOCIETY",
-            societyId: society._id,
-            name: c.name,
-            slug: c.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
-            sortOrder: c.sortOrder ?? (i + 1) * 10,
-            isActive: c.isActive,
-            createdBy: societyAdminUser?._id,
-          })),
-          { session, ordered: true },
-        );
-        created.forEach((c) => categoryIdByName.set(c.name.toLowerCase(), c._id));
-        counts.commercialCategories = created.length;
-      }
-
-      if (optional.shops.length > 0) {
-        const created = await Shop.create(
-          optional.shops.map((sh) => ({
-            societyId: society._id,
-            shopNo: sh.shopNo,
-            wing: sh.wing || null,
-            floor: sh.floor ?? 0,
-            unitKind: sh.unitKind || "Shop",
-            ownerName: sh.ownerName,
-            ownerPhone: sh.ownerPhone || null,
-            ownerEmail: sh.ownerEmail || null,
-            // A flat link is a REFERENCE, not a reclassification: models/Shop.js
-            // is explicit that setting ownerMemberId writes nothing back to
-            // that Member. A resident who also owns a shop keeps one flat
-            // record and one shop record, correctly separate.
-            ownerMemberId: sh.ownerFlatNo
-              ? memberIdByFlat.get(String(sh.ownerFlatNo).trim()) || null
-              : null,
-            areaSqft: sh.areaSqft ?? null,
-            occupancyType: sh.occupancyType || "Owner-Occupied",
-            tenantName: sh.tenantName || null,
-            tenantPhone: sh.tenantPhone || null,
-            leaseStartDate: sh.leaseStartDate,
-            leaseEndDate: sh.leaseEndDate,
-            tradeName: sh.tradeName || null,
-            categoryId: sh.categoryName
-              ? categoryIdByName.get(sh.categoryName.toLowerCase()) || null
-              : null,
-            gstin: sh.gstin || null,
-            importRunId,
-          })),
-          { session, ordered: true },
-        );
-        created.forEach((sh) => shopIdByNo.set(sh.shopNo, sh._id));
-        // BusinessProfile.memberId is required - a business belongs to the
-        // person who runs it, not only to the unit it trades from - so the
-        // owning flat is carried forward from the shop that names it.
-        created.forEach((sh) => {
-          if (sh.ownerMemberId) shopOwnerMemberByNo.set(sh.shopNo, sh.ownerMemberId);
-        });
-        counts.shops = created.length;
-      }
-
-      if (optional.businesses.length > 0) {
-        // models/BusinessProfile.js carries NO shopId and is indexed
-        // { societyId, memberId } UNIQUE - it is one profile per member, not
-        // per unit. So a member who owns two shops gets one business profile,
-        // and a second row for them would abort this whole transaction on a
-        // duplicate key. Deduped here, with the dropped row reported.
-        const claimedByMember = new Set();
-        const rows = optional.businesses
-          .map((b) => {
-            const shopId = shopIdByNo.get(b.shopNo);
-            // The sheet's fk rule already refused an unknown shop at preview,
-            // so this only skips a row that somehow reached here without one
-            // rather than throwing away the whole import.
-            if (!shopId) return null;
-            // A BusinessProfile requires the member who runs it. A shop owned
-            // by an outside party has no flat to name, so the business record
-            // cannot be created - said out loud in the report rather than
-            // dropped silently, because the admin filled that row in and will
-            // otherwise assume it landed.
-            const memberId = shopOwnerMemberByNo.get(b.shopNo);
-            if (!memberId) {
-              warnings.push(
-                `Business "${b.tradeName}" was not created: shop ${b.shopNo} is not linked to a flat, and a business record has to name the member who runs it. Set "Owner's Flat No" on the Shops sheet and add it in the app.`,
-              );
-              return null;
-            }
-            const key = String(memberId);
-            if (claimedByMember.has(key)) {
-              warnings.push(
-                `Business "${b.tradeName}" (shop ${b.shopNo}) was not created: this flat already has a business profile, and the system keeps one per member. Add the second business in the app.`,
-              );
-              return null;
-            }
-            claimedByMember.add(key);
-            return {
-              societyId: society._id,
-              memberId,
-              tradeName: b.tradeName,
-              legalName: b.legalName || undefined,
-              categoryId: b.categoryName
-                ? categoryIdByName.get(b.categoryName.toLowerCase()) || null
-                : null,
-              description: b.description || undefined,
-              phone: b.phone || undefined,
-              whatsapp: b.whatsapp || undefined,
-              email: b.email || undefined,
-              gstin: b.gstin || undefined,
-              licenseNumber: b.licenseNumber || undefined,
-              hours: b.hours,
-              importRunId,
-            };
-          })
-          .filter(Boolean);
-        if (rows.length > 0) {
-          const created = await BusinessProfile.create(rows, { session, ordered: true });
-          counts.businesses = created.length;
-        }
-      }
-
-      if (optional.amenities.length > 0) {
-        // Amenity.categoryId is required, so each distinct category name on the
-        // sheet becomes a category. Creating them here rather than asking the
-        // admin to pre-declare them keeps the amenities sheet usable on its own.
-        const amenityCatIdByName = new Map();
-        const distinct = [...new Set(optional.amenities.map((a) => a.categoryName))];
-        const createdCats = await AmenityCategory.create(
-          distinct.map((name, i) => ({
-            societyId: society._id,
-            name,
-            displayOrder: (i + 1) * 10,
-            createdBy: societyAdminUser?._id,
-          })),
-          { session, ordered: true },
-        );
-        createdCats.forEach((c) => amenityCatIdByName.set(c.name.toLowerCase(), c._id));
-
-        const created = await Amenity.create(
-          optional.amenities.map((a, i) => ({
-            societyId: society._id,
-            categoryId: amenityCatIdByName.get(a.categoryName.toLowerCase()),
-            name: a.name,
-            description: a.description || undefined,
-            location: a.location || undefined,
-            status: a.status || "OPEN",
-            openingTime: a.openingTime || "06:00",
-            closingTime: a.closingTime || "22:00",
-            displayOrder: (i + 1) * 10,
-            attendanceMode: a.attendanceMode || "NONE",
-            access: a.audience ? { audience: a.audience } : undefined,
-            // Blank max occupancy means unlimited, which is the model default;
-            // a number switches it off.
-            capacity:
-              a.maxOccupancy == null
-                ? undefined
-                : { unlimited: false, maxOccupancy: a.maxOccupancy },
-            contactPerson:
-              a.contactName || a.contactPhone
-                ? { name: a.contactName || undefined, phone: a.contactPhone || undefined }
-                : undefined,
-            importRunId,
-          })),
-          { session, ordered: true },
-        );
-        counts.amenities = created.length;
-        counts.amenityCategories = createdCats.length;
       }
     });
   } catch (err) {
@@ -1117,12 +908,6 @@ export async function POST(request) {
     memberCredentials,
     onboardingEmailErrors,
     totalMemberRows: validMembers.length,
-    // Plan 02 §17
-    commercialCategoriesCreated: counts.commercialCategories,
-    shopsCreated: counts.shops,
-    businessesCreated: counts.businesses,
-    amenitiesCreated: counts.amenities,
-    amenityCategoriesCreated: counts.amenityCategories,
     billingHeadsCreated: billingHeads.length,
     billsGenerated,
     billPeriod,
@@ -1155,7 +940,6 @@ export async function POST(request) {
       {
         error:
           "Society, members, and bills were created successfully, and onboarding emails may already be sent, but an internal error interrupted the final step. Nothing was rolled back. Do NOT re-upload/re-run this file — check the Society list, and contact support with this importRunId if anything looks incomplete.",
-        detail: err.message,
         importRunId,
         pointOfNoReturn: true,
       },

@@ -116,6 +116,9 @@ const MemberSchema = new mongoose.Schema(
         type: { type: String, enum: ["Stilt", "Open", "Covered"] },
         vehicleType: { type: String, enum: ["Two-Wheeler", "Four-Wheeler"] },
         monthlyBilling: { type: Boolean, default: true }, // auto-set: false for Stilt, true for Open/Covered
+        // Optional. Set by bulk import; the gate-facing vehicles[] list below stays the full record.
+        vehicleNumber: { type: String, uppercase: true, trim: true },
+        vehicleName: { type: String, trim: true },
       },
     ],
     isActive: { type: Boolean, default: true },

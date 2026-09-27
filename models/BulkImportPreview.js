@@ -15,10 +15,6 @@ const BulkImportPreviewSchema = new mongoose.Schema(
     previewId: { type: String, required: true, unique: true },
     societyPayload: { type: mongoose.Schema.Types.Mixed, required: true },
     validMembers: { type: mongoose.Schema.Types.Mixed, required: true },
-    // Plan 02 §17 - the optional commercial and amenity sheets, already
-    // normalised. Stored alongside validMembers so the commit inserts exactly
-    // what the preview validated, rather than re-parsing the workbook.
-    optional: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
     // [[email, {_id, username}], ...] — a Map isn't BSON-storable directly.
     existingMemberEmailMap: { type: mongoose.Schema.Types.Mixed, default: [] },
     multiSocietyAdminUserId: { type: String, default: null },

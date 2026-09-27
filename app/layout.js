@@ -6,7 +6,6 @@ import { Inter } from "next/font/google";
 import ToastProvider from "@/components/ui/ToastProvider";
 import ConfirmDialogHost from "@/components/ui/ConfirmDialogHost";
 import ActionLoader from "@/components/brand/ActionLoader";
-import ScatterIntro from "@/components/brand/ScatterIntro";
 import SessionGuard from "@/components/session/SessionGuard";
 const inter = Inter({ subsets: ["latin"] });
 export const metadata = {
@@ -48,7 +47,6 @@ export default async function RootLayout({ children }) {
             mounted before children so the patch is in place first. */}
         <SessionGuard />
         <QueryProvider>{children}</QueryProvider>
-        <ScatterIntro />
         <ActionLoader />
         <ToastProvider />
         <ConfirmDialogHost />

@@ -176,7 +176,13 @@ export default function DashboardLayout({
               <div key={i} className={styles.navGroup}>
                 <div className={styles.navGroupTitle}>{group.title}</div>
                 {group.items.map((item) => {
-                  const isActive = pathname.startsWith(item.path);
+                  // Only the most specific matching row is lit: "/admin/accounting"
+                  // and "/admin/commercial" are prefixes of every sibling page, so a
+                  // plain startsWith() highlighted them all the time.
+                  const matches = (p) => pathname === p || pathname.startsWith(p + "/");
+                  const isActive =
+                    matches(item.path) &&
+                    !navigation.some((g) => g.items.some((o) => o.path.length > item.path.length && matches(o.path)));
                   return (
                     <div
                       key={item.path}

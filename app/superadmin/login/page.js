@@ -1,5 +1,4 @@
 "use client";
-import { playScatterIntro } from "@/components/brand/ScatterIntro";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import TurnstileWidget from "@/components/TurnstileWidget";
@@ -40,7 +39,6 @@ export default function AdminLogin() {
       }
       // 🔥 FIXED: redirect based on role
       if (data.user?.role === "SuperAdmin") {
-        playScatterIntro();
         router.push("/superadmin/dashboard");
       } else {
         router.push("/superadmin/login");

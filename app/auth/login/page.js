@@ -5,7 +5,6 @@ import { Eye, EyeOff } from "lucide-react";
 import styles from "@/styles/Auth.module.css";
 import TurnstileWidget from "@/components/TurnstileWidget";
 import { clearPersistedSession } from "@/lib/query-persist";
-import { playScatterIntro } from "@/components/brand/ScatterIntro";
 import { SkylineArcMark } from "@/components/brand/SkylineArc";
 export default function LoginPage() {
   const router = useRouter();
@@ -141,7 +140,6 @@ export default function LoginPage() {
       }
       const role = data.user?.role;
       clearPersistedSession();
-      playScatterIntro();
       const next = consumeNext();
       if (next) {
         router.replace(next);

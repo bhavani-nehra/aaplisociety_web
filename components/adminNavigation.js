@@ -126,16 +126,16 @@ export const ADMIN_NAVIGATION = [
   {
     title: "Accounting",
     items: [
+      { name: "Accounting home", path: "/admin/accounting", pageKey: "accountingOverview", icon: <Settings size={16} /> },
       { name: "Your year", path: "/admin/accounting/your-year", pageKey: "accountingOverview", icon: <Flag size={16} /> },
       { name: "Set up your books", path: "/admin/accounting/setup-books", pageKey: "accountingOverview", icon: <ListChecks size={16} /> },
-      { name: "Configuration", path: "/admin/accounting", pageKey: "accountingOverview", icon: <Settings size={16} /> },
       { name: "Account Heads", path: "/admin/accounting/chart-of-accounts", pageKey: "chartOfAccounts", icon: <BookOpen size={16} /> },
       { name: "What we own & owe", path: "/admin/accounting/registers", pageKey: "assets", icon: <Package size={16} /> },
       { name: "Cash Flow Setup", path: "/admin/accounting/cash-flow", pageKey: "bankAccounts", icon: <Banknote size={16} /> },
       { name: "Balance Sheet Format", path: "/admin/accounting/format", pageKey: "schedules", icon: <Layers size={16} /> },
+      { name: "Balance sheet (year)", path: "/admin/accounting/year-summary", pageKey: "accountingOverview", icon: <Layers size={16} /> },
       { name: "Balance Sheet & I&E", path: "/admin/accounting/statements", pageKey: "statementsWorkspace", icon: <Zap size={16} /> },
       { name: "Money overview", path: "/admin/money-overview", pageKey: "payments", icon: <LayoutDashboard size={16} /> },
-      { name: "Money (all in one)", path: "/admin/money", pageKey: "payments", icon: <CreditCard size={16} /> },
     ],
   },
   // Not part of the 6-page cluster above (these are day-to-day transaction
@@ -169,6 +169,7 @@ export const ADMIN_NAVIGATION = [
   {
     title: "Security",
     items: [
+      { name: "Overview", path: "/admin/security-overview", pageKey: "visitors", icon: "📊" },
       { name: "Visitors", path: "/admin/visitors", pageKey: "visitors", icon: "🚪" },
       { name: "Active Visitors", path: "/admin/visitors/active", pageKey: "visitorsActive", icon: "🟢" },
       { name: "Visitor Log", path: "/admin/visitors/log", pageKey: "visitorsLog", icon: "📋" },

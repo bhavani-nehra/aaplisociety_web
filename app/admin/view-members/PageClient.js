@@ -1,4 +1,5 @@
 'use client';
+import { MembersBand } from "@/components/dash/PageBands";
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import styles from '@/styles/ViewMembers.module.css';
@@ -104,6 +105,8 @@ export default function ViewMembersPage() {
         <SmallStat icon="user-circle" label="Owner-occupied" value={ownerCount} />
         <SmallStat icon="key-round" label="Rented" value={rentedCount} />
       </div>
+
+      <MembersBand />
 
       {/* ── Filters ───────────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>

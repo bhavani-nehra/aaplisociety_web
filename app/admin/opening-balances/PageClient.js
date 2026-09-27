@@ -211,9 +211,25 @@ export default function OpeningBalancesScreen() {
       ) : !status ? (
         <NoFinancialYear what="entering opening balances" />
       ) : status.openingBalancesConfirmed ? (
-        <Banner tone="success" icon="check-circle">
-          Opening balances are already posted and confirmed for this Financial Year. To change them, ask your accountant to post a correcting Journal Entry — the opening slip itself is locked once posted, the same way a paper cash book's first page isn't rewritten.
-        </Banner>
+        <div style={{ display: "grid", gap: 14 }}>
+          <Banner tone="success" icon="check-circle">
+            Opening position is posted and locked for this year. It is the first page of the books, so it is corrected with a Journal Entry, never rewritten.
+          </Banner>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 12 }}>
+            {[
+              ["See the opening slip", "It is the first voucher of the year — every figure entered here.", "/admin/accounting/vouchers"],
+              ["Correct a figure", "Post one dated Journal Entry that moves the amount.", "/admin/accounting/journal-entries"],
+              ["Check the flats' dues", "Each member's opening due sits in their passbook.", "/admin/ledger"],
+              ["See the year so far", "Billed, collected, spent and what is left.", "/admin/accounting/year-summary"],
+              ["Books check", "Confirm the books still balance after the opening.", "/admin/accounting/your-year"],
+            ].map(([t, sub, href]) => (
+              <a key={t} href={href} onClick={(e) => { e.preventDefault(); router.push(href); }} style={{ display: "block", textDecoration: "none", color: "inherit", border: "1px solid var(--hairline, #e3e9f7)", borderRadius: 14, padding: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{t} ›</div>
+                <div style={{ fontSize: 12.5, opacity: 0.75, marginTop: 4 }}>{sub}</div>
+              </a>
+            ))}
+          </div>
+        </div>
       ) : !status.canEnterOpening && correctionChoice !== "enter" ? (
         <>
           <Banner tone="danger" icon="alert-triangle">

@@ -771,3 +771,20 @@
     transform: translateY(-8px);
   }
 }
+
+/* Command bar: sits on its own solid strip so scrolled content never shows
+   through or overlaps the controls. */
+.commandSticky {
+  top: 0;
+  margin: 0 0 12px;
+  padding: 10px 0 12px;
+  background: #f1eee3;
+  border-radius: 0 0 16px 16px;
+}
+:global(html[data-theme="dark"]) .commandSticky {
+  background: #0b0b0f;
+}
+.commandSticky input,
+.commandSticky button {
+  border-radius: 12px !important;
+}

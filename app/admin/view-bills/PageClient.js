@@ -1,4 +1,5 @@
 "use client";
+import { BillsBand } from "@/components/dash/PageBands";
 import { useState, useEffect, useMemo } from "react";
 import DOMPurify from "dompurify";
 import { useQuery } from "@tanstack/react-query";
@@ -221,23 +222,21 @@ export default function ViewBillsPage() {
   const [viewMode, setViewMode] = useState("cards");
   const isDark = useIsDark();
   const { data: billsData, isLoading } = useQuery({
-    queryKey: ["view-bills", selectedPeriod, filterStatus],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (selectedPeriod !== "all") params.append("period", selectedPeriod);
-      if (filterStatus !== "all") params.append("status", filterStatus);
-      const qs = params.toString();
-      return apiClient.get(`/api/billing/generated${qs ? "?" + qs : ""}`);
-    },
+    // The endpoint returns every bill and ignores period/status params, so
+    // the period and status filters are applied here, on the client.
+    queryKey: ["view-bills"],
+    queryFn: () => apiClient.get("/api/billing/generated"),
   });
   const { data: receiptsData, isLoading: receiptsLoading } = useQuery({
     queryKey: ["bill-receipts", viewingBill?.memberId?._id],
     queryFn: () => apiClient.get(`/api/receipts?memberId=${viewingBill.memberId._id}`),
     enabled: !!viewingBill?.memberId?._id && activeTab === "receipts",
   });
-  const bills = billsData?.bills || [];
-  const periods = [...new Set(bills.map((b) => b.billPeriodId))].filter(Boolean).sort().reverse();
+  const allBills = billsData?.bills || [];
+  const periods = [...new Set(allBills.map((b) => b.billPeriodId))].filter(Boolean).sort().reverse();
+  const bills = allBills.filter((b) => selectedPeriod === "all" || b.billPeriodId === selectedPeriod);
   const filteredBills = bills.filter((b) => {
+    if (filterStatus !== "all" && b.status !== filterStatus) return false;
     const q = searchTerm.toLowerCase();
     const matchesSearch =
       b.memberId?.flatNo?.toLowerCase().includes(q) ||
@@ -305,7 +304,7 @@ export default function ViewBillsPage() {
   // The status filter is applied server-side, so `bills` only ever holds the
   // selected status once one is picked — counting the other tabs from it would
   // report 0. Show per-tab counts only on the unfiltered set.
-  const statusCount = (s) => (filterStatus === "all" ? bills.filter((b) => b.status === s).length : undefined);
+  const statusCount = (s) => bills.filter((b) => b.status === s).length;
 
   return (
     <div className={styles.container}>
@@ -349,6 +348,8 @@ export default function ViewBillsPage() {
           </div>
         </div>
       </Card>
+
+      <BillsBand bills={filteredBills} label={selectedPeriod !== "all" ? selectedPeriod : "All periods"} />
 
       {/* ── Filters ───────────────────────────────────────────────── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 12, flexWrap: "wrap" }}>

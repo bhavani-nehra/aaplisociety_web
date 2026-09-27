@@ -3,9 +3,9 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { produce } from "immer";
-import {
-  PageHeader, Card, CardHead, Btn, Icon, RevampSkeleton, Toast,
-} from "@/components/revamp";
+import Link from "next/link";
+import { RevampSkeleton, Toast } from "@/components/revamp";
+import "@/components/money/money.css";
 
 // Config group register (final_audit_fix_plan/06-skills-and-execution-tooling.md
 // §13): "Calm/minimal — infrequent, high-consequence screens, maximum
@@ -177,340 +177,156 @@ export default function SocietyConfigPage() {
 
   if (isLoading) {
     return (
-      <div style={{ maxWidth: 900, margin: "0 auto" }}>
-        <RevampSkeleton h={64} style={{ marginBottom: 14 }} />
-        <RevampSkeleton h={220} style={{ marginBottom: 14 }} />
-        <RevampSkeleton h={280} />
+      <div style={{ maxWidth: 1180, margin: "0 auto" }}>
+        <RevampSkeleton h={80} style={{ marginBottom: 14 }} />
+        <RevampSkeleton h={260} />
       </div>
     );
   }
 
-  // Was a bare `maxWidth: 760` with no centering — on anything wider than
-  // that (every real monitor) the form sat flush left with a dead gap
-  // filling the rest of the content frame, which is what read as the page
-  // stopping short partway across ("cuts at 90%"). Centered and widened
-  // slightly; still a single readable column, just not orphaned on one side.
+  const c = formData.config;
+  const dueDay = Number(c.billDueDay) || 0;
+  const example = (100000 * (Number(c.interestRate) || 0)) / 1200;
+  const steps = [
+    ["Bills created", c.billGenerationDay],
+    ["Payments uploaded", c.paymentUploadDay],
+    ["Due date", c.billDueDay],
+    ["Interest begins", dueDay + (Number(c.interestAfterDays) || 0)],
+  ];
+  const field = (label, help, error, control) => (
+    <label className="mn-field"><span className="l">{label}</span>{control}{error ? <small className="err">{error}</small> : help ? <small>{help}</small> : null}</label>
+  );
+  const num = (k, min, max, step, err) => (
+    <input
+      type="number" min={min} max={max} step={step} value={c[k]} className={`mn-input ${err ? "bad" : ""}`}
+      onChange={(e) => handleChange(`config.${k}`, step ? parseFloat(e.target.value) || 0 : Number(e.target.value))}
+    />
+  );
+
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto" }}>
-      <form onSubmit={handleSubmit}>
-        <PageHeader
-          eyebrow="Config"
-          title="Society Configuration"
-          sub="Society details and financial parameters"
-          right={
-            <div style={{ display: "flex", gap: 8 }}>
-              <Btn variant="ghost" icon="rotate-ccw" onClick={() => window.location.reload()}>
-                Reset changes
-              </Btn>
-              <Btn
-                variant="primary"
-                icon={updateMutation.isPending ? undefined : "save"}
-                type="submit"
-                disabled={updateMutation.isPending}
-              >
-                {updateMutation.isPending ? "Saving…" : "Save configuration"}
-              </Btn>
-            </div>
-          }
-        />
+    <div className="mn" style={{ maxWidth: 1180, margin: "0 auto", display: "grid", gap: 14 }}>
+      <form onSubmit={handleSubmit} style={{ display: "grid", gap: 14 }}>
+        <div className="mn-card mn-h" style={{ flexWrap: "wrap", padding: "16px 24px" }}>
+          <div>
+            <div className="mn-lbl">Config</div>
+            <div style={{ fontSize: 22, fontWeight: 600, color: "var(--mn-navy)", marginTop: 4 }} className="mn-ov-title">Society configuration</div>
+            <div className="mn-sub">Society details, interest rules and the monthly billing calendar.</div>
+          </div>
+          <div className="mn-row" style={{ flexWrap: "wrap" }}>
+            <button type="button" className="mn-btn" onClick={() => window.location.reload()}>Reset changes</button>
+            <button type="submit" className="mn-btn solid" disabled={updateMutation.isPending}>{updateMutation.isPending ? "Saving…" : "Save configuration"}</button>
+          </div>
+          <style>{`:root[data-theme="dark"] .mn-ov-title{color:var(--mn-ink)!important}`}</style>
+        </div>
 
-        {errors.submit && (
-          <Card style={{ marginBottom: 16, borderColor: "var(--r-danger)" }}>
-            <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-              <Icon name="alert-circle" size={16} color="var(--r-danger)" />
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--r-fg-1)" }}>Update failed</div>
-                <div style={{ fontSize: 12.5, color: "var(--r-fg-3)", marginTop: 2 }}>{errors.submit}</div>
+        {errors.submit && <div className="mn-card" style={{ borderColor: "var(--mn-bad)" }}><b style={{ color: "var(--mn-bad)" }}>Update failed</b><div className="mn-sub" style={{ marginTop: 4 }}>{errors.submit}</div></div>}
+
+        <div className="mn-grid">
+          <div className="mn-s8" style={{ display: "grid", gap: 14, alignContent: "start" }}>
+            <div className="mn-card">
+              <div className="mn-lbl">Society</div>
+              <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
+                {field("Society name *", null, errors.name,
+                  <input type="text" className={`mn-input ${errors.name ? "bad" : ""}`} value={formData.name} onChange={(e) => handleChange("name", e.target.value)} placeholder="Green Valley Apartments" />)}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
+                  {field("Registration number", null, null,
+                    <input type="text" className="mn-input" value={formData.registrationNo} onChange={(e) => handleChange("registrationNo", e.target.value)} placeholder="REG/2024/1234" />)}
+                  {field("Address", null, null,
+                    <textarea rows="2" className="mn-input" value={formData.address} onChange={(e) => handleChange("address", e.target.value)} placeholder="Complete society address" />)}
+                </div>
               </div>
             </div>
-          </Card>
-        )}
 
-        <Card style={{ marginBottom: 16 }}>
-          <CardHead title="Basic information" />
-          <div style={{ display: "grid", gap: 16 }}>
-            <div>
-              <label className="label">Society name *</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => handleChange("name", e.target.value)}
-                className={`input ${errors.name ? "input-error" : ""}`}
-                placeholder="Green Valley Apartments"
-              />
-              {errors.name && <p className="error-text">{errors.name}</p>}
+            <div className="mn-card">
+              <div className="mn-lbl">Money rules</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14, marginTop: 14 }}>
+                {field("Interest on arrears (% a year) *", "Charged on overdue dues, e.g. 21.", errors.interestRate, num("interestRate", "0", "100", "0.01", errors.interestRate))}
+                {field("Service tax (%)", "Applied on total charges, e.g. 2.", errors.serviceTaxRate, num("serviceTaxRate", "0", "100", "0.01", errors.serviceTaxRate))}
+                {field("Interest rounding", "Use Round up if the society never spares even ₹0.01.", null,
+                  <select className="mn-input" value={c.interestRounding || "TWO_DECIMAL"} onChange={(e) => handleChange("config.interestRounding", e.target.value)}>
+                    <option value="TWO_DECIMAL">2 decimals (10.256 becomes 10.26)</option>
+                    <option value="ROUND_UP">Round up to a whole rupee (10.001 becomes 11)</option>
+                  </select>)}
+                {field("Interest use mode", "Which interest a payment clears first.", null,
+                  <select className="mn-input" value={c.interestUseMode || "OLDEST_FIRST"} onChange={(e) => handleChange("config.interestUseMode", e.target.value)}>
+                    <option value="OLDEST_FIRST">Oldest first</option>
+                    <option value="TOTAL">One pool for all interest</option>
+                  </select>)}
+              </div>
+              <label className="mn-switch" style={{ marginTop: 14 }}>
+                <input type="checkbox" checked={c.memberPaymentBreakdownVisible !== false} onChange={(e) => handleChange("config.memberPaymentBreakdownVisible", e.target.checked)} />
+                <span className="knob" />
+                <span><b>Members see the payment breakdown</b><small>Shows how much of a payment went to interest and how much to dues.</small></span>
+              </label>
             </div>
-            <div>
-              <label className="label">Registration number</label>
-              <input
-                type="text"
-                value={formData.registrationNo}
-                onChange={(e) => handleChange("registrationNo", e.target.value)}
-                className="input"
-                placeholder="REG/2024/1234"
-              />
-            </div>
-            <div>
-              <label className="label">Address</label>
-              <textarea
-                value={formData.address}
-                onChange={(e) => handleChange("address", e.target.value)}
-                className="input"
-                rows="3"
-                placeholder="Complete society address"
-              />
+
+            <div className="mn-card">
+              <div className="mn-h" style={{ flexWrap: "wrap" }}><span className="mn-lbl">Monthly billing calendar</span><span className="mn-sub">Day numbers only. February uses its last day.</span></div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14, marginTop: 14 }}>
+                {field("Bill creation day", "Create monthly bills by this day.", errors.billGenerationDay, num("billGenerationDay", "1", "31", null, errors.billGenerationDay))}
+                {field("Payment upload day", "Upload the payment Excel by this day.", errors.paymentUploadDay, num("paymentUploadDay", "1", "31", null, errors.paymentUploadDay))}
+                {field("Bill due day", "Members should pay by this day.", errors.billDueDay, num("billDueDay", "1", "31", null, errors.billDueDay))}
+                {field("Interest starts after (days)", "Days after the due day.", errors.interestAfterDays,
+                  <input type="number" min="0" max="365" className={`mn-input ${errors.interestAfterDays ? "bad" : ""}`} value={c.interestAfterDays} onChange={(e) => handleChange("config.interestAfterDays", parseInt(e.target.value) || 0)} />)}
+              </div>
             </div>
           </div>
-        </Card>
 
-        <Card style={{ marginBottom: 16 }}>
-          <CardHead title="Financial parameters" />
-          <div style={{ display: "grid", gap: 16 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
-              <div>
-                <label className="label">Interest rate on arrears (% p.a.) *</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  value={formData.config.interestRate}
-                  onChange={(e) => handleChange("config.interestRate", parseFloat(e.target.value) || 0)}
-                  className={`input ${errors.interestRate ? "input-error" : ""}`}
-                  placeholder="21.00"
-                />
-                {errors.interestRate ? (
-                  <p className="error-text">{errors.interestRate}</p>
-                ) : (
-                  <p style={{ fontSize: 12, color: "var(--r-fg-4)", marginTop: 6 }}>
-                    Annual interest rate on overdue payments (e.g., 21% p.a.)
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="label">Service tax rate (%)</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  value={formData.config.serviceTaxRate}
-                  onChange={(e) => handleChange("config.serviceTaxRate", parseFloat(e.target.value) || 0)}
-                  className={`input ${errors.serviceTaxRate ? "input-error" : ""}`}
-                  placeholder="2.00"
-                />
-                {errors.serviceTaxRate ? (
-                  <p className="error-text">{errors.serviceTaxRate}</p>
-                ) : (
-                  <p style={{ fontSize: 12, color: "var(--r-fg-4)", marginTop: 6 }}>
-                    Tax applied on total charges (e.g., GST 2%)
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="label">Interest rounding</label>
-                <select
-                  value={formData.config.interestRounding || "TWO_DECIMAL"}
-                  onChange={(e) => handleChange("config.interestRounding", e.target.value)}
-                  className="input"
-                >
-                  <option value="TWO_DECIMAL">2 decimal (e.g. 10.256 → 10.26)</option>
-                  <option value="ROUND_UP">Round up to whole rupee (e.g. 10.001 → 11)</option>
-                </select>
-                <p style={{ fontSize: 12, color: "var(--r-fg-4)", marginTop: 6 }}>
-                  Society never spares even ₹0.01 — use Round Up
-                </p>
-              </div>
-              <div>
-                <label className="label">Interest use mode</label>
-                <select
-                  value={formData.config.interestUseMode || "OLDEST_FIRST"}
-                  onChange={(e) => handleChange("config.interestUseMode", e.target.value)}
-                  className="input"
-                >
-                  <option value="OLDEST_FIRST">Oldest first — clear oldest period&rsquo;s interest first</option>
-                  <option value="TOTAL">Total pool — treat all interest as one bucket</option>
-                </select>
-              </div>
-            </div>
-
-            <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={formData.config.memberPaymentBreakdownVisible !== false}
-                onChange={(e) => handleChange("config.memberPaymentBreakdownVisible", e.target.checked)}
-                style={{ marginTop: 3 }}
-              />
-              <span>
-                <span style={{ display: "block", fontSize: 13.5, fontWeight: 500, color: "var(--r-fg-1)" }}>
-                  Member payment breakdown visible
-                </span>
-                <span style={{ display: "block", fontSize: 12, color: "var(--r-fg-4)", marginTop: 2 }}>
-                  Show members how much goes to interest vs principal
-                </span>
-              </span>
-            </label>
-
-            <div style={{ borderTop: "1px solid var(--r-hairline)", paddingTop: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--r-fg-2)", marginBottom: 4 }}>
-                Monthly billing schedule
-              </div>
-              <p style={{ fontSize: 12, color: "var(--r-fg-4)", marginBottom: 14 }}>
-                Enter only a day number. Example: 30 means the 30th of every month. February
-                automatically uses its last day. Admins receive email and in-app reminders one day
-                before bill creation and payment upload.
-              </p>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 16 }}>
-                {[
-                  ["billGenerationDay", "Bill creation day", "Create monthly bills by this day"],
-                  ["paymentUploadDay", "Payment upload day", "Upload the payment Excel by this day"],
-                  ["billDueDay", "Bill due day", "Members should pay by this day"],
-                ].map(([key, label, help]) => (
-                  <div key={key}>
-                    <label className="label">{label}</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="31"
-                      step="1"
-                      value={formData.config[key]}
-                      onChange={(e) => handleChange(`config.${key}`, Number(e.target.value))}
-                      className={`input ${errors[key] ? "input-error" : ""}`}
-                    />
-                    <p style={{ fontSize: 12, color: "var(--r-fg-4)", marginTop: 6 }}>{help}</p>
-                    {errors[key] && <p className="error-text">{errors[key]}</p>}
-                  </div>
-                ))}
-              </div>
-
-              {/* Live timeline built from the three day-numbers above — grounds
-                  three lonely input boxes in what they actually mean for a
-                  real month, instead of leaving the admin to do the mental
-                  math themselves. Updates as the fields change. */}
-              <div style={{
-                display: "flex", alignItems: "center", marginTop: 20, padding: "14px 4px",
-                overflowX: "auto",
-              }}>
-                {[
-                  { day: formData.config.billGenerationDay, label: "Bills created", icon: "file-spreadsheet" },
-                  { day: formData.config.paymentUploadDay, label: "Payments uploaded", icon: "upload" },
-                  { day: formData.config.billDueDay, label: "Due date", icon: "flag" },
-                  { day: (Number(formData.config.billDueDay) || 0) + (Number(formData.config.interestAfterDays) || 0), label: "Interest begins", icon: "percent", wraps: true },
-                ].map((step, i, arr) => (
-                  <div key={step.label} style={{ display: "flex", alignItems: "center", flex: i < arr.length - 1 ? 1 : "0 0 auto", minWidth: 92 }}>
-                    <div style={{ textAlign: "center", flexShrink: 0 }}>
-                      <div style={{
-                        width: 34, height: 34, borderRadius: "50%", margin: "0 auto 8px",
-                        background: "var(--r-brand-soft)", color: "var(--r-brand)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                      }}>
-                        <Icon name={step.icon} size={15} />
-                      </div>
-                      <div className="revamp-num" style={{ fontSize: 15, fontWeight: 700, color: "var(--r-fg-1)" }}>
-                        {step.wraps && step.day > 31 ? `+${Number(formData.config.interestAfterDays) || 0}d` : `Day ${step.day || "—"}`}
-                      </div>
-                      <div style={{ fontSize: 10.5, color: "var(--r-fg-4)", marginTop: 2, whiteSpace: "nowrap" }}>{step.label}</div>
-                    </div>
-                    {i < arr.length - 1 && (
-                      <div style={{ flex: 1, height: 1, background: "var(--r-border)", margin: "0 4px 26px" }} />
-                    )}
+          <div className="mn-s4" style={{ display: "grid", gap: 14, alignContent: "start" }}>
+            <div className="mn-dk">
+              <div className="mn-lbl">A month, as members live it</div>
+              <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+                {steps.map(([l, day], i) => (
+                  <div key={l} className="mn-row" style={{ gap: 12 }}>
+                    <span className="mn-av" style={{ width: 34, height: 34, fontSize: 12 }}>{i + 1}</span>
+                    <div style={{ flex: 1 }}><b style={{ fontSize: 13 }}>{l}</b></div>
+                    <b className="mn-num" style={{ fontSize: 16 }}>{i === 3 && day > 31 ? `due + ${Number(c.interestAfterDays) || 0}d` : `Day ${day || "—"}`}</b>
                   </div>
                 ))}
               </div>
             </div>
-
-            <div style={{ borderTop: "1px solid var(--r-hairline)", paddingTop: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--r-fg-2)", marginBottom: 10 }}>
-                Interest info
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <label style={{ fontSize: 13, fontWeight: 500, color: "var(--r-fg-3)", whiteSpace: "nowrap" }}>
-                  Interest starts after due date
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="365"
-                  value={formData.config.interestAfterDays}
-                  onChange={(e) => handleChange("config.interestAfterDays", parseInt(e.target.value) || 0)}
-                  className="input"
-                  style={{ width: 80, textAlign: "center" }}
-                />
-                <span style={{ fontSize: 13, color: "var(--r-fg-4)" }}>days after the recurring bill due day</span>
-                {errors.interestAfterDays && (
-                  <span style={{ fontSize: 12, color: "var(--r-danger)" }}>{errors.interestAfterDays}</span>
-                )}
+            <div className="mn-card">
+              <div className="mn-lbl">What the interest rule means</div>
+              <div className="mn-num" style={{ fontSize: 26, marginTop: 8 }}>₹{example.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</div>
+              <div className="mn-sub" style={{ marginTop: 4 }}>a month on ₹1,00,000 overdue, at {Number(c.interestRate) || 0}% a year.</div>
+            </div>
+            <div className="mn-card">
+              <div className="mn-lbl">Related</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+                <Link className="mn-btn" href="/admin/billing-config">Billing heads</Link>
+                <Link className="mn-btn" href="/admin/bill-template">Bill template</Link>
+                <Link className="mn-btn" href="/admin/rbac/roles">Roles &amp; access</Link>
               </div>
             </div>
           </div>
-        </Card>
+        </div>
 
-        {/* Commercial module. Always visible to admins - this is the only
-            place the module can be switched on. Every flag defaults to off. */}
-        <Card>
-          <CardHead
-            title="Commercial module"
-            sub="Directory of the shops and offices inside this society. Changes save immediately — the Save button above does not apply to this section. Turning the master switch off hides the module instantly for members and admins. No data is deleted."
-          />
-          {commercialMutation.isError && (
-            <div style={{ marginBottom: 14, fontSize: 12.5, color: "var(--r-danger)" }}>
-              Could not update: {commercialMutation.error?.message}
-            </div>
-          )}
-          <div style={{ display: "grid", gap: 14 }}>
+        <div className="mn-card">
+          <div className="mn-lbl">Commercial module</div>
+          <div className="mn-sub" style={{ marginTop: 4 }}>Shops and offices inside this society. These switches save at once; the Save button above does not apply. Turning the master switch off hides the module. No data is deleted.</div>
+          {commercialMutation.isError && <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--mn-bad)" }}>Could not update: {commercialMutation.error?.message}</div>}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12, marginTop: 14 }}>
             {[
-              ["enabled", "Enable commercial module",
-                "Master switch. Off means nothing commercial exists for this society."],
-              ["directoryEnabled", "Show the directory in the member app",
-                "Members can browse published shops. Off keeps listings admin-only."],
-              ["ownerEditingEnabled", "Let shop owners edit their own listing",
-                "Owners edit details; publishing and suspending stay with the admin."],
-              ["commercialBillingEnabled", "Allow charges restricted to shops/offices",
-                "Lets a billing head target specific unit types. Off means every head applies to everyone, exactly as today."],
+              ["enabled", "Enable commercial module", "Master switch. Off means nothing commercial exists here."],
+              ["directoryEnabled", "Show the directory in the member app", "Members browse published shops. Off keeps listings admin-only."],
+              ["ownerEditingEnabled", "Let shop owners edit their listing", "Publishing and suspending stay with the admin."],
+              ["commercialBillingEnabled", "Allow charges limited to shops and offices", "Off means every billing head applies to everyone."],
             ].map(([key, label, help]) => {
               const locked = key !== "enabled" && !commercialFlags.enabled;
               return (
-                <label
-                  key={key}
-                  style={{
-                    display: "flex",
-                    gap: 10,
-                    alignItems: "flex-start",
-                    opacity: locked ? 0.5 : 1,
-                    cursor: locked ? "not-allowed" : "pointer",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={!!commercialFlags[key]}
-                    disabled={locked || commercialMutation.isPending}
-                    onChange={(e) => commercialMutation.mutate({ [key]: e.target.checked })}
-                    style={{ marginTop: 3 }}
-                  />
-                  <span>
-                    <span style={{ display: "block", fontSize: 13.5, fontWeight: 500, color: "var(--r-fg-1)" }}>
-                      {label}
-                    </span>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--r-fg-4)", marginTop: 2 }}>
-                      {help}
-                    </span>
-                  </span>
+                <label key={key} className={`mn-switch ${locked ? "off" : ""}`}>
+                  <input type="checkbox" checked={!!commercialFlags[key]} disabled={locked || commercialMutation.isPending} onChange={(e) => commercialMutation.mutate({ [key]: e.target.checked })} />
+                  <span className="knob" />
+                  <span><b>{label}</b><small>{help}</small></span>
                 </label>
               );
             })}
           </div>
-          {commercialFlags.enabled && (
-            <p style={{ marginTop: 14, fontSize: 12, color: "var(--r-fg-4)" }}>
-              Manage listings under Commercial in the sidebar.
-            </p>
-          )}
-        </Card>
+          {commercialFlags.enabled && <Link className="mn-link" href="/admin/commercial" style={{ display: "inline-block", marginTop: 12 }}>Open Shops &amp; offices ›</Link>}
+        </div>
       </form>
 
-      <Toast
-        toast={successMessage ? { message: successMessage, type: "success" } : null}
-        onClose={() => setSuccessMessage("")}
-      />
+      <Toast toast={successMessage ? { message: successMessage, type: "success" } : null} onClose={() => setSuccessMessage("")} />
     </div>
   );
 }

@@ -6,6 +6,7 @@
  */
 import { useState } from "react";
 import Link from "next/link";
+import { Wallet, CalendarRange, Calendar, Search, Plus, AlertCircle, PiggyBank, TrendingDown, TrendingUp, CalendarClock, Droplets, Gauge as GaugeIcon, Banknote } from "lucide-react";
 import {
   useMoneyInsights, inr, compact, fmtDate, ago, flatOf, initials, pct, currentFy,
   Skeleton, BandError, Empty, Delta, AreaTrend, Sparkline, CapsuleBars, Ring, Donut, Heatmap, BarList, StackBar, PALETTE,
@@ -21,11 +22,11 @@ const HREF = {
   statements: "/admin/accounting/statements",
 };
 
-function Kpi({ label, value, sub, spark, sparkColor, href, tone }) {
+function Kpi({ label, value, sub, spark, sparkColor, href, tone, icon }) {
   return (
     <Link href={href} className="mn-card tight" style={{ textDecoration: "none", color: "inherit", display: "block" }}>
-      <div className="mn-lbl">{label}</div>
-      <div className="mn-num" style={{ fontSize: 25, marginTop: 8, color: tone }}>{value}</div>
+      <div className="mn-h"><span className="mn-lbl">{label}</span>{icon}</div>
+      <div className="mn-num" style={{ fontSize: 26, marginTop: 8, color: tone }}>{value}</div>
       <div className="mn-h" style={{ marginTop: 6, alignItems: "flex-end" }}>
         <span className="mn-sub">{sub}</span>
         {spark && <Sparkline values={spark} w={70} h={22} color={sparkColor} />}
@@ -89,47 +90,49 @@ function DueDetail({ m }) {
   );
 }
 
-function Slab({ d }) {
-  const [tab, setTab] = useState("payments");
+function Workbench({ d }) {
   const [sel, setSel] = useState(0);
-  const list = tab === "payments" ? d.recent : d.top;
+  const list = d.recent;
   const cur = list[sel] || list[0];
   const tabs = [
-    { key: "payments", label: "Recent payments", n: d.recent.length },
-    { key: "late", label: "Owes the most", n: d.dues.overdueUnits },
+    { key: "payments", label: "Payments", n: d.thisMonth.count, on: true },
+    { key: "receipts", label: "Receipts", n: d.receipts, href: HREF.receipts },
+    { key: "late", label: "Late", n: d.dues.overdueUnits, href: HREF.late, late: true },
+    { key: "passbook", label: "Passbook", href: HREF.passbook },
+    { key: "expenses", label: "Expenses", href: HREF.expenses },
   ];
   return (
-    <div className="mn-card mn-s12" style={{ padding: 0 }}>
-      <div className="mn-h" style={{ padding: "14px 18px", borderBottom: "1px solid var(--mn-line)", flexWrap: "wrap" }}>
-        <div className="mn-tabs" role="tablist">
-          {tabs.map((t) => (
-            <button key={t.key} role="tab" aria-selected={tab === t.key} className={`mn-tab ${tab === t.key ? "on" : ""}`} onClick={() => { setTab(t.key); setSel(0); }}>
-              {t.label}<span className="n">{t.n}</span>
-            </button>
-          ))}
-        </div>
-        <Link className="mn-link" href={tab === "payments" ? HREF.payments : HREF.late}>Open full list ›</Link>
+    <div className="mn-wb mn-s12">
+      <div className="mn-wb-notch" role="tablist">
+        {tabs.map((t) => (
+          <button key={t.key} role="tab" aria-selected={!!t.on} className={t.on ? "on" : ""} onClick={() => { if (!t.on) window.location.assign(t.href); }}>
+            {t.label}{t.n ? <span className={t.late ? "late" : ""}>{t.n}</span> : null}
+          </button>
+        ))}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.25fr) minmax(0, 1fr)", gap: 16, padding: 16 }} className="mn-slab">
-        <div className="mn-list" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))" }}>
-          {list.map((x, i) => (
-            <button key={x._id || x.memberId} className={`mn-pick ${i === sel ? "on" : ""}`} onClick={() => setSel(i)}>
-              <span className="mn-av">{initials(tab === "payments" ? x.member?.ownerName : x.ownerName)}</span>
-              <span style={{ minWidth: 0 }}>
-                <span className="mn-ell" style={{ display: "block", fontWeight: 650, fontSize: 13 }}>{tab === "payments" ? (x.member?.ownerName || x.description || "Payment") : x.ownerName}</span>
-                <span className="mn-sub mn-ell" style={{ display: "block" }}>{tab === "payments" ? [flatOf(x.member), x.paymentMode, fmtDate(x.date)].filter(Boolean).join(" · ") : `${flatOf(x)} · ${x.daysOverdue} days`}</span>
-              </span>
-              <b style={{ fontSize: 13, color: tab === "late" ? "var(--mn-bad)" : undefined }}>{compact(tab === "payments" ? x.amount : x.balance)}</b>
-            </button>
-          ))}
-          {!list.length && <Empty h={200}>{tab === "payments" ? "No payments recorded yet." : "Nobody is past the due date."}</Empty>}
+      <div className="mn-wb-grid">
+        <div>
+          <p className="mn-wb-h">Recent payments</p>
+          <div className="mn-wb-rows">
+            {list.map((x, i) => (
+              <button key={x._id || i} className={`mn-wb-row ${i === sel ? "sel" : ""}`} onClick={() => setSel(i)}>
+                <span className="mn-av">{initials(x.member?.ownerName)}</span>
+                <span style={{ minWidth: 0 }}>
+                  <b className="mn-ell">{x.member?.ownerName || x.description || "Payment"}</b>
+                  <small className="mn-ell">{[flatOf(x.member), x.paymentMode, fmtDate(x.date)].filter(Boolean).join(" · ")}</small>
+                </span>
+                <span className="amt">{compact(x.amount)}</span>
+              </button>
+            ))}
+            {!list.length && <Empty h={200}>No payments recorded yet.</Empty>}
+          </div>
+          <div style={{ marginTop: 14 }}><Link className="mn-link" href={HREF.payments} style={{ color: "#9db8ff" }}>Open full list ›</Link></div>
         </div>
-        <div className="mn-dk" style={{ alignSelf: "start" }}>
-          <div className="mn-orb" style={{ width: 200, height: 200, top: -80, right: -80 }} />
-          <div style={{ position: "relative" }}>{tab === "payments" ? <PaymentDetail p={cur} /> : <DueDetail m={cur} />}</div>
+        <div className="mn-wb-detail">
+          <div className="mn-wb-glow" />
+          <div style={{ position: "relative" }}><PaymentDetail p={cur} /></div>
         </div>
       </div>
-      <style>{`@media(max-width:900px){.mn-slab{grid-template-columns:1fr!important}}`}</style>
     </div>
   );
 }
@@ -164,22 +167,26 @@ export default function MoneyOverviewBoard() {
   const lastWithIncome = [...s].reverse().find((m) => m.collected || m.spent);
 
   return (
-    <div className="mn mn-grid" style={{ background: "linear-gradient(135deg, var(--mn-tint), transparent 55%)", padding: 14, borderRadius: 30 }}>
+    <div className="mn mn-grid">
       {/* header */}
-      <div className="mn-card tight mn-s12 mn-h" style={{ flexWrap: "wrap" }}>
-        <div className="mn-row">
-          <span className="mn-av" style={{ width: 42, height: 42, background: "var(--mn-navy)", color: "var(--mn-on-navy)" }}>₹</span>
+      <div className="mn-card tight mn-s12 mn-h" style={{ flexWrap: "wrap", padding: "14px 24px" }}>
+        <div className="mn-row" style={{ gap: 12 }}>
+          <span style={{ width: 44, height: 44, borderRadius: 16, background: "#1e3a8a", color: "#f5f8ff", display: "grid", placeItems: "center" }}><Wallet size={20} /></span>
           <div>
-            <div style={{ fontSize: 19, fontWeight: 650, color: "var(--mn-navy)" }} className="mn-ov-title">Money{d.society ? ` · ${d.society}` : ""}</div>
-            <div className="mn-sub">{d.members} flats · figures from your bills, payments, expenses and books</div>
+            <div style={{ fontSize: 19, fontWeight: 600, color: "var(--mn-navy)", lineHeight: 1 }} className="mn-ov-title">Money{d.society ? ` · ${d.society}` : ""}</div>
+            <div className="mn-sub" style={{ marginTop: 5 }}>Accounting overview · {d.members} flats</div>
           </div>
         </div>
-        <div className="mn-row" style={{ flexWrap: "wrap" }}>
-          <select className="mn-btn" value={fy} onChange={(e) => setFy(parseInt(e.target.value, 10))} aria-label="Financial year">
-            {[0, 1, 2, 3].map((k) => { const y = currentFy() - k; return <option key={y} value={y}>FY {y}-{String(y + 1).slice(-2)}</option>; })}
-          </select>
-          <button className="mn-btn" onClick={() => q.refetch()} disabled={q.isFetching}>{q.isFetching ? "Refreshing…" : "Refresh"}</button>
-          <Link className="mn-btn solid" href={HREF.payments}>Record payment</Link>
+        <div className="mn-row" style={{ flexWrap: "wrap", gap: 8 }}>
+          <label className="mn-row" style={{ background: "var(--mn-tint)", borderRadius: 99, padding: "7px 12px", fontSize: 12, fontWeight: 500, color: "var(--mn-navy)", gap: 6 }}>
+            <CalendarRange size={14} />
+            <select value={fy} onChange={(e) => setFy(parseInt(e.target.value, 10))} aria-label="Financial year" style={{ background: "transparent", border: 0, font: "inherit", color: "inherit", cursor: "pointer" }}>
+              {[0, 1, 2, 3].map((k) => { const y = currentFy() - k; return <option key={y} value={y}>FY {y}-{String(y + 1).slice(-2)}</option>; })}
+            </select>
+          </label>
+          <span className="mn-row" style={{ border: "1px solid var(--mn-line)", borderRadius: 99, padding: "7px 12px", fontSize: 12, color: "var(--mn-sub)", gap: 6 }}><Calendar size={14} />1 Apr – 31 Mar</span>
+          <button className="mn-btn" style={{ width: 36, height: 36, padding: 0, justifyContent: "center", background: "transparent", border: "1px solid var(--mn-line)" }} onClick={() => q.refetch()} disabled={q.isFetching} aria-label="Refresh figures" title={q.isFetching ? "Refreshing…" : "Refresh"}><Search size={15} /></button>
+          <Link className="mn-btn solid" href={HREF.payments} style={{ background: "#6b8eef", color: "#f5f8ff", padding: "8px 16px" }}><Plus size={14} />Record payment</Link>
         </div>
         <style>{`:root[data-theme="dark"] .mn-ov-title{color:var(--mn-ink)!important}`}</style>
       </div>
@@ -207,10 +214,10 @@ export default function MoneyOverviewBoard() {
 
       {/* KPIs */}
       <div className="mn-s4" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-        <Kpi label="Pending dues" value={compact(d.dues.total)} sub={`${d.dues.units} flats owe`} href={HREF.late} tone="var(--mn-bad)" />
-        <Kpi label="Advance held" value={compact(d.advance.total)} sub={`${d.advance.members} flats paid ahead`} href={HREF.passbook} />
-        <Kpi label="Spent this month" value={compact(tm.expenses)} sub={`${compact(d.fyTotals.spent)} this year`} spark={s.map((m) => m.spent)} sparkColor="var(--mn-warn)" href={HREF.expenses} />
-        <Kpi label="Left over this year" value={compact(d.fyTotals.surplus)} sub="collected minus spent" spark={s.map((m) => m.collected - m.spent)} sparkColor="var(--mn-ok)" href={HREF.statements} tone={d.fyTotals.surplus < 0 ? "var(--mn-bad)" : undefined} />
+        <Kpi label="Pending dues" value={compact(d.dues.total)} sub={`${d.dues.units} flats owe`} href={HREF.late} tone="var(--mn-bad)" icon={<AlertCircle size={14} color="#dc2626" />} />
+        <Kpi label="Advance held" value={compact(d.advance.total)} sub={`${d.advance.members} flats paid ahead`} href={HREF.passbook} icon={<PiggyBank size={14} color="#6b8eef" />} />
+        <Kpi label="Spent this month" value={compact(tm.expenses)} sub={`${compact(d.fyTotals.spent)} this year`} spark={s.map((m) => m.spent)} sparkColor="var(--mn-warn)" href={HREF.expenses} icon={<TrendingDown size={14} color="#f59e0b" />} />
+        <Kpi label="Left over this year" value={compact(d.fyTotals.surplus)} sub="collected minus spent" spark={s.map((m) => m.collected - m.spent)} sparkColor="var(--mn-ok)" href={HREF.statements} tone={d.fyTotals.surplus < 0 ? "var(--mn-bad)" : "var(--mn-ok)"} icon={<TrendingUp size={14} color="#059669" />} />
       </div>
 
       {/* efficiency + modes */}
@@ -311,21 +318,46 @@ export default function MoneyOverviewBoard() {
         <div style={{ marginTop: 14 }}><BarList rows={d.categories.map((c) => ({ label: c.category, value: c.total }))} color="var(--mn-navy)" /></div>
       </Link>
 
-      <Slab d={d} />
+      {/* dues row */}
+      <Link href={HREF.payments} className="mn-card mn-s3" style={{ textDecoration: "none", color: "inherit" }}>
+        <div className="mn-h"><span className="mn-lbl">Next due{d.nextDue ? ` · ${fmtDate(d.nextDue.date, { weekday: "short", day: "numeric", month: "short" })}` : ""}</span><CalendarClock size={15} /></div>
+        <div className="mn-num" style={{ fontSize: 26, marginTop: 4 }}>{d.nextDue ? inr(d.nextDue.amount) : "—"}</div>
+        <div className="mn-sub" style={{ marginTop: 4 }}>{d.nextDue ? `${d.nextDue.bills} bills open on that date` : "No bill is waiting on a due date"}</div>
+      </Link>
+      <Link href="/admin/accounting/registers" className="mn-card mn-s3" style={{ textDecoration: "none", color: "inherit" }}>
+        <div className="mn-h"><span className="mn-lbl">Bill to pay{d.nextPayable ? ` · ${fmtDate(d.nextPayable.date, { weekday: "short", day: "numeric", month: "short" })}` : ""}</span><Droplets size={15} color="#6b8eef" /></div>
+        <div className="mn-num" style={{ fontSize: 26, marginTop: 4 }}>{d.nextPayable ? inr(d.nextPayable.amount) : "—"}</div>
+        <div className="mn-sub" style={{ marginTop: 4 }}>{d.nextPayable ? `${d.nextPayable.name} · ${Math.max(0, Math.ceil((new Date(d.nextPayable.date) - new Date()) / 864e5))} days left` : "Nothing owed to a vendor is due"}</div>
+      </Link>
+      <Link href={HREF.expenses} className="mn-card mn-s3" style={{ textDecoration: "none", color: "inherit" }}>
+        <div className="mn-h"><span className="mn-lbl">Spend vs billed</span><GaugeIcon size={15} /></div>
+        <div className="mn-h" style={{ alignItems: "flex-end" }}>
+          <div><div className="mn-num" style={{ fontSize: 26, marginTop: 4 }}>{pct(d.fyTotals.spent, d.fyTotals.billed)}%</div><span className="mn-sub">{compact(d.fyTotals.spent)} of {compact(d.fyTotals.billed)}</span></div>
+          <Ring value={pct(d.fyTotals.spent, d.fyTotals.billed)} size={46} stroke={6} color="var(--mn-navy)" track="var(--mn-tint)" />
+        </div>
+      </Link>
+      <Link href={HREF.statements} className="mn-card mn-s3" style={{ textDecoration: "none", color: "inherit" }}>
+        <div className="mn-h"><span className="mn-lbl">Left of what was billed</span><Wallet size={15} color="#059669" /></div>
+        <div className="mn-num" style={{ fontSize: 26, marginTop: 4, color: "var(--mn-ok)" }}>{inr(Math.max(d.fyTotals.billed - d.fyTotals.spent, 0))}</div>
+        <div className="mn-bar-h" style={{ marginTop: 8, height: 8 }}><i style={{ width: `${Math.min(100, 100 - pct(d.fyTotals.spent, d.fyTotals.billed))}%`, background: "linear-gradient(90deg,#1e3a8a,#6b8eef)" }} /></div>
+        <span className="mn-sub" style={{ marginTop: 4, display: "block" }}>{Math.max(0, 100 - pct(d.fyTotals.spent, d.fyTotals.billed))}% of this year's billing left</span>
+      </Link>
+
+      <Workbench d={d} />
 
       {/* defaulters */}
-      <div className="mn-dk mn-s6" style={{ alignSelf: "start" }}>
-        <div className="mn-h"><span className="mn-lbl">Owes the most · {d.dues.overdueUnits} flats</span><Link className="mn-btn" href={HREF.late}>Open late list</Link></div>
+      <div className="mn-card mn-s6" style={{ alignSelf: "start" }}>
+        <div className="mn-h"><span className="mn-lbl">Top defaulters · {d.dues.overdueUnits} flats</span><Link className="mn-btn" href={HREF.late}>Open late list</Link></div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 10, marginTop: 14 }}>
           {d.top.slice(0, 4).map((m) => (
             <div key={m.memberId} className="mn-row">
               <span className="mn-av">{initials(m.ownerName)}</span>
-              <div style={{ minWidth: 0 }}><div className="mn-ell" style={{ fontWeight: 650, fontSize: 13 }}>{m.ownerName} · {flatOf(m)}</div><div style={{ fontSize: 11.5, color: "#f7a8a8" }}>{inr(m.balance)} · {m.daysOverdue} days</div></div>
+              <div style={{ minWidth: 0 }}><div className="mn-ell" style={{ fontWeight: 650, fontSize: 13 }}>{m.ownerName} · {flatOf(m)}</div><div style={{ fontSize: 11.5, color: "var(--mn-bad)" }}>{inr(m.balance)} · {m.daysOverdue} days</div></div>
             </div>
           ))}
           {!d.top.length && <Empty>Nobody is past the due date.</Empty>}
         </div>
-        <div className="mn-h" style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--mn-on-navy-line)" }}><span className="mn-sub">Late total</span><b>{inr(d.dues.overdue)}</b></div>
+        <div className="mn-h" style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--mn-line)" }}><span className="mn-sub">Late total</span><b>{inr(d.dues.overdue)}</b></div>
       </div>
 
       {/* activity */}

@@ -32,6 +32,7 @@ import ChartOfAccount from "@/models/ChartOfAccount";
 import Society from "@/models/Society";
 import { getCurrentFinancialYear } from "@/lib/services/FinancialYearService";
 import BillingHead from "@/models/BillingHead";
+import Liability from "@/models/Liability";
 import Voucher from "@/models/Voucher";
 import { getTrialBalance } from "@/lib/services/TrialBalanceService";
 import { getFiscalConfig } from "@/lib/services/FiscalConfigService";
@@ -48,6 +49,7 @@ const PERMS = {
 };
 PERMS.overview = ["dashboard.stats.view", ...new Set(Object.values(PERMS).flat())];
 PERMS.guide = ["accounting.overview.view", ...PERMS.overview];
+PERMS.yearbook = PERMS.guide;
 
 const PAY_MATCH = { type: "Credit", category: { $in: ["Payment", "Adjustment"] }, isReversed: { $ne: true } };
 const OPEN = ["Unpaid", "Partial", "Overdue", "Scheduled"];
@@ -491,7 +493,7 @@ async function expensesView(societyId, fy) {
 
 async function overviewView(societyId, fy, today) {
   const months = fyMonths(fy);
-  const [payments, late, expenses, billed, adv, bank, heads, recentExpenses, recentReceipts, memberCount, society] = await Promise.all([
+  const [payments, late, expenses, billed, adv, bank, heads, recentExpenses, recentReceipts, memberCount, society, nextBill, nextPayable] = await Promise.all([
     paymentsView(societyId, fy, today),
     lateView(societyId, today),
     expensesView(societyId, fy),
@@ -509,6 +511,14 @@ async function overviewView(societyId, fy, today) {
     Receipt.find({ societyId }).populate("memberId", "flatNo wing").sort({ createdAt: -1 }).limit(3).select("receiptNo amount createdAt status memberId").lean(),
     Member.countDocuments({ societyId, isDeleted: { $ne: true } }),
     Society.findById(societyId).select("name").lean(),
+    Bill.aggregate([
+      { $match: { societyId, isDeleted: { $ne: true }, isHistoricalArchive: { $ne: true }, dueDate: { $gte: today }, balanceAmount: { $gt: 0 } } },
+      { $group: { _id: "$dueDate", n: { $sum: 1 }, amount: { $sum: "$balanceAmount" } } },
+      { $sort: { _id: 1 } },
+      { $limit: 1 },
+    ]).catch(() => []),
+    Liability.findOne({ societyId, isDeleted: { $ne: true }, status: { $ne: "Closed" }, outstandingAmount: { $gt: 0 }, dueDate: { $gte: today } })
+      .sort({ dueDate: 1 }).select("name type outstandingAmount dueDate").lean().catch(() => null),
   ]);
   const monthKey = `${today.getFullYear()}-${today.getMonth()}`;
   const thisMonthBill = billed[monthKey] || { billed: 0, count: 0, paid: 0, partial: 0 };
@@ -546,6 +556,9 @@ async function overviewView(societyId, fy, today) {
     },
     fyTotals: { billed: fyBilled, collected: fyCollected, spent: expenses.spent, surplus: r2(fyCollected - expenses.spent), lastYearSpent: expenses.lastYear },
     series,
+    nextDue: nextBill[0] ? { date: nextBill[0]._id, bills: nextBill[0].n, amount: r2(nextBill[0].amount) } : null,
+    nextPayable: nextPayable ? { name: nextPayable.name, type: nextPayable.type, date: nextPayable.dueDate, amount: r2(nextPayable.outstandingAmount) } : null,
+    fyRange: fyRange(fy),
     dues: { total: late.openAmount, units: late.openUnits, overdue: late.totalOverdue, overdueUnits: late.overdueUnits },
     advance: adv,
     aging: late.buckets,
@@ -560,6 +573,19 @@ async function overviewView(societyId, fy, today) {
     receipts: recentReceipts.length,
     activity,
   };
+}
+
+/** Year at a glance: the overview figures plus interest charged, month by month. */
+async function yearbookView(societyId, fy, today) {
+  const base = await overviewView(societyId, fy, today);
+  const rows = await Bill.aggregate([
+    { $match: { societyId, isDeleted: { $ne: true }, ...fyBillMatch(fy) } },
+    { $group: { _id: { y: "$billYear", m: "$billMonth" }, interest: { $sum: { $ifNull: ["$currentInterest", 0] } }, bills: { $sum: 1 } } },
+  ]);
+  const byKey = {};
+  rows.forEach((r) => { byKey[`${r._id.y}-${r._id.m}`] = r; });
+  const months = base.series.map((mo) => ({ ...mo, interest: r2(byKey[mo.key]?.interest || 0), bills: byKey[mo.key]?.bills || 0 }));
+  return { ...base, months, interestTotal: r2(months.reduce((a, x) => a + x.interest, 0)), billsTotal: months.reduce((a, x) => a + x.bills, 0) };
 }
 
 /**
@@ -697,15 +723,25 @@ async function booksChecks(societyId, residential, lastLive) {
   ]);
   const advBy = new Map(residential.map((x) => [String(x._id), x.advanceCredit || 0]));
   const flats = new Map(residential.map((x) => [String(x._id), `${x.wing ? `${x.wing}-` : ""}${x.flatNo}`]));
-  const wrong = last.filter((t) => Math.abs(r2(t.bal) - r2((owesBy.get(String(t._id)) || 0) - (advBy.get(String(t._id)) || 0))) > 0.02);
+  const expectedOf = (id) => r2((owesBy.get(String(id)) || 0) - (advBy.get(String(id)) || 0));
+  const wrong = last.filter((t) => Math.abs(r2(t.bal) - expectedOf(t._id)) > 0.02);
   out.push({
     key: "passbook",
     ok: !wrong.length,
     label: "Every member's passbook adds up",
     detail: wrong.length
-      ? `${wrong.length} passbook(s) do not match what the flat owes: ${wrong.slice(0, 4).map((w) => flats.get(String(w._id))).join(", ")}`
+      ? `${wrong.length} passbook${wrong.length === 1 ? " does" : "s do"} not match what the flat owes. Open each one below, look at the last few lines, and fix the line that is off.`
       : `${last.length} passbooks match what each flat owes`,
-    href: "/admin/ledger",
+    hint: wrong.length
+      ? "A passbook that shows more than the bill usually carries an opening due that the bills never picked up, or a payment saved without its bill. Record the missing payment or bill in that flat's passbook and the check turns green."
+      : undefined,
+    items: wrong.slice(0, 12).map((w) => ({
+      label: flats.get(String(w._id)),
+      passbook: r2(w.bal),
+      bills: expectedOf(w._id),
+      href: `/admin/ledger?memberId=${w._id}`,
+    })),
+    href: wrong.length ? `/admin/ledger?memberId=${wrong[0]._id}` : "/admin/ledger",
   });
   return out;
 }
@@ -733,6 +769,7 @@ export async function GET(request) {
     else if (view === "passbook") data = await passbookView(societyId, fy, searchParams.get("memberId"));
     else if (view === "expenses") data = await expensesView(societyId, fy);
     else if (view === "guide") data = await guideView(societyId, fy, today);
+    else if (view === "yearbook") data = await yearbookView(societyId, fy, today);
     else data = await overviewView(societyId, fy, today);
     return NextResponse.json({ success: true, view, generatedAt: today.toISOString(), ...data });
   } catch (err) {

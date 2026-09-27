@@ -123,6 +123,19 @@ export default function PageClient() {
   const [overrides, setOverrides] = useState({});
   const [untilIdx, setUntilIdx] = useState(11);
   const [run, setRun] = useState(null); // { idx, phase, done, total }
+
+  // ── Expenses (bulk import) ─────────────────────────────────────────────
+  const [expenseCsv, setExpenseCsv] = useState("Date,Category,Amount,PaymentMethod,Vendor,Description\n");
+  const [expenseBusy, setExpenseBusy] = useState(false);
+  const [expenseResult, setExpenseResult] = useState(null);
+
+  // ── Repair tools (advanced, legacy-data only) ──────────────────────────
+  const [contraBusy, setContraBusy] = useState(false);
+  const [contraResult, setContraResult] = useState(null);
+  const [paymentsBusy, setPaymentsBusy] = useState(false);
+  const [paymentsResult, setPaymentsResult] = useState(null);
+  const [ledgerBusy, setLedgerBusy] = useState(false);
+  const [ledgerResult, setLedgerResult] = useState(null);
   const [log, setLog] = useState([]);
   const stopRef = useRef(false);
 
@@ -401,6 +414,94 @@ export default function PageClient() {
     } finally {
       setStmtBusy(false);
     }
+  }
+
+  // ── Expenses (bulk import) ─────────────────────────────────────────────
+  // CSV convention matches scripts/fy-cycle.js::importExpenses exactly
+  // (Date,Category,Amount,PaidBy,Vendor,Description) so the same file works
+  // either way. Server re-validates every row — this just parses text into
+  // objects.
+  function parseExpenseCsv(text) {
+    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) return [];
+    const dataLines = /^date/i.test(lines[0]) ? lines.slice(1) : lines;
+    return dataLines.map((line) => {
+      const [date, category, amount, paymentMethod, vendor, description] = line.split(",").map((x) => (x || "").trim());
+      return { date, category, amount, paymentMethod: paymentMethod || "Online", vendor, description };
+    });
+  }
+
+  async function importExpenses() {
+    const rows = parseExpenseCsv(expenseCsv);
+    if (!rows.length) return notify.error("Paste at least one expense row first.");
+    setExpenseBusy(true);
+    setExpenseResult(null);
+    try {
+      const res = await apiClient.post("/api/admin/fy-runner/import-expenses", { rows, financialYearId: fyId });
+      setExpenseResult(res);
+      addLog(res.problems?.length ? "warn" : "ok", `Expenses: ${res.posted} posted (${inr(res.totalAmount)})${res.problems?.length ? `, ${res.problems.length} problem(s)` : ""}.`);
+      if (res.posted > 0) notify.success(`${res.posted} expense(s) posted to the books.`);
+    } catch (e) {
+      notify.error(e.message);
+    } finally {
+      setExpenseBusy(false);
+    }
+  }
+
+  // ── Repair tools (advanced, legacy-data only) ──────────────────────────
+  async function scanContraSides() {
+    setContraBusy(true);
+    try {
+      const res = await apiClient.post("/api/admin/fy-runner/fix-contra-sides", { financialYearId: fyId, apply: false });
+      setContraResult(res);
+    } catch (e) { notify.error(e.message); } finally { setContraBusy(false); }
+  }
+  async function applyContraSides() {
+    if (!window.confirm("Post corrections for every account this found? This writes real journal entries.")) return;
+    setContraBusy(true);
+    try {
+      const res = await apiClient.post("/api/admin/fy-runner/fix-contra-sides", { financialYearId: fyId, apply: true });
+      setContraResult(res);
+      addLog("ok", `Contra-side fix: ${res.corrected?.length || 0} account(s) corrected.`);
+      notify.success(`${res.corrected?.length || 0} account(s) corrected.`);
+    } catch (e) { notify.error(e.message); } finally { setContraBusy(false); }
+  }
+
+  async function scanPaymentRepair() {
+    setPaymentsBusy(true);
+    try {
+      const res = await apiClient.post("/api/admin/fy-runner/repair-payments", { apply: false });
+      setPaymentsResult(res);
+    } catch (e) { notify.error(e.message); } finally { setPaymentsBusy(false); }
+  }
+  async function applyPaymentRepair() {
+    if (!window.confirm("Replay every member's payments through the current allocator? This resets and rewrites live bills.")) return;
+    setPaymentsBusy(true);
+    try {
+      const res = await apiClient.post("/api/admin/fy-runner/repair-payments", { apply: true });
+      setPaymentsResult(res);
+      const fixed = res.results?.filter((r) => r.applied).length || 0;
+      addLog("ok", `Payment repair: ${fixed} member(s) repaired.`);
+      notify.success(`${fixed} member(s) repaired.`);
+    } catch (e) { notify.error(e.message); } finally { setPaymentsBusy(false); }
+  }
+
+  async function scanLedgerBackfill() {
+    setLedgerBusy(true);
+    try {
+      const res = await apiClient.post("/api/admin/fy-runner/backfill-ledger", { financialYearId: fyId, apply: false });
+      setLedgerResult(res);
+    } catch (e) { notify.error(e.message); } finally { setLedgerBusy(false); }
+  }
+  async function applyLedgerBackfill() {
+    if (!window.confirm("Post every missing bill/payment into the books now?")) return;
+    setLedgerBusy(true);
+    try {
+      const res = await apiClient.post("/api/admin/fy-runner/backfill-ledger", { financialYearId: fyId, apply: true });
+      setLedgerResult(res);
+      addLog("ok", `Ledger backfill: ${res.posted?.bills || 0} bill(s), ${res.posted?.payments || 0} payment(s) posted.`);
+      notify.success(`Posted ${res.posted?.bills || 0} bill(s) and ${res.posted?.payments || 0} payment(s).`);
+    } catch (e) { notify.error(e.message); } finally { setLedgerBusy(false); }
   }
 
   // ── Render ──────────────────────────────────────────────────────────────
@@ -695,6 +796,128 @@ export default function PageClient() {
                 </Btn>
                 {statements && <Btn icon="printer" onClick={() => window.print()}>Print</Btn>}
               </div>
+            </Card>
+          )}
+
+          {shownStep === 4 && (
+            <Card>
+              <StepTitle
+                title="Expenses"
+                sub="Paste rows and post them to the books in one go — same as scripts/fy-cycle.js's expense CSV, just typed here instead of on disk. One bad row never blocks the rest."
+              />
+              <textarea
+                value={expenseCsv}
+                onChange={(e) => setExpenseCsv(e.target.value)}
+                rows={6}
+                spellCheck={false}
+                style={{ width: "100%", fontFamily: "var(--r-font-num, monospace)", fontSize: 13, padding: 10, borderRadius: 8, border: "1px solid var(--r-hairline)", background: "var(--r-bg-2)", color: "var(--r-fg-1)", resize: "vertical" }}
+                placeholder="Date,Category,Amount,PaymentMethod,Vendor,Description"
+              />
+              <div style={{ fontSize: 12, color: "var(--r-fg-4)", marginTop: 6 }}>
+                Category must be one of: Salary, Security, Housekeeping, Repairs &amp; Maintenance, Electricity, Water, Lift/Elevator, Garden, Legal &amp; Professional, Audit, Insurance, Property Tax, Bank Charges, Festival &amp; Events, Miscellaneous. PaymentMethod: Cash / Cheque / Online / NEFT / UPI / Card / Other (defaults to Online).
+              </div>
+              <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                <Btn variant="primary" icon="upload" onClick={importExpenses} disabled={expenseBusy || !fyId}>
+                  {expenseBusy ? "Posting…" : "Import & Post to Books"}
+                </Btn>
+              </div>
+              {expenseResult && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 13, color: "var(--r-fg-2)", marginBottom: 8 }}>
+                    {expenseResult.posted} posted, {inr(expenseResult.totalAmount)} total
+                    {expenseResult.problems?.length ? `, ${expenseResult.problems.length} problem(s)` : ""}.
+                  </div>
+                  {expenseResult.problems?.length > 0 && (
+                    <div style={{ fontSize: 12.5, color: "var(--r-danger)", display: "flex", flexDirection: "column", gap: 2 }}>
+                      {expenseResult.problems.map((p, i) => (
+                        <div key={i}>Row {p.row}: {p.error}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
+          )}
+
+          {shownStep === 4 && (
+            <Card>
+              <StepTitle
+                title="Repair Tools (Advanced)"
+                sub="For a society with pre-existing/legacy data only — an empty scan means nothing here needs fixing. Skip this on a fresh society."
+              />
+
+              <Accordion icon="alert-triangle" title="Fix contra-side accounts" sub={contraResult ? `${contraResult.correctable?.length || contraResult.corrected?.length || 0} correctable` : "Scan first"}>
+                <p style={{ fontSize: 13, color: "var(--r-fg-3)", marginBottom: 10 }}>
+                  A contra-asset account (e.g. Accumulated Depreciation) should hold a credit balance. Finds any that were opened as a debit by mistake and, only when it's provably just the opening entry, corrects it.
+                </p>
+                <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                  <Btn size="sm" onClick={scanContraSides} disabled={contraBusy || !fyId}>{contraBusy ? "Scanning…" : "Scan"}</Btn>
+                  {contraResult?.correctable?.length > 0 && (
+                    <Btn size="sm" variant="danger" onClick={applyContraSides} disabled={contraBusy}>Apply corrections</Btn>
+                  )}
+                </div>
+                {contraResult && (
+                  <div style={{ fontSize: 12.5 }}>
+                    {(contraResult.correctable || []).map((c, i) => (
+                      <div key={i} style={{ color: "var(--r-fg-2)" }}>✓ {c.code} {c.name}: debit {inr(c.debit)} → will move {inr(c.correctionAmount)} to credit</div>
+                    ))}
+                    {(contraResult.uncorrectable || []).map((c, i) => (
+                      <div key={i} style={{ color: "var(--r-danger)" }}>✗ {c.code} {c.name}: {c.reason}</div>
+                    ))}
+                    {(contraResult.corrected || []).map((c, i) => (
+                      <div key={`c${i}`} style={{ color: "var(--r-success, var(--r-fg-1))" }}>Posted: {c.code} {c.name}</div>
+                    ))}
+                    {!contraResult.findings?.length && !contraResult.correctable?.length && !contraResult.corrected?.length && (
+                      <div style={{ color: "var(--r-fg-4)" }}>Nothing wrong found.</div>
+                    )}
+                  </div>
+                )}
+              </Accordion>
+
+              <div style={{ height: 12 }} />
+
+              <Accordion icon="rotate-ccw" title="Repair payment allocation" sub={paymentsResult ? `${paymentsResult.results?.length || 0} member(s) affected` : "Scan first"}>
+                <p style={{ fontSize: 13, color: "var(--r-fg-3)", marginBottom: 10 }}>
+                  Fixes bills left wrong by an old payment allocator — resets each member's live bills and replays their payments, oldest-first, through the current allocator. Skips anyone whose case can't be replayed automatically (advance already applied, or a payment made between bill generations).
+                </p>
+                <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                  <Btn size="sm" onClick={scanPaymentRepair} disabled={paymentsBusy}>{paymentsBusy ? "Scanning…" : "Scan"}</Btn>
+                  {paymentsResult?.results?.some((r) => !r.skipped) && (
+                    <Btn size="sm" variant="danger" onClick={applyPaymentRepair} disabled={paymentsBusy}>Apply repair</Btn>
+                  )}
+                </div>
+                {paymentsResult && (
+                  <div style={{ fontSize: 12.5, maxHeight: 260, overflowY: "auto" }}>
+                    {paymentsResult.results.length === 0 && <div style={{ color: "var(--r-fg-4)" }}>Nothing to repair.</div>}
+                    {paymentsResult.results.map((r, i) => (
+                      <div key={i} style={{ color: r.skipped ? "var(--r-fg-4)" : "var(--r-fg-2)" }}>
+                        {r.flat}: {r.skipped ? `skipped — ${r.reason}` : `owed ${inr(r.before)} → ${inr(r.after)}, advance ${inr(r.advance)} (${r.paymentsReplayed} payment(s)${r.applied ? ", applied" : ""})`}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Accordion>
+
+              <div style={{ height: 12 }} />
+
+              <Accordion icon="link" title="Backfill missing ledger entries" sub={ledgerResult ? `${ledgerResult.summary?.billsMissing || 0} bill(s), ${ledgerResult.summary?.paymentsMissing || 0} payment(s) missing` : "Scan first"}>
+                <p style={{ fontSize: 13, color: "var(--r-fg-3)", marginBottom: 10 }}>
+                  Bills/payments made before accounting was turned on for this society exist as real records but never reached the double-entry books. Posts them in, idempotently.
+                </p>
+                <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                  <Btn size="sm" onClick={scanLedgerBackfill} disabled={ledgerBusy || !fyId}>{ledgerBusy ? "Scanning…" : "Scan"}</Btn>
+                  {ledgerResult?.summary && (ledgerResult.summary.billsMissing > 0 || ledgerResult.summary.paymentsMissing > 0) && !ledgerResult.posted && (
+                    <Btn size="sm" variant="danger" onClick={applyLedgerBackfill} disabled={ledgerBusy}>Post them</Btn>
+                  )}
+                </div>
+                {ledgerResult?.summary && (
+                  <div style={{ fontSize: 12.5, color: "var(--r-fg-2)" }}>
+                    Bills in year: {ledgerResult.summary.billsInFy}, missing from books: {ledgerResult.summary.billsMissing}<br />
+                    Payments in year: {ledgerResult.summary.paymentsInFy}, missing from books: {ledgerResult.summary.paymentsMissing}
+                    {ledgerResult.posted && <div style={{ marginTop: 6, color: "var(--r-fg-1)" }}>Posted {ledgerResult.posted.bills} bill(s), {ledgerResult.posted.payments} payment(s).</div>}
+                  </div>
+                )}
+              </Accordion>
             </Card>
           )}
 

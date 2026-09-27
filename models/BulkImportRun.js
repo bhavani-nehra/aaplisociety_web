@@ -18,6 +18,13 @@ const BulkImportRunSchema = new mongoose.Schema(
         "COMPLETED",
         "FAILED",
         "ROLLED_BACK",
+        // final_audit_fix_plan/bill-history-upgrade.md §40 — society/members/
+        // billing-heads are real, but this run deliberately stops SHORT of
+        // "safe to expose" (no importStatus:"active", no onboarding emails
+        // sent) because this society needs a Bill History decision first.
+        // Still eligible for compensateImportRun() rollback — pointOfNoReturn
+        // is NOT set for this status, on purpose, unlike COMMITTED.
+        "AWAITING_BILL_HISTORY",
         // SEC-20: the data is real and committed, but a post-transaction step
         // that the society NEEDS in order to be usable did not finish — today
         // that is RBAC role seeding and the admin's RoleAssignment, without

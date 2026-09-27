@@ -405,6 +405,16 @@ const SocietySchema = new mongoose.Schema(
       billHistoryPeriods: [{ type: String }], // e.g. ["2025-04", "2025-05", ...]
       joinPeriodId: { type: String, default: null }, // YYYY-MM when society joined platform
     },
+    // final_audit_fix_plan/bill-history-upgrade.md §38-D — one bill-history
+    // commit in flight per society at a time. Claimed atomically by
+    // lib/billing/historyCommit.js before writing anything, released in a
+    // finally block regardless of outcome. Absence of this field (or an
+    // absent lockedAt) means "not locked" — the commit's atomic claim query
+    // matches on that absence.
+    billHistoryCommitLock: {
+      lockedAt: { type: Date, default: null },
+      lockedBy: { type: String, default: null },
+    },
     // Accounting control center (Phase 2.3 of the accounting-system revamp —
     // see docs/accounting-system-ARD.md §6.11). Additive, optional sub-document.
     // Deliberately does NOT duplicate config.interestRate / config.charges —

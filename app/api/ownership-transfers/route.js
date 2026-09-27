@@ -42,7 +42,10 @@ export async function GET(request) {
 
     const query = { societyId: gate.context.societyId };
     if (scope === "open") query.status = { $in: TRANSFER_OPEN_STATUSES };
-    if (memberId) query.memberId = memberId;
+    if (memberId) {
+      if (!/^[a-f\d]{24}$/i.test(memberId)) return NextResponse.json({ error: "Invalid memberId" }, { status: 400 });
+      query.memberId = memberId;
+    }
 
     const transfers = await OwnershipTransfer.find(query)
       .sort({ createdAt: -1 })
@@ -80,6 +83,10 @@ export async function POST(request) {
         { error: "Which flat is being transferred?", code: "MEMBER_REQUIRED" },
         { status: 400 },
       );
+    }
+
+    if (typeof body.memberId !== "string" || !/^[a-f\d]{24}$/i.test(body.memberId)) {
+      return NextResponse.json({ error: "That flat id is not valid.", code: "MEMBER_NOT_FOUND" }, { status: 400 });
     }
 
     const transfer = await initiateTransfer({

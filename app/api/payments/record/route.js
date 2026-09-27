@@ -54,6 +54,9 @@ export async function POST(request) {
         { status: 400 },
       );
     }
+    if (typeof memberId !== "string" || !/^[a-f\d]{24}$/i.test(memberId)) {
+      return NextResponse.json({ error: "Invalid member ID" }, { status: 400 });
+    }
     if (!paymentMode) {
       return NextResponse.json(
         { error: "Payment mode is required" },

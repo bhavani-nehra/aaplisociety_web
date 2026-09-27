@@ -32,6 +32,9 @@ export async function GET(request) {
         { status: 400 },
       );
     }
+    if (!/^[a-f\d]{24}$/i.test(memberId)) {
+      return NextResponse.json({ error: "Invalid member ID" }, { status: 400 });
+    }
     // Fetch member (for advanceCredit)
     const member = await cache.getOrSet(
       `member:single:${memberId}`,

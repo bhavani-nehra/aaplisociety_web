@@ -33,8 +33,18 @@ export async function POST(request) {
         { error: "File too large. Max 5MB." },
         { status: 400 },
       );
+    if (!file.size)
+      return NextResponse.json({ error: "The uploaded file is empty." }, { status: 400 });
     const bytes = await file.arrayBuffer();
-    const rawRows = await parseFirstSheet(Buffer.from(bytes), { defval: "" });
+    let rawRows;
+    try {
+      rawRows = await parseFirstSheet(Buffer.from(bytes), { defval: "" });
+    } catch {
+      return NextResponse.json(
+        { error: "That file is not a valid Excel workbook. Upload the .xlsx template." },
+        { status: 400 },
+      );
+    }
     // Skip instruction row (Wing-FlatNo or Wing cell starts with ⚠, or all id columns blank)
     const dataRows = rawRows.filter((r) => {
       const wf = String(r["Wing-FlatNo"] || "").trim();

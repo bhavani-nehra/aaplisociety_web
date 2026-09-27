@@ -18,6 +18,10 @@ export async function POST(request) {
   const { userId, societyId, decoded } = gate.context;
   try {
     await connectDB();
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ error: "A JSON body is required" }, { status: 400 });
+    }
     const {
       type,
       title,
@@ -26,7 +30,7 @@ export async function POST(request) {
       recipientIds = [],
       actionUrl,
       expiresInDays,
-    } = await request.json();
+    } = body;
     if (!title?.trim() || !message?.trim() || !type || !recipientType) {
       return NextResponse.json(
         { error: "title, message, type, recipientType are required" },

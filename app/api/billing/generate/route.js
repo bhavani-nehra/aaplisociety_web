@@ -30,8 +30,10 @@ export async function POST(request) {
     const { year, month, bills, memberIds } = await request.json();
     if (!year || !month)
       return NextResponse.json({ error: "Year and month are required" }, { status: 400 });
-    if (month < 1 || month > 12)
-      return NextResponse.json({ error: "Month must be between 1 and 12" }, { status: 400 });
+    if (!Number.isInteger(Number(month)) || Number(month) < 1 || Number(month) > 12)
+      return NextResponse.json({ error: "Month must be a whole number between 1 and 12" }, { status: 400 });
+    if (!Number.isInteger(Number(year)) || Number(year) < 2000 || Number(year) > 2100)
+      return NextResponse.json({ error: "Year must be a valid four-digit year" }, { status: 400 });
 
     const societyId = gate.context.societyId || decoded.societyId;
     const society = await Society.findById(societyId).lean();

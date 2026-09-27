@@ -55,6 +55,8 @@ export async function POST(request) {
         { status: 400 },
       );
     const phone = Blacklist.normalizePhone(phoneRaw);
+    if (phoneRaw && phone.replace(/\D/g, "").length < 10)
+      return NextResponse.json({ error: "Enter a valid phone number (at least 10 digits)" }, { status: 400 });
     // Avoid duplicate active entries for the same phone.
     if (phone) {
       const dup = await Blacklist.findOne({

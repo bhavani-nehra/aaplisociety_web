@@ -103,8 +103,18 @@ export async function POST(request) {
     }
 
     // --- Parse --------------------------------------------------------------
+    if (!buffer.length) {
+      return NextResponse.json({ error: "The uploaded file is empty." }, { status: 400 });
+    }
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer);
+    try {
+      await workbook.xlsx.load(buffer);
+    } catch {
+      return NextResponse.json(
+        { error: "That file is not a valid Excel workbook. Upload the .xlsx template." },
+        { status: 400 },
+      );
+    }
     const firstSheet = workbook.worksheets[0];
     if (!firstSheet) {
       return NextResponse.json({ error: "Workbook has no sheets" }, { status: 400 });

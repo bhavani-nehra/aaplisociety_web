@@ -54,6 +54,9 @@ export async function GET(request) {
     // Apply filters
     // Member filter (single or multiple)
     if (memberId && memberId !== "all") {
+      if (!memberId.split(",").every((id) => /^[a-f\d]{24}$/i.test(id))) {
+        return NextResponse.json({ error: "Invalid member ID" }, { status: 400 });
+      }
       if (memberId.includes(",")) {
         query.memberId = { $in: memberId.split(",") };
       } else {

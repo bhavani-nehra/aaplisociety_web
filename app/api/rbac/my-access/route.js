@@ -31,6 +31,8 @@ export async function GET(request) {
   } catch {
     return NextResponse.json({ error: "Invalid session" }, { status: 401 });
   }
+  // verifyToken() returns null (it does not throw) for an expired or tampered token.
+  if (!decoded) return NextResponse.json({ error: "Invalid session" }, { status: 401 });
   // Single source of truth for MEMBER vs STAFF — see session-context.js
   // header comment. This used to reimplement the same precedence inline and
   // independently from /api/auth/me, and the two disagreed about identical

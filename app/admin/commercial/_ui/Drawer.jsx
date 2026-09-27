@@ -30,7 +30,7 @@ export default function Drawer({ open, onClose, title, sub, right, children, foo
   if (!open || !mounted) return null;
 
   return createPortal(
-    <div style={{ position: "fixed", inset: 0, zIndex: 60 }}>
+    <div className="commercial-scope" style={{ position: "fixed", inset: 0, zIndex: 60, background: "transparent" }}>
       <div
         onClick={onClose}
         style={{

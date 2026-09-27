@@ -23,6 +23,7 @@ import PostingRulesPage from "./posting-rules/PageClient";
 import ValidationRulesPage from "./validation-rules/PageClient";
 import FiscalConfigPage from "./fiscal-config/PageClient";
 import AccountingSetupPage from "./setup/PageClient";
+import AccountingBand from "@/components/accounting/AccountingBand";
 
 // Page 1 of the 6-page accounting environment: Configuration. Everything
 // small — financial years, posting rules, book checks, fiscal mappings, the
@@ -104,7 +105,7 @@ function AccountingOverviewPageInner() {
   return (
     <div style={{ maxWidth: 1480, margin: "0 auto" }}>
       <PageHeader
-        title="Configuration"
+        title="Accounting home"
         sub={fy ? `Working year ${fy.label}, ${fullDate(fy.startDate)} to ${fullDate(fy.endDate)}.` : "No financial year yet. Create one to start keeping books."}
         right={
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -127,6 +128,7 @@ function AccountingOverviewPageInner() {
         </Card>
       ) : (
         <>
+          <AccountingBand />
           <Card style={{ marginBottom: 20 }}>
             <SectionLabel icon="alert-circle">{next ? "Do this next" : "Needs attention"}</SectionLabel>
             {!next && !failing.length && !openQueryCount ? (

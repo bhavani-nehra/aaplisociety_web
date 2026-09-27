@@ -90,7 +90,7 @@ function buildSteps(st, g) {
       what: "Generate the bills, then record what each member paid — less, in full, or in advance.",
       status: members && tm.bills >= members ? DONE : NEEDS,
       fact: `${tm.bills || 0} of ${members} bills raised · ${tm.payments || 0} payment${tm.payments === 1 ? "" : "s"} (${inr(tm.collected || 0)})`,
-      links: [{ href: "/admin/generate-bills", label: "Generate bills" }, { href: "/admin/money?tab=payments", label: "Record payments" }],
+      links: [{ href: "/admin/generate-bills", label: "Generate bills" }, { href: "/admin/payments", label: "Record payments" }],
     },
     {
       n: 6,
@@ -99,7 +99,7 @@ function buildSteps(st, g) {
       what: "One list per month — electricity, security, repairs. Each one posts to the books by itself.",
       status: ex.thisMonth > 0 && !ex.notPosted ? DONE : NEEDS,
       fact: `${ex.monthsWithEntries || 0} of ${ex.monthsElapsed || 0} months have entries${ex.notPosted ? ` · ${ex.notPosted} not in the books` : ""}`,
-      links: [{ href: "/admin/money?tab=expenses", label: "Add expenses" }],
+      links: [{ href: "/admin/expenditure", label: "Add expenses" }],
     },
     {
       n: 7,
@@ -108,7 +108,10 @@ function buildSteps(st, g) {
       what: "Green ticks in plain words. A red one says what is off and links to where to fix it.",
       status: g ? (checksOk ? DONE : NEEDS) : LATER,
       fact: g ? `${(g.checks || []).filter((c) => c.ok).length} of ${(g.checks || []).length} checks pass` : "—",
-      links: [{ href: "#books-check", label: "See the checks" }],
+      links: (() => {
+        const bad = (g?.checks || []).find((c) => !c.ok && c.href);
+        return bad ? [{ href: bad.href, label: `Fix: ${bad.label}` }] : [{ href: "/admin/accounting/statements?tab=trial-balance", label: "Open Trial Balance" }];
+      })(),
     },
     {
       n: 8,
@@ -215,7 +218,18 @@ export default function YourYearPage() {
                 <b style={{ fontSize: 13 }}>{c.label}</b>
               </div>
               <div className="mn-sub" style={{ fontSize: 11.5, marginTop: 6, lineHeight: 1.45 }}>{c.detail}</div>
-              {!c.ok && c.href && <Link href={c.href} className="mn-btn" style={{ marginTop: 8 }}>Fix it</Link>}
+              {!c.ok && c.hint && <div className="mn-sub" style={{ fontSize: 11.5, marginTop: 6, lineHeight: 1.45 }}><b>What to do:</b> {c.hint}</div>}
+              {!c.ok && c.items?.length > 0 && (
+                <div style={{ display: "grid", gap: 4, marginTop: 8 }}>
+                  {c.items.map((it) => (
+                    <Link key={it.href} href={it.href} className="mn-row" style={{ justifyContent: "space-between", fontSize: 12, padding: "5px 8px", borderRadius: 10, background: "var(--mn-card)", textDecoration: "none", color: "inherit", border: "1px solid var(--mn-line)" }}>
+                      <b>{it.label}</b>
+                      <span className="mn-sub">passbook {inr(it.passbook, 2)} · bills {inr(it.bills, 2)} ›</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+              {!c.ok && c.href && !c.items?.length && <Link href={c.href} className="mn-btn" style={{ marginTop: 8 }}>Fix it</Link>}
             </div>
           ))}
           {health.map((h) => (

@@ -630,7 +630,7 @@ export default function CommercialShopsPage() {
         , and apply to every shop and office.
       </div>
 
-      {mounted && createPortal(
+      {mounted && createPortal(<div className="commercial-scope" style={{ display: "contents" }}>
       <AnimatePresence>
         {openId && (
           <>
@@ -1198,7 +1198,7 @@ export default function CommercialShopsPage() {
             </motion.div>
           </>
         )}
-      </AnimatePresence>,
+      </AnimatePresence></div>,
       document.body
       )}
 
